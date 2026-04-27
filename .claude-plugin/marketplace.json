@@ -1,34 +1,35 @@
 {
   "name": "digital-delivery-team",
   "owner": {
-    "name": "zhaowenhao",
-    "email": "me@affaanmustafa.com"
+    "name": "赵文昊",
+    "email": "dhslegle@gmail.com"
   },
   "metadata": {
-    "description": "Battle-tested Claude Code configurations from an Anthropic hackathon winner"
+    "description": "全栈工程师数字员工交付 Claude 插件"
   },
   "plugins": [
     {
       "name": "digital-delivery-team",
       "source": "./",
-      "description": "一人一队：全栈工程师 + 数字员工交付插件。9 个数字员工子代理 + 13 个岗位/编排命令 + 4 个领域知识 skill + 5 个自动度量 hook + 本地度量脚本。",
-      "version": "1.10.0",
+      "description": "一人一队：9 个数字员工子代理、13 个岗位/编排命令、4 个领域 skill、插件 hooks 与本地效率度量脚本。",
+      "version": "0.4.0",
       "author": {
-        "name": "zhaowenhao",
-        "email": "me@affaanmustafa.com"
+        "name": "赵文昊",
+        "email": "dhslegle@gmail.com"
       },
-      "homepage": "https://ecc.tools",
-      "repository": "https://github.com/affaan-m/digital-delivery-team",
+      "repository": "https://github.com/dhslegen/digital-delivery-team",
       "license": "MIT",
       "keywords": [
         "agents",
         "skills",
         "hooks",
         "commands",
-        "tdd",
-        "code-review",
-        "security",
-        "best-practices"
+        "claude-code",
+        "delivery",
+        "efficiency",
+        "agent",
+        "workflow",
+        "metrics"
       ],
       "category": "workflow",
       "tags": [
@@ -36,10 +37,9 @@
         "skills",
         "hooks",
         "commands",
-        "tdd",
-        "code-review",
-        "security",
-        "best-practices"
+        "delivery",
+        "subagents",
+        "metrics"
       ],
       "strict": false
     }
