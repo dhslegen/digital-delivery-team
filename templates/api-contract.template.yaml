@@ -1,0 +1,289 @@
+openapi: "3.0.3"
+info:
+  title: "<项目名称> API"
+  version: "1.0.0"
+  description: |
+    <一句话描述 API 用途>
+
+servers:
+  - url: "http://localhost:<PORT>"
+    description: 本地开发
+  - url: "https://<your-domain>/api"
+    description: 生产环境
+
+tags:
+  - name: <module-name>
+    description: <模块描述>
+
+paths:
+  /<resource>:
+    get:
+      tags: [<module-name>]
+      summary: "列出所有 <Resource>"
+      operationId: "list<Resource>"
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Paginated<Resource>Response"
+              example:
+                data: []
+                total: 0
+                page: 1
+                limit: 20
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [<module-name>]
+      summary: "创建 <Resource>"
+      operationId: "create<Resource>"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Create<Resource>Request"
+            example:
+              field1: "<示例值>"
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/<Resource>"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /<resource>/{id}:
+    get:
+      tags: [<module-name>]
+      summary: "获取单个 <Resource>"
+      operationId: "get<Resource>ById"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "<id-example>"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/<Resource>"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    put:
+      tags: [<module-name>]
+      summary: "更新 <Resource>"
+      operationId: "update<Resource>"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "<id-example>"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Update<Resource>Request"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/<Resource>"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [<module-name>]
+      summary: "删除 <Resource>"
+      operationId: "delete<Resource>"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "<id-example>"
+      responses:
+        "204":
+          description: 删除成功
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    <Resource>:
+      type: object
+      required:
+        - id
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          example: "<id-example>"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-05-06T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-05-06T10:00:00Z"
+
+    Create<Resource>Request:
+      type: object
+      required:
+        - field1
+      properties:
+        field1:
+          type: string
+          example: "<示例值>"
+
+    Update<Resource>Request:
+      type: object
+      properties:
+        field1:
+          type: string
+          example: "<示例值>"
+
+    Paginated<Resource>Response:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/<Resource>"
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "field1 is required"
+        details:
+          type: array
+          items:
+            type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: "BAD_REQUEST"
+            message: "Invalid request body"
+
+    Unauthorized:
+      description: 未授权
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: "UNAUTHORIZED"
+            message: "Authentication required"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: "NOT_FOUND"
+            message: "Resource not found"
+
+    UnprocessableEntity:
+      description: 业务规则校验失败
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: "UNPROCESSABLE_ENTITY"
+            message: "Business rule violation"
+
+    InternalError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

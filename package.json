@@ -1,0 +1,27 @@
+{
+  "name": "digital-delivery-team",
+  "version": "0.4.0",
+  "description": "一人一队：全栈工程师 + 数字员工交付插件。9 个子代理 + 13 个命令 + 4 个 skill + 5 个 hook + 本地度量脚本。",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "bin": {
+    "ddt-aggregate": "bin/aggregate.mjs",
+    "ddt-baseline": "bin/baseline.mjs",
+    "ddt-report": "bin/report.mjs"
+  },
+  "scripts": {
+    "aggregate": "node bin/aggregate.mjs",
+    "baseline": "node bin/baseline.mjs",
+    "report": "node bin/report.mjs",
+    "baseline:force": "node bin/baseline.mjs --force",
+    "test": "node --test 'tests/**/*.test.mjs'",
+    "test:unit": "node --test 'tests/unit/*.test.mjs'",
+    "test:integration": "node --test 'tests/integration/*.test.mjs'"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": ["claude-code", "delivery", "efficiency", "agent", "subagent", "workflow", "metrics"],
+  "license": "Proprietary",
+  "author": "赵文昊 <dhslegle@gmail.com>"
+}

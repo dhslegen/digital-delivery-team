@@ -1,0 +1,9 @@
+project_id,name,type,total_hours,prd_hours,wbs_hours,design_hours,frontend_hours,backend_hours,test_hours,review_hours,docs_hours,defect_count,coverage_pct,team_size,notes
+HIST-001,用户认证模块,auth,48,4,3,6,12,12,6,2,3,5,72,1,单人全栈
+HIST-002,商品列表页,frontend,32,2,2,4,14,4,3,1,2,3,68,1,纯前端
+HIST-003,订单 API,backend,56,4,4,8,6,22,6,2,4,7,75,1,含数据库迁移
+HIST-004,消息推送服务,backend,40,3,2,6,4,18,4,1,2,4,70,1,含第三方集成
+HIST-005,管理后台 CRUD,fullstack,64,5,4,8,16,16,7,3,5,6,73,1,前后端全栈
+HIST-006,数据报表页,frontend,28,2,2,3,12,3,3,1,2,2,65,1,纯前端含图表
+HIST-007,支付集成,backend,72,6,5,10,8,28,7,3,5,9,78,1,高复杂度
+HIST-008,搜索功能,fullstack,44,3,3,6,11,11,5,2,3,4,71,1,含搜索引擎集成

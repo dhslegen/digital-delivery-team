@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# 本地 Claude Code 项目设置（包含机器级 MCP 配置和权限）
+.claude/
+
+# Node.js
+node_modules/

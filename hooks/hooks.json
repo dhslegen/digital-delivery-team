@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:session-start hooks/handlers/session-start.js minimal,standard,strict"
+          }
+        ],
+        "description": "Record digital-delivery-team session start metrics",
+        "id": "ddt:session-start"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:session-end hooks/handlers/session-end.js minimal,standard,strict",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Record digital-delivery-team session end metrics",
+        "id": "ddt:session-end"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:pre-tool-use hooks/handlers/pre-tool-use.js standard,strict"
+          }
+        ],
+        "description": "Record digital-delivery-team tool preflight metrics",
+        "id": "ddt:pre-tool-use"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:post-tool-use hooks/handlers/post-tool-use.js standard,strict",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Record digital-delivery-team tool result metrics",
+        "id": "ddt:post-tool-use"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:post-tool-use-failure hooks/handlers/post-tool-use.js standard,strict",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Record failed digital-delivery-team tool metrics",
+        "id": "ddt:post-tool-use-failure"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:subagent-stop hooks/handlers/subagent-stop.js minimal,standard,strict",
+            "async": true,
+            "timeout": 10
+          }
+        ],
+        "description": "Record digital employee subagent runtime metrics",
+        "id": "ddt:subagent-stop"
+      }
+    ]
+  }
+}

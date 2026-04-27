@@ -1,0 +1,47 @@
+{
+  "name": "digital-delivery-team",
+  "owner": {
+    "name": "zhaowenhao",
+    "email": "me@affaanmustafa.com"
+  },
+  "metadata": {
+    "description": "Battle-tested Claude Code configurations from an Anthropic hackathon winner"
+  },
+  "plugins": [
+    {
+      "name": "digital-delivery-team",
+      "source": "./",
+      "description": "一人一队：全栈工程师 + 数字员工交付插件。9 个数字员工子代理 + 13 个岗位/编排命令 + 4 个领域知识 skill + 5 个自动度量 hook + 本地度量脚本。",
+      "version": "1.10.0",
+      "author": {
+        "name": "zhaowenhao",
+        "email": "me@affaanmustafa.com"
+      },
+      "homepage": "https://ecc.tools",
+      "repository": "https://github.com/affaan-m/digital-delivery-team",
+      "license": "MIT",
+      "keywords": [
+        "agents",
+        "skills",
+        "hooks",
+        "commands",
+        "tdd",
+        "code-review",
+        "security",
+        "best-practices"
+      ],
+      "category": "workflow",
+      "tags": [
+        "agents",
+        "skills",
+        "hooks",
+        "commands",
+        "tdd",
+        "code-review",
+        "security",
+        "best-practices"
+      ],
+      "strict": false
+    }
+  ]
+}
