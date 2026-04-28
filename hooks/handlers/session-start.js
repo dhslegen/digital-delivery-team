@@ -33,12 +33,17 @@ function maybeInferProgress(cwd) {
   } catch (_) { /* hook 必须容错 */ }
 }
 
-// M2-1: 把解析好的 plugin root 持久化到 ~/.claude/delivery-metrics/.ddt-plugin-root，
-//        让 commands 用 1 行 fallback 读取代替 80 行 inline node。
+// M2-1 / M5-3: 把解析好的 plugin root 持久化到 ~/.claude/delivery-metrics/.ddt-plugin-root，
+//   让 commands 用 1 行 fallback 读取代替 80 行 inline node。
+//   M5-3：写入前必须验证 root 含 bin/aggregate.mjs，避免把无效 env 值（如旧路径）污染 marker
 function persistPluginRoot() {
   try {
     const root = process.env.DDT_PLUGIN_ROOT || process.env.CLAUDE_PLUGIN_ROOT;
     if (!root) return;
+    if (!fs.existsSync(path.join(root, 'bin', 'aggregate.mjs'))) {
+      // env 变量指向无效目录（典型场景：用户 shell rc 设了旧路径），不写 marker
+      return;
+    }
     const os = require('os');
     const dir = process.env.DDT_METRICS_DIR ||
       path.join(os.homedir(), '.claude', 'delivery-metrics');

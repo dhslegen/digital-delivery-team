@@ -4,6 +4,40 @@
 
 ---
 
+## [0.5.1] - 2026-04-28
+
+修复 v0.5.0 在 Claude Code v2.1+ 真实安装路径下 SessionStart hook 解析失败的问题。
+
+### Fixed — 修复
+
+- 🔴 P0：hook 解析路径列表只覆盖 `plugins/marketplace/`（**单数**）和 `plugins/cache/`，但 Claude Code v2.1+ 实际安装到 `plugins/marketplaces/`（**复数**），导致 SessionStart hook 找不到插件根目录 → marker 文件未写入 → commands 全部 fallback 失败 → `/digital-delivery-team:doctor` 报 `❌ DDT plugin root 未解析`
+- 🔴 P0：用户 shell 中残留无效 `DDT_PLUGIN_ROOT` 环境变量时，`SessionStart::persistPluginRoot` 会把这个无效路径写到 marker，反向污染 `~/.claude/delivery-metrics/.ddt-plugin-root`
+- 🟠 commands 的 `${VAR:=fallback}` 仅在 unset/empty 时赋值，无法自动 fallback 用户 shell 残留的无效 env 变量
+
+### Changed — 改动
+
+- `hooks/hooks.json`（6 处 inline）：路径列表新增 `['marketplaces','digital-delivery-team']`；新增 `marketplaces/` 通配扫描；解析失败时返回 `null` 而非 `path.resolve('.')`，避免污染 `process.env`
+- `hooks/plugin-hook-bootstrap.js`：candidates 数组同步加 marketplaces 路径 + Priority 3 通配扫描
+- `hooks/handlers/session-start.js::persistPluginRoot`：写 marker 前验证 `bin/aggregate.mjs` 存在
+- 9 个 commands（wbs/prd/design/package/report/fix/doctor/import-design/resume）：fallback 行从 `${VAR:=...}` 改为显式 `[ -f "$ROOT/bin/aggregate.mjs" ] || ROOT=...` 三级链（env → marker → 硬编码 `~/.claude/plugins/marketplaces/digital-delivery-team` 兜底）
+- `bin/find-plugin-root.mjs::tryStandardPaths`：加 marketplaces 路径；新增 `tryMarketplacesDir()` 通配扫描
+
+### Added — 新增
+
+- `tests/integration/marketplaces-path.test.mjs`（7 用例）：构造伪 `~/.claude` 目录验证 4 种路径布局解析正确
+
+### Migration — 升级指引
+
+如果你从 v0.5.0 升级到 v0.5.1：
+
+1. 运行 `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. 检查并清理 shell rc 文件中的旧 `DDT_PLUGIN_ROOT` 设置：`grep DDT_PLUGIN_ROOT ~/.zshrc ~/.bashrc ~/.bash_profile`
+3. 删除可能被污染的 marker：`rm ~/.claude/delivery-metrics/.ddt-plugin-root`
+4. 重启 Claude Code 会话（让 SessionStart hook 重新写 marker）
+5. `/digital-delivery-team:doctor` 应见 11/11 通过
+
+---
+
 ## [0.5.0] - 2026-04-28
 
 完整修复 v0.4.x e2e 测试中发现的 P0 数据采集断链 + ECC 体验对齐 + 技术栈灵活性 + 可重入状态机。

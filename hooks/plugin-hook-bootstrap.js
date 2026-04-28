@@ -26,12 +26,25 @@ function resolveRoot() {
     path.join(home, 'plugins', 'digital-delivery-team'),
     path.join(home, 'plugins', 'digital-delivery-team@digital-delivery-team'),
     path.join(home, 'plugins', 'marketplace', 'digital-delivery-team'),
+    path.join(home, 'plugins', 'marketplaces', 'digital-delivery-team'),
   ];
   for (const r of candidates) {
     if (ok(r)) return r;
   }
 
-  // Priority 3: marketplace cache — correct structure: cache/<publisher>/digital-delivery-team/<version>/
+  // Priority 3: marketplaces directory walk — covers marketplace-named-after-other-publisher case
+  try {
+    const ms = path.join(home, 'plugins', 'marketplaces');
+    for (const m of fs.readdirSync(ms, { withFileTypes: true })) {
+      if (!m.isDirectory()) continue;
+      const direct = path.join(ms, m.name);
+      if (ok(direct)) return direct;
+      const nested = path.join(ms, m.name, 'digital-delivery-team');
+      if (ok(nested)) return nested;
+    }
+  } catch (_) {}
+
+  // Priority 4: marketplace cache — correct structure: cache/<publisher>/digital-delivery-team/<version>/
   try {
     const cacheBase = path.join(home, 'plugins', 'cache');
     for (const pub of fs.readdirSync(cacheBase, { withFileTypes: true })) {

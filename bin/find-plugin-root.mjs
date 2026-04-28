@@ -45,11 +45,30 @@ function tryStandardPaths() {
   const candidates = [
     join(home, 'plugins', SLUG),
     join(home, 'plugins', `${SLUG}@${SLUG}`),
-    join(home, 'plugins', 'marketplace', SLUG),
+    join(home, 'plugins', 'marketplace', SLUG),    // 单数（旧）
+    join(home, 'plugins', 'marketplaces', SLUG),   // 复数（v2.1+ Claude Code marketplace 实际目录）
   ];
   for (const candidate of candidates) {
     if (isValidRoot(candidate)) return candidate;
   }
+  return null;
+}
+
+// M5-5: marketplaces/<marketplace-name>/<plugin-name> 通配扫描
+//   覆盖：marketplace 与 plugin 不同名（如 publisher-x/digital-delivery-team），
+//   或 marketplace 直接就是 plugin 本身（如 marketplaces/digital-delivery-team）。
+function tryMarketplacesDir() {
+  const ms = join(homedir(), '.claude', 'plugins', 'marketplaces');
+  if (!existsSync(ms)) return null;
+  try {
+    for (const m of readdirSync(ms, { withFileTypes: true })) {
+      if (!m.isDirectory()) continue;
+      const direct = join(ms, m.name);
+      if (isValidRoot(direct)) return direct;
+      const nested = join(ms, m.name, SLUG);
+      if (isValidRoot(nested)) return nested;
+    }
+  } catch { /* ignore */ }
   return null;
 }
 
@@ -81,7 +100,7 @@ function trySelfRelative() {
 }
 
 function resolvePluginRoot() {
-  return tryEnv() || tryStandardPaths() || tryCacheDir() || trySelfRelative();
+  return tryEnv() || tryStandardPaths() || tryMarketplacesDir() || tryCacheDir() || trySelfRelative();
 }
 
 const root = resolvePluginRoot();
