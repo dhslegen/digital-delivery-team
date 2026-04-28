@@ -26,6 +26,6 @@
   "dependencies": {},
   "devDependencies": {},
   "keywords": ["claude-code", "delivery", "efficiency", "agent", "subagent", "workflow", "metrics"],
-  "license": "Proprietary",
+  "license": "MIT",
   "author": "赵文昊 <dhslegle@gmail.com>"
 }

@@ -1,174 +1,225 @@
 # digital-delivery-team
 
-一人一队：全栈工程师 + 数字员工交付插件化方案。
+> 一人一队 · 全栈工程师的 AI 数字员工交付插件
 
-10 个数字员工子代理 · 16 个岗位/编排/辅助命令 · 5 个领域知识 skill · 7 类自动度量 hook · 5 套技术栈预设 · 4 套 AI-native UI 通道 · 进度状态机与跨会话恢复 · Node 22+ 零 npm 依赖
+为 Claude Code 提供契约先行（Contract-First）+ 数字员工分工（Agent-Owned）+ 自动度量（Hooks-Driven）的端到端交付工作流。**一句话**：从产品需求到上线交付，由 10 个数字员工接力完成，每个阶段自动度量，每条产物可追溯。
 
-> v0.5.0 修复了 v0.4.x 的 P0 数据采集断链（efficiency-report 实际工时全空）；与 ECC 体验对齐（commands 内嵌 inline node-e 清零）；新增技术栈预设、AI-native UI、进度状态机。详见 [CHANGELOG.md](./CHANGELOG.md)。
+10 数字员工 · 17 命令 · 5 技能 · 8 类 Hook · 5 套技术栈预设 · 4 套 AI-native UI 通道 · 进度状态机 · 跨会话恢复 · Node 22+ 零 npm 依赖
+
+[![Tests](https://img.shields.io/badge/tests-80%2F80%20passing-brightgreen)](#testing) [![Version](https://img.shields.io/badge/version-0.5.0-blue)](./CHANGELOG.md) [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+---
+
+## 安装
+
+通过 Claude Code 插件市场（推荐，零配置）：
+
+```text
+/plugin marketplace add https://github.com/dhslegen/digital-delivery-team
+/plugin install digital-delivery-team@digital-delivery-team
+/reload-plugins
+```
+
+> Claude Code v2.1+ 会自动加载 hooks，无需修改 `~/.claude/settings.json`。
+
+安装后**先做一次自检**：
+
+```text
+/digital-delivery-team:doctor
+```
+
+应见 11 项全部 ✅。任一未通过按提示处理（最常见：升级 Node 到 22+ 或重启会话让 SessionStart hook 写入 plugin-root marker）。
 
 ---
 
 ## 5 分钟上手
 
-1. **安装插件**
+```bash
+cd your-project/
+echo "我要做一个任务清单 Web App，支持看板视图和标签管理" > project-brief.md
+```
 
-   ```bash
-   # 将插件目录加入 Claude Code 插件路径
-   git clone <repo> ~/plugins/digital-delivery-team
-   # 在 ~/.claude/settings.json 中添加插件路径
-   ```
+回到 Claude Code 会话内：
 
-2. **初始化项目**
+```text
+/kickoff --preset java-modern    # 默认即 java-modern，可省略
+/impl
+/verify
+/ship
+```
 
-   ```bash
-   cd your-project/
-   echo "我要做一个任务清单 Web App，支持看板视图和标签管理" > project-brief.md
-   ```
+完成后产出全部位于项目目录：
 
-3. **一键启动完整流程**
+```text
+docs/prd.md  docs/wbs.md  docs/risks.md
+docs/arch.md  docs/api-contract.yaml  docs/data-model.md
+web/...  server/...  tests/test-report.md
+docs/review-report.md  docs/efficiency-report.md
+README.md  docs/deploy.md  docs/demo-script.md
+delivery-<project-id>-<timestamp>.tar.gz   ← 一键交付包
+```
 
-   ```
-   /kickoff      → 产出 PRD + WBS + 架构契约（串行，约 3 步）
-   /impl         → 前后端并行实现（并行，1 步双产物）
-   /verify       → 测试 + 评审（并行，1 步双产物）
-   /ship         → 交付包 + 效率报告（串行，约 2 步）
-   ```
-
-4. **查看效率报告**
-
-   ```bash
-   export DDT_PLUGIN_ROOT="${DDT_PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}"
-   node "$DDT_PLUGIN_ROOT/bin/report.mjs" \
-     --project "$(cat .delivery/project-id)" \
-     --baseline baseline/baseline.locked.json
-   # 产出 docs/efficiency-report.raw.md
-   ```
+> 中途可随时运行 `/resume` 查看进度，或 `/fix --severity blocker` 修复评审阻塞项。
 
 ---
 
-## 岗位速查
+## 命令矩阵
 
-| 岗位 | 命令 | 主要产物 | 调用的子代理 |
-|------|------|---------|------------|
-| 产品 | `/prd` | `docs/prd.md` | product-agent |
-| PM | `/wbs` | `docs/wbs.md` | pm-agent |
+### 岗位命令（按角色）
+
+| 岗位 | 命令 | 主要产物 | 子代理 |
+|------|------|---------|--------|
+| 产品 | `/prd` | `docs/prd.md`（含 Given/When/Then 验收标准） | product-agent |
+| PM | `/wbs` | `docs/wbs.md` + `docs/risks.md` | pm-agent |
 | 架构 | `/design` | `docs/arch.md` + `docs/api-contract.yaml` + `docs/data-model.md` | architect-agent |
-| 前端 | `/build-web` | `web/`（含测试） | frontend-agent |
-| 后端 | `/build-api` | `server/`（含集成测试） | backend-agent |
-| 测试 | `/test` | `tests/test-report.md`（含覆盖率）| test-agent |
-| 评审 | `/review` | `docs/review-report.md`（三级分类） | review-agent |
-| 交付 | `/package` | `README + deploy.md + demo-script.md` | docs-agent |
-| 度量 | `/report` | `docs/efficiency-report.raw.md` | metrics-agent |
+| 前端 | `/build-web` | `web/`（含 happy-path 测试） | frontend-agent |
+| 后端 | `/build-api` | `server/`（含集成测试 + migration） | backend-agent |
+| 测试 | `/test` | `tests/test-report.md`（覆盖率 ≥ 70%） | test-agent |
+| 评审 | `/review` | `docs/review-report.md`（阻塞/警告/建议三级） | review-agent |
+| 修复 | `/fix` | review-report 条目逐条 patch（默认 dry-run） | fix-agent |
+| 文档 | `/package` | `README.md` + `docs/deploy.md` + `docs/demo-script.md` | docs-agent |
+| 度量 | `/report` | `docs/efficiency-report.md`（含洞察 + 优化建议） | metrics-agent |
 
-**编排命令（一键组合）**：
+### 编排命令（一键组合）
 
 | 命令 | 等价于 | 适用场景 |
 |------|--------|---------|
-| `/kickoff` | `/prd` → `/wbs` → `/design` | 新项目起手 |
-| `/impl` | `/build-web` ‖ `/build-api` | 有设计文档后并行开发 |
-| `/verify` | `/test` ‖ `/review` | 开发完成后并行验收 |
-| `/ship` | `/package` → `/report` | 准备交付 |
+| `/kickoff [--preset <name>] [--ai-design <type>]` | `/prd` → `/wbs` → `/design` | 新项目起手 |
+| `/impl [--web-only\|--api-only]` | `/build-web` ‖ `/build-api`（同消息内并行派发） | 设计冻结后并行实现 |
+| `/verify` | `/test` ‖ `/review`（并行） | 实现完成后并行验收 |
+| `/ship` | `/package` → `/report` + 打包 tar.gz | 交付出包 |
 
-**辅助命令**（v0.5.0 新增）：
+### 辅助命令
 
 | 命令 | 用途 |
 |------|------|
-| `/fix [--severity blocker\|warning\|all] [--apply]` | 按 review-report 条目修复（默认 dry-run） |
-| `/import-design --from figma\|v0\|lovable\|claude-design --url <url>` | 从外部 AI 设计源生成符合契约的 UI |
-| `/resume` | 显示当前进度与下一步建议（跨会话恢复） |
+| `/fix [--severity blocker\|warning\|all] [--apply]` | 按 review-report 修复，默认 dry-run，阻塞级强制人工 review |
+| `/import-design --from figma\|v0\|lovable\|claude-design --url <url>` | 从外部 AI 设计源生成符合契约的 React + Tailwind 组件 |
+| `/resume` | 显示当前进度 + 下一步建议（跨会话恢复） |
 | `/digital-delivery-team:doctor` | 11 项安装自检 |
 
 ---
 
-## 技术栈预设（v0.5.0 新增）
+## 技术栈预设
 
-5 套主流栈，默认 `java-modern`。在 `project-brief.md` 中通过 `**技术栈预设**: <name>` 切换，或 CLI `/kickoff --preset <name>`：
+5 套主流栈，**默认 `java-modern`**。在 `project-brief.md` 中写 `**技术栈预设**: <name>`，或 CLI `/kickoff --preset <name>`：
 
 | 预设 | 后端 | 前端 | 默认 AI 设计 |
 |------|------|------|------------|
-| `java-modern` | Spring Boot 3.2 + MySQL 8 + Redis 7 + Maven | React 18 + Vite + Tailwind + shadcn-ui | claude-design |
-| `java-traditional` | Spring Boot 2.7 + MySQL 5.7 + Maven | Vue 3 + Element Plus | claude-design |
+| `java-modern` ⭐ | Spring Boot 3.2 + MySQL 8 + Redis 7 + Maven + MyBatis-Plus | React 18 + Vite + Tailwind + shadcn-ui | claude-design |
+| `java-traditional` | Spring Boot 2.7 + MySQL 5.7 + Maven + MyBatis | Vue 3 + Element Plus | claude-design |
 | `node-modern` | Nest.js 10 + Postgres + Prisma | Next.js 14 (App Router) + Tailwind + shadcn-ui | v0 |
 | `go-modern` | Gin + Postgres + GORM | React 18 + Tailwind + shadcn-ui | claude-design |
 | `python-fastapi` | FastAPI + Postgres + SQLAlchemy + Alembic | React 18 + Tailwind + shadcn-ui | lovable |
 
-技术栈优先级（从高到低）：CLI flag > project-brief > 已有 `.delivery/tech-stack.json` > manifest 自动检测 > 默认。
+**优先级链**（从高到低）：CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.delivery/tech-stack.json` → manifest 自动检测（`pom.xml`/`package.json`/`go.mod`/`pyproject.toml`）→ 默认 `java-modern`。
 
-## AI-native UI 通道（v0.5.0 新增）
+---
 
-`/import-design --from <type>` 支持 4 套通道，由 `skills/ai-native-design/SKILL.md` 详述工作流：
+## AI-native UI 通道
 
-| 通道 | 适用场景 | 流程要点 |
-|------|---------|---------|
-| `claude-design` | 默认零依赖 | Claude artifact / web-artifacts-builder 直接生成 React + Tailwind + shadcn |
-| `figma` | 设计稿驱动开发 | 通过 Figma MCP 拉 design context → 转 React+Tailwind |
+`/import-design --from <type>` 把 4 种主流 AI 设计源转化为符合 `docs/api-contract.yaml` 的 React + Tailwind 组件：
+
+| 通道 | 适用场景 | 工作流要点 |
+|------|---------|----------|
+| `claude-design` ⭐ | 默认零依赖 | Claude artifact / web-artifacts-builder 直接生成 React + Tailwind + shadcn |
+| `figma` | 设计稿驱动 | Figma MCP `get_design_context` → 转 React + Tailwind |
 | `v0` | Next.js 现代化 UI | 解析 v0 share URL → `npx shadcn add` → 接 OpenAPI client |
-| `lovable` | UI 重的 ToC | 从 Lovable 导出/clone → 移除 supabase 替换为 OpenAPI client |
+| `lovable` | UI 重的 ToC | Lovable 导出 → 移除 supabase 依赖 → 接 OpenAPI client |
+
+详细工作流见 `skills/ai-native-design/SKILL.md`。
 
 ---
 
 ## 架构概览
 
-```
+```text
 project-brief.md
-    └─ /kickoff ─── product-agent  ──► docs/prd.md
-                ├── pm-agent       ──► docs/wbs.md
-                └── architect-agent──► docs/arch.md
-                                       docs/api-contract.yaml
-                                       docs/data-model.md
-    └─ /impl ────── frontend-agent ──► web/
-              └─── backend-agent   ──► server/
-    └─ /verify ─── test-agent      ──► tests/
-               └── review-agent    ──► docs/review-report.md
-    └─ /ship ────── docs-agent     ──► README.md + docs/deploy.md + docs/demo-script.md
-               └── metrics-agent   ──► docs/efficiency-report.raw.md
+    └─ /kickoff ────── product-agent   ──► docs/prd.md
+                  ├─── pm-agent        ──► docs/wbs.md + docs/risks.md
+                  └─── architect-agent ──► docs/arch.md + docs/api-contract.yaml + docs/data-model.md
+                                            （契约 lint 通过才继续）
+    └─ /impl ───────── frontend-agent  ──► web/        （并行）
+                  └─── backend-agent   ──► server/     （并行）
+    └─ /verify ─────── test-agent      ──► tests/test-report.md      （并行）
+                  └─── review-agent    ──► docs/review-report.md     （并行）
+    └─ /fix ────────── fix-agent       ──► 源码 patch + review-report.md 末尾 Fix Log
+    └─ /ship ───────── docs-agent      ──► README.md + docs/deploy.md + docs/demo-script.md
+                  └─── metrics-agent   ──► docs/efficiency-report.md
+                                            + delivery-<id>-<ts>.tar.gz
 ```
 
-**插件目录说明（Landscape）**
+### 插件目录
 
-| 目录 | 说明 |
+| 目录 | 内容 |
 |------|------|
-| `agents/` | 9 个数字员工子代理定义 |
-| `commands/` | 13 个岗位/编排命令 |
-| `skills/` | 4 个领域知识 skill |
-| `hooks/` | 5 个自动度量 hook + handlers |
-| `contexts/delivery.md` | 交付上下文：项目目标、当前阶段、质量门槛（v0.4.0 新增） |
-| `rules/delivery/` | agent 全局不变量、合同完整性规则、度量完整性规则（v0.4.0 新增） |
-| `bin/` | 度量聚合/基线/报告脚本 + manifest 工具 |
-| `tests/` | 最小回归测试套件（unit + integration，node --test）（v0.4.0 新增） |
-| `_templates/` | agent 基础模板 |
-| `templates/` | 交付物模板（WBS、风险、blockers 等） |
-| `baseline/` | 历史项目基准数据 |
+| `agents/` | 10 个数字员工子代理（含 fix-agent） |
+| `commands/` | 17 个命令（10 岗位 + 4 编排 + 4 辅助 + 1 待用） |
+| `skills/` | 5 个领域知识：api-contract-first / acceptance-criteria / efficiency-metrics / delivery-package / ai-native-design |
+| `hooks/` | 8 类事件注册 + handlers + lib/ |
+| `bin/` | 11 个脚本：aggregate / baseline / report / manifest / doctor / progress / resume / find-plugin-root / resolve-tech-stack / check-contract-alignment / check-blockers.sh |
+| `templates/` | 12 个模板（PRD / WBS / 风险 / API 契约 / blockers / **tech-stack-presets.yaml** / ...） |
+| `contexts/delivery.md` | 全局交付上下文（agent 必读） |
+| `rules/delivery/` | 6 条 Global Invariants 权威定义 |
+| `tests/` | 17 个测试文件（unit + integration，node --test） |
+| `baseline/` | 历史项目基准数据 + 估算规则 |
 
 ---
 
 ## 度量与效率追踪
 
-插件通过 5 个 hook 自动采集交付事件（零侵入，无需手动触发）：
+8 类自动 hook（零侵入，无需手动触发）：
 
-| Hook | 触发时机 | 采集内容 |
-|------|---------|---------|
-| `session-start` | 会话开始 | session_id、时间戳 |
-| `session-end` | 会话结束 | token 消耗（input/output）|
-| `pre-tool-use` | 工具调用前 | 工具名、文件路径 |
-| `post-tool-use` | 工具调用后 | 成功/失败 |
-| `subagent-stop` | 子代理完成 | 运行时长、token 消耗 |
+| Hook 事件 | 触发时机 | 采集内容 |
+|-----------|---------|---------|
+| `SessionStart` | 会话开始 | session_id / Node 版本 / 持久化 plugin-root marker / 自动 bootstrap project_id / progress 推断 |
+| `SessionEnd` | 会话结束 | token 消耗 + 释放本会话 advisory lock |
+| `UserPromptSubmit` | 用户输入 | 抓 slash command 作 phase 标签 → 写 `phase_start` 事件 |
+| `PreToolUse` | 工具调用前 | 工具名 / 文件路径 / Bash 头 / Task 时写 `subagent_start` + advisory lock |
+| `PostToolUse` | 工具调用后 | 成功/失败 / 耗时 / 自动捕获 test-report.md 与 review-report.md 中的质量指标 |
+| `PostToolUseFailure` | 工具调用失败 | 失败工具事件（与 PostToolUse 共享 handler，标 `success: false`） |
+| `SubagentStop` | 子代理完成 | 通过 lookback join 反查 PreToolUse 记录的 `subagent_start`，重建真实 name + duration |
+| `Stop` | 每个 turn 结束 | 关闭未闭合 phase + 后台触发 metrics 聚合 + progress.json infer |
 
-`PostToolUseFailure` 复用 `post-tool-use` handler，失败工具调用会以 `success: false` 写入同一条度量链路。
+数据链路：
 
-Hook 入口遵循 Claude Code v2.1+ 插件约定：`hooks/hooks.json` 自动加载；不要在 `.claude-plugin/plugin.json` 中显式声明 hooks，也不要维护 `.claude/hooks.json` 作为主入口。
-
-**查看报告**：直接 `/report` 命令即可，commands 内部已自动调用 aggregate + report。也可手动：
-
-```bash
-: "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
-node "$DDT_PLUGIN_ROOT/bin/report.mjs" --project "$DDT_PROJECT_ID" \
-  --baseline baseline/baseline.locked.json --out docs/efficiency-report.raw.md
+```text
+hooks → ~/.claude/delivery-metrics/<project-id>/events.jsonl
+    └─→ bin/aggregate.mjs → metrics.db (sessions / tool_calls / subagent_runs / phase_runs / quality_metrics)
+        └─→ bin/report.mjs → docs/efficiency-report.raw.md
+            └─→ metrics-agent (自然语言解读 + 三问分析 + Top 3 优化建议)
+                └─→ docs/efficiency-report.md
 ```
 
-> v0.5.0：`captureQualityIfNeeded` 已由 PostToolUse hook 自动捕获，commands 不再需要 `--capture-quality` 兜底。
+> Baseline 文件（`baseline/baseline.locked.json`）属于被交付项目目录，不属于插件源码目录；首次 `/report` 时根据 `historical-projects.csv` + `estimation-rules.md` 自动封盘，封盘后不可变。
 
-Baseline 文件属于被交付项目目录，不属于插件源码目录。`report.mjs` 默认要求 `baseline/baseline.locked.json` 存在；缺失时会失败，除非显式传 `--allow-missing-baseline` 输出不可证明报告。
+---
+
+## 进度状态机与跨会话恢复
+
+每个 DDT 项目在 `.delivery/progress.json` 维护一份状态机：
+
+```json
+{
+  "schema_version": 1,
+  "project_id": "proj-...",
+  "current_phase": "design",
+  "last_activity_at": "2026-04-28T07:55:00Z",
+  "phases": {
+    "prd":         { "status": "completed",   "started_at": "...", "completed_at": "..." },
+    "design":      { "status": "in_progress", "started_at": "...", "completed_at": null  },
+    "build-web":   { "status": "pending",     ... }
+  }
+}
+```
+
+由 hook 全自动维护：
+
+- **SessionStart**：根据 `docs/*` 文件存在性 infer 状态
+- **UserPromptSubmit**：检测到岗位 phase 命令时标 `in_progress`
+- **Stop**：每个 turn 结束 infer，artifact 出现则标 `completed`
+
+中断后跨会话续作：`/resume` 输出阶段进度 + 下一步建议（含 stale 检测）。
 
 ---
 
@@ -177,65 +228,98 @@ Baseline 文件属于被交付项目目录，不属于插件源码目录。`repo
 | Code | 含义 | 来源 |
 |------|------|------|
 | 0 | 成功 | 所有命令 |
-| 1 | 前置条件未满足（必读文件缺失、DDT_PLUGIN_ROOT 未解析、参数错误等） | 大多数命令 Phase 1 |
+| 1 | 前置条件未满足（必读文件缺失 / `DDT_PLUGIN_ROOT` 未解析 / 参数错误） | 各命令 Phase 1 |
 | 2 | 存在未解决 blocker（`docs/blockers.md` 中 `resolved_at: null`） | `bin/check-blockers.sh` |
-| 3 | 契约对齐失败（`/import-design` 生成代码引入禁用模式如 lovable supabase） | `bin/check-contract-alignment.mjs` |
-| 4 | OpenAPI lint 失败（schema 错误、security 未声明等） | `/design`、`/impl`、`/kickoff` |
-| 5 | OpenAPI lint 工具缺失（npx 不可用 / @redocly/cli 未装） | `/design`、`/impl`、`/kickoff` |
+| 3 | 契约对齐失败（`/import-design` 生成代码引入禁用模式） | `bin/check-contract-alignment.mjs` |
+| 4 | OpenAPI lint 失败（schema 错误 / security 未声明等） | `/design`、`/impl`、`/kickoff` |
+| 5 | OpenAPI lint 工具缺失（`npx` 不可用 / `@redocly/cli` 未装） | 同上 |
 
-OpenAPI 契约 lint 是硬门禁：`/design`、`/build-web`、`/build-api` 和 `/kickoff` 中 lint 失败返回 4，lint 工具缺失返回 5。
+OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web`、`/build-api` 或 `/ship`。
 
 ---
 
 ## 数据与隐私
 
 - 所有度量数据落在本地 `~/.claude/delivery-metrics/`，**不上报任何外部服务**
-- Bash 命令仅记录前 80 个字符，工具事件仅记录度量所需字段
-- 度量数据库（`metrics.db`）为本地 SQLite 文件，可随时删除
-- 清空数据：`rm ~/.claude/delivery-metrics/events.jsonl ~/.claude/delivery-metrics/metrics.db`
+- Bash 命令仅记录前 80 字符；工具事件仅记录度量必需字段
+- 度量数据库（`metrics.db`）为本地 SQLite，可随时删除
+- 清空数据：`rm -rf ~/.claude/delivery-metrics/`
 
 ---
 
 ## 环境要求
 
-| 项目 | 要求 |
-|------|------|
-| Node.js | ≥ 22.0.0（使用内置 `node:sqlite`，零 npm 依赖） |
-| Claude Code | 最新版 |
-| 操作系统 | macOS / Linux / Windows（WSL2）|
+| 项 | 要求 |
+|----|------|
+| Node.js | **≥ 22.0.0**（使用内置 `node:sqlite`，零 npm 依赖） |
+| Claude Code | v2.1+（hook 自动加载） |
+| 操作系统 | macOS / Linux / Windows（建议 WSL2） |
+| 可选工具 | `@redocly/cli`（OpenAPI lint，命令首次运行时 `npx` 自动拉取） |
 
-**可选环境变量**：
+### 可选环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
+| 变量 | 默认 | 说明 |
+|------|------|------|
 | `DDT_METRICS_DIR` | `~/.claude/delivery-metrics/` | 度量数据目录 |
-| `DDT_PROJECT_ID` | `.delivery/project-id` | 当前项目 ID |
+| `DDT_PROJECT_ID` | 自动从 `.delivery/project-id` 读取 | 当前项目 ID |
 | `DDT_HOOK_PROFILE` | `standard` | Hook 档位：`minimal` / `standard` / `strict` |
-| `DDT_DISABLED_HOOKS` | 空 | 禁用指定 DDT hook id，例如 `ddt:pre-tool-use` |
+| `DDT_DISABLED_HOOKS` | 空 | 禁用指定 hook id（CSV，例：`ddt:pre-tool-use`） |
 
-度量脚本与 hook 开关都使用独立 `DDT_*` 命名空间，不读取 ECC 变量，也不依赖 MCP server 或远程上报。
+> 度量脚本与 hook 开关都使用独立 `DDT_*` 命名空间，不读取 ECC 变量，也不依赖 MCP server 或远程上报。
+
+---
+
+## 故障排查
+
+**优先做这一步**：
+
+```text
+/digital-delivery-team:doctor
+```
+
+11 项检查覆盖：Node 版本 / 插件 root / SessionStart marker / hooks.json 7 个事件注册 / events.jsonl 可写 / metrics.db 完整 / `@redocly/cli` 可用 / `check-blockers.sh` 权限 / M3-M4 脚本完整 / 技术栈预设与 ai-native-design skill / progress.json 写入路径。
+
+**常见问题**：
+
+| 现象 | 处理 |
+|------|------|
+| `Node ≥ 22 ❌` | `nvm install 22 && nvm use 22` |
+| `SessionStart marker ❌` | 重启 Claude Code 会话（marker 由 SessionStart hook 自动写入） |
+| `@redocly/cli ❌` | 确认网络可达；首次执行命令时 `npx --yes @redocly/cli` 会自动安装 |
+| `progress.json 状态错误` | 手动校正：`node "$DDT_PLUGIN_ROOT/bin/progress.mjs" --update <phase> <status>` |
+| 跨会话忘记进度 | `/resume` |
 
 ---
 
 ## Testing
 
-需要 Node.js 22+（内置 `node:test` 与 `node:sqlite`）。
-
 ```bash
 cd plugins/digital-delivery-team
-
-npm test                 # 全量（unit + integration）
-npm run test:unit        # 仅单元测试
-npm run test:integration # 仅集成测试
+npm test                  # 全量（80 个测试）
+npm run test:unit         # 仅 unit
+npm run test:integration  # 仅 integration
 ```
 
-| 测试文件 | 覆盖内容 |
-|----------|---------|
-| `tests/unit/frontmatter.test.mjs` | agents/skills/commands frontmatter 必填字段；agents 引用 `rules/delivery/agent-invariants.md` |
-| `tests/unit/hooks-registration.test.mjs` | hooks.json 可解析；entry id 唯一；command ≤ 256 字符；handler 文件存在 |
-| `tests/unit/plugin-manifest.test.mjs` | `bin/manifest.mjs --check` 退出码为 0；plugin.json 不声明 agents/hooks |
-| `tests/integration/metric-chain.test.mjs` | aggregate → baseline → report 全链路；断言 metrics.db、baseline.locked.json 字段、报告三个章节标题 |
-| `tests/integration/blocker-gate.test.mjs` | /wbs Phase 1 门禁：未解决 blocker → exit 2；全部解决 → exit 0 |
+| 测试套 | 数量 | 覆盖 |
+|-------|------|------|
+| `tests/unit/frontmatter.test.mjs` | 4 | agents/skills/commands frontmatter 必填；agent 必读 invariants |
+| `tests/unit/hooks-registration.test.mjs` | 5 | hooks.json 合法性 + entry id 唯一 + handler 文件存在 |
+| `tests/unit/plugin-manifest.test.mjs` | 1 | manifest --check 通过 |
+| `tests/unit/v3-semantics.test.mjs` | 6 | metrics-integrity / contract-integrity / refresh 增量语义 |
+| `tests/unit/phase-detection.test.mjs` | 8 | UserPromptSubmit slash command 识别 |
+| `tests/unit/commands-slim.test.mjs` | 6 | 防 commands 退化回 80 行 inline |
+| `tests/unit/find-plugin-root.test.mjs` | 4 | plugin-root 5 级解析链 |
+| `tests/unit/m3-agents.test.mjs` | 9 | 三 agent 必读 tech-stack.json + ai-native-design skill |
+| `tests/unit/advisory-lock.test.mjs` | 7 | 白名单 / 冲突 warn / stale / SessionEnd 释放 |
+| `tests/integration/metric-chain.test.mjs` | 1 | aggregate → baseline → report 全链路 |
+| `tests/integration/blocker-gate.test.mjs` | 3 | blocker 门禁 |
+| `tests/integration/lookback-join.test.mjs` | 3 | subagent_start lookback join + phase_runs + FIFO |
+| `tests/integration/end-to-end-phase-coverage.test.mjs` | 1 | 完整 6 阶段链路：raw report 各 stage 实际工时非空（P0 守门测试） |
+| `tests/integration/tech-stack.test.mjs` | 9 | 5 级优先级链解析 |
+| `tests/integration/progress-state-machine.test.mjs` | 6 | progress.mjs / resume.mjs 状态机 |
+| `tests/integration/concurrent-events.test.mjs` | 4 | 100 并发 appendEvent 不丢/不交错（O_APPEND + advisory lock） |
+| `tests/integration/session-start-context.test.mjs` | 4 | additionalContext 注入合法 JSON |
+| **合计** | **80** | **100% pass** |
 
 ---
 
@@ -243,14 +327,16 @@ npm run test:integration # 仅集成测试
 
 - [USAGE.md](./USAGE.md) — 场景化使用示例
 - [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录
-- 设计文档：`design/岗位技能提效与数字员工团队方案_v3.md`
+- 设计原则：契约先行（Contract-First）+ 数字员工分工（Single-Producer）+ 自动度量（Hooks-Driven）
 
 ---
 
-> **版本**：0.5.0 · **许可**：MIT（见 marketplace.json）
+## 反馈与贡献
 
-## 故障排查
+- 问题反馈：[GitHub Issues](https://github.com/dhslegen/digital-delivery-team/issues)
+- 功能建议：欢迎提 PR 或在 Issues 讨论
+- 安全问题：请直接邮件 dhslegle@gmail.com（不要在 Issues 公开）
 
-跑 `/digital-delivery-team:doctor` 一次完成 11 项自检：Node 版本 / 插件 root / SessionStart marker / hooks.json 7 个事件注册 / events.jsonl 可写 / metrics.db 完整 / @redocly/cli / check-blockers.sh 权限 / M3-M4 脚本齐全 / 技术栈预设与 ai-native-design skill / progress.json 写入路径。
+---
 
-跨会话恢复中断的项目：`/resume`。
+> **版本**：v0.5.0 · **许可**：[MIT](./LICENSE) · **作者**：[@dhslegen](https://github.com/dhslegen)
