@@ -6,3 +6,13 @@
 
 # Node.js
 node_modules/
+
+# 测试残留（防 -e 模式 argv 错位污染仓库）
+/undefined/
+/w[0-9]/
+/w[0-9][0-9]/
+
+# DDT 项目交付产物（仅在被交付项目目录中产生；插件仓库本身不应有）
+/.delivery/
+/baseline/baseline.locked.json
+/docs/efficiency-report*.md

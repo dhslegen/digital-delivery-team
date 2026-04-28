@@ -13,8 +13,8 @@ model: opus
 
 - `docs/prd.md`（必读）
 - `docs/wbs.md`（必读）
+- `.delivery/tech-stack.json`（**M3 必读** 技术栈选型 SSoT，由 `/design` 自动写入）
 - `skills/api-contract-first/SKILL.md`（OpenAPI 契约规范）
-- 当前代码仓的技术栈识别（通过 Read `package.json` / `pyproject.toml` / `go.mod` 等文件）
 - `contexts/delivery.md`（必读）
 - `rules/delivery/agent-invariants.md`（必读）
 - `rules/delivery/contract-integrity.md`（必读）
@@ -32,6 +32,7 @@ model: opus
 3. 每个关键决策给出 ≥ 2 个备选方案 + trade-off 表 + 选型理由（ADR 格式）
 4. 数据模型必须包含：事务边界 / 并发控制策略 / 索引建议 / 预估数据量级
 5. 不产生实现代码
+6. **M3 技术栈刚性约束**：架构 / 契约 / 数据模型必须严格遵循 `.delivery/tech-stack.json` 中的 backend / frontend / database / orm 选项；禁止自由发挥。若需要偏离（如 PRD 性能要求超出 preset 范围）→ 写 blocker 等人类决策，不擅自改栈。
 
 ## Output Contract
 

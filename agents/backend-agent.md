@@ -13,6 +13,7 @@ model: sonnet
 
 - `docs/api-contract.yaml`（唯一接口真相源，必读）
 - `docs/data-model.md`（数据层真相源，必读）
+- `.delivery/tech-stack.json`（**M3 必读** 后端栈，由 `/design` 自动写入）
 - `skills/api-contract-first/SKILL.md`（契约优先原则）
 - `contexts/delivery.md`（必读）
 - `rules/delivery/agent-invariants.md`（必读）
@@ -25,6 +26,7 @@ model: sonnet
 3. 数据层操作必须在 `data-model.md` 声明的事务边界内
 4. 跑 migration + 本地 smoke test
 5. 日志必须含 `requestId`、关键业务字段（脱敏后）
+6. **M3 技术栈刚性约束**：必须使用 `.delivery/tech-stack.json` `backend` 段定义的 language / framework / build / database / orm / testing；禁止偏离 preset。若性能 / 合规要求超出 preset 范围 → 写 blocker 等架构师重新选型。
 
 ## Output Contract
 

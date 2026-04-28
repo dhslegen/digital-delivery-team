@@ -23,24 +23,15 @@ echo "⚠️ 已创建 project-brief.md 骨架，请填写后重跑 /prd"
 exit 1
 ```
 
-## Phase 2 — 初始化项目 ID
+## Phase 2 — 项目 ID 自检
 
-若 `DDT_PROJECT_ID` 未设置且 `.delivery/project-id` 不存在：
-
-```bash
-if [ -z "${DDT_PLUGIN_ROOT:-}" ]; then
-  DDT_PLUGIN_ROOT="$(node -e 'const p=require("path"),f=require("fs"),o=require("os");const ok=r=>r&&f.existsSync(p.join(r,"bin","aggregate.mjs"));const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e)){console.log(p.resolve(e));process.exit(0)}const h=p.join(o.homedir(),".claude");for(const s of [["plugins","digital-delivery-team"],["plugins","digital-delivery-team@digital-delivery-team"],["plugins","marketplace","digital-delivery-team"]]){const r=p.join(h,...s);if(ok(r)){console.log(r);process.exit(0)}}try{const cb=p.join(h,"plugins","cache");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,"digital-delivery-team");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const r=p.join(pd,v.name);if(ok(r)){console.log(r);process.exit(0)}}}}catch{}process.exit(1)')" || { echo "❌ DDT plugin root not found; set DDT_PLUGIN_ROOT"; exit 1; }
-  export DDT_PLUGIN_ROOT
-fi
-node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --bootstrap --name "$(basename "$(pwd)")"
-export DDT_PROJECT_ID=$(cat .delivery/project-id)
-echo "✅ 项目 ID: $DDT_PROJECT_ID"
-```
-
-否则读取已有 ID：
+`SessionStart` hook 已在新会话首次进入项目时自动 bootstrap。命令本身只读取已有 ID：
 
 ```bash
+: "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+test -d "$DDT_PLUGIN_ROOT" || { echo "❌ DDT plugin root 未解析，请重启会话或运行 /digital-delivery-team:doctor"; exit 1; }
 export DDT_PROJECT_ID=$(cat .delivery/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
+test -n "$DDT_PROJECT_ID" || { node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --bootstrap --name "$(basename "$(pwd)")"; export DDT_PROJECT_ID=$(cat .delivery/project-id); }
 ```
 
 ## Phase 3 — 增量 / refresh 选择

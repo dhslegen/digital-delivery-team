@@ -7,8 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PLUGIN_JSON = path.join(ROOT, '.claude-plugin', 'plugin.json');
 
-const KNOWN_POSITIONAL    = new Set(['prd','wbs','design','build-web','build-api','test','review','package','report']);
+const KNOWN_POSITIONAL    = new Set(['prd','wbs','design','build-web','build-api','test','review','package','report','fix']);
 const KNOWN_ORCHESTRATION = new Set(['kickoff','impl','verify','ship']);
+const KNOWN_AUXILIARY     = new Set(['doctor', 'import-design', 'resume']);
 
 function scanAgents() {
   return fs.readdirSync(path.join(ROOT, 'agents'))
@@ -42,21 +43,24 @@ function scanCommands() {
 
   const positional = [];
   const orchestration = [];
+  const auxiliary = [];
   const unknown = [];
   for (const name of files) {
-    if (KNOWN_POSITIONAL.has(name))         positional.push(name);
-    else if (KNOWN_ORCHESTRATION.has(name)) orchestration.push(name);
+    if (KNOWN_POSITIONAL.has(name))           positional.push(name);
+    else if (KNOWN_ORCHESTRATION.has(name))   orchestration.push(name);
+    else if (KNOWN_AUXILIARY.has(name))       auxiliary.push(name);
     else unknown.push(name);
   }
   if (unknown.length > 0) {
     console.error(`ERROR: Unknown commands (not in v3 spec): ${unknown.join(', ')}`);
     process.exit(1);
   }
-  const posOrder = ['prd','wbs','design','build-web','build-api','test','review','package','report'];
+  const posOrder = ['prd','wbs','design','build-web','build-api','test','review','fix','package','report'];
   const orchOrder = ['kickoff','impl','verify','ship'];
   positional.sort((a, b) => posOrder.indexOf(a) - posOrder.indexOf(b));
   orchestration.sort((a, b) => orchOrder.indexOf(a) - orchOrder.indexOf(b));
-  return { positional, orchestration };
+  auxiliary.sort();
+  return { positional, orchestration, auxiliary };
 }
 
 function scanHooks() {

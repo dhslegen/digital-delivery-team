@@ -13,7 +13,9 @@ model: sonnet
 
 - `docs/api-contract.yaml`（唯一接口真相源，必读）
 - `docs/prd.md`（UX 语义参考）
+- `.delivery/tech-stack.json`（**M3 必读** 前端栈与 ai_design 选项，由 `/design` 自动写入）
 - `skills/api-contract-first/SKILL.md`（契约优先原则）
+- `skills/ai-native-design/SKILL.md`（AI 设计稿工作流，必读）
 - `contexts/delivery.md`（必读）
 - `rules/delivery/agent-invariants.md`（必读）
 - `rules/delivery/contract-integrity.md`（必读）
@@ -25,6 +27,8 @@ model: sonnet
 3. 完成后必须跑：本地构建 + lint + type-check + 最小 happy-path UI 测试
 4. 代码组织：`web/` 目录；组件测试放 `web/__tests__/`
 5. 所有网络调用走统一 client（自动从 OpenAPI 生成 types）
+6. **M3 技术栈刚性约束**：必须使用 `.delivery/tech-stack.json` `frontend` 段定义的 framework / bundler / ui.css / ui.components / state / data_fetching；禁止偏离。preset 默认 `react-18 + vite + tailwind + shadcn-ui`，若 PRD 提出特殊 UX 需求需要换栈 → 写 blocker，不自行换。
+7. **AI-native UI 工作流**：`tech-stack.json::ai_design.type` 决定生成 UI 代码的来源（claude-design / figma / v0 / lovable），按 `skills/ai-native-design/SKILL.md` 中的对应章节执行。
 
 ## Output Contract
 

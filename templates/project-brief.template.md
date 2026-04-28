@@ -26,7 +26,9 @@
 ## 关键约束
 
 - **截止日期**：<YYYY-MM-DD>
-- **技术栈**：<已有栈或偏好，e.g. React + Node.js + PostgreSQL>
+- **技术栈预设**：java-modern  <!-- 候选：java-modern | java-traditional | node-modern | go-modern | python-fastapi | custom -->
+- **AI-native UI**：claude-design  <!-- 候选：claude-design | figma | v0 | lovable | none -->
+- **技术栈细节**：<可选，仅在 preset=custom 或需要覆盖默认时填写。e.g. "用 PostgreSQL 替代 MySQL"或"前端必须用 Vue"。留空则按 preset 默认。>
 - **预算 / 工期**：<人天或工时>
 - **合规 / 安全**：<如有，e.g. 需通过 GDPR 审计>
 

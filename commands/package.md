@@ -14,22 +14,11 @@ argument-hint: "[--demo-length <minutes>]"
 以下任一不满足直接拒绝：
 
 ```bash
-# 检查测试报告存在
 test -f tests/test-report.md || { echo "❌ tests/test-report.md 不存在，请先运行 /test"; exit 1; }
-
-# 检查评审报告无阻塞
 test -f docs/review-report.md || { echo "❌ docs/review-report.md 不存在，请先运行 /review"; exit 1; }
-
-# 检查上游阶段是否留下未解决 blockers
-if [ -f docs/blockers.md ]; then
-  unresolved=$(awk '/^- \*\*resolved_at\*\*: null$/' docs/blockers.md | wc -l)
-  if [ "$unresolved" -gt 0 ]; then
-    echo "❌ docs/blockers.md 中存在 $unresolved 条未解决阻塞，请先处理。"
-    echo "   未解决项来自："
-    awk '/^## /{h=$0} /^- \*\*resolved_at\*\*: null$/{print "   - "h}' docs/blockers.md
-    exit 2
-  fi
-fi
+: "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+test -d "$DDT_PLUGIN_ROOT" || { echo "❌ DDT plugin root 未解析，请重启会话或运行 /digital-delivery-team:doctor"; exit 1; }
+"$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 ```
 
 若 `docs/review-report.md` 中阻塞级条目 > 0，拒绝执行并提示：

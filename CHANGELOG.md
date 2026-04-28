@@ -4,6 +4,71 @@
 
 ---
 
+## [0.5.0] - 2026-04-28
+
+完整修复 v0.4.x e2e 测试中发现的 P0 数据采集断链 + ECC 体验对齐 + 技术栈灵活性 + 可重入状态机。
+
+### Added — 新增
+
+**核心数据链路（M1）**
+- `hooks/handlers/user-prompt-submit.js` — 抓 slash command 作 phase 标签
+- `hooks/handlers/stop.js` — 关闭未闭合 phase + 后台触发 metrics 聚合
+- `bin/lib/schema.sql::phase_runs` 表 — 精确阶段工时
+- `subagent_runs` 占位行机制 — `subagent_start`/`subagent_stop` lookback join 计算真实 duration
+
+**用户体验对齐 ECC（M2）**
+- `bin/find-plugin-root.mjs` / `bin/check-blockers.sh` / `bin/doctor.mjs` + `commands/doctor.md`（11 项安装自检）
+- `agents/fix-agent.md` + `commands/fix.md` — 评审 → 修复闭环（dry-run 默认）
+- SessionStart 自动 bootstrap project_id + 持久化 `~/.claude/delivery-metrics/.ddt-plugin-root` marker
+
+**技术栈灵活性（M3）**
+- `templates/tech-stack-presets.yaml` — 5 套主流栈（默认 java-modern）+ 4 套 AI-native UI 通道（claude-design / figma / v0 / lovable）
+- `bin/resolve-tech-stack.mjs` — 5 级优先级链（CLI > brief > existing > manifest > default）
+- `bin/check-contract-alignment.mjs` — UI 代码契约对齐轻量检查
+- `skills/ai-native-design/SKILL.md` — 4 通道 AI 设计稿工作流
+- `commands/import-design.md` — `/import-design --from figma|v0|lovable|claude-design`
+- `--preset` / `--ai-design` CLI 参数支持（kickoff / design）
+
+**可重入与跨会话恢复（M4）**
+- `bin/progress.mjs` — `.delivery/progress.json` 状态机（10 phase，5 子命令）
+- `bin/resume.mjs` + `commands/resume.md` — `/resume` 跨会话恢复
+- `hooks/handlers/lib/advisory-lock.js` — `.delivery/locks/` advisory lock（warn-only）
+
+**测试覆盖**
+- 39 个新测试（10 unit + 16 integration），含 P0 端到端断言"6 个 stage 实际工时全非空"
+
+### Changed — 改动
+
+- `hooks/handlers/pre-tool-use.js` — Task/Agent 触发时写 subagent_start + advisory lock 触发
+- `hooks/handlers/subagent-stop.js` — payload 缺字段时反查 events.jsonl
+- `hooks/handlers/post-tool-use.js` — 路径鲁棒性（realpath + endsWith）
+- `hooks/handlers/session-start.js` — Node 22 检查 + plugin root marker + auto bootstrap + progress infer
+- `hooks/handlers/session-end.js` — 释放本会话 advisory lock
+- `bin/lib/store.mjs` — FIFO 关联（`MIN(id)`）+ `INSERT OR REPLACE`
+- `bin/report.mjs` — phase 维度优先 → subagent fallback；新增"阶段与编排原始工时"段
+- `agents/architect-agent.md` / `frontend-agent.md` / `backend-agent.md` — 必读 `tech-stack.json` + Hard Requirement 6 技术栈刚性约束
+- `agents/metrics-agent.md` — Hard Requirement 6 工时不可证明刚性约束
+- `commands/prd.md` / `wbs.md` / `design.md` / `package.md` / `report.md` — 移除 80 行 inline node-e
+- `commands/verify.md` — 阻塞级评审项时建议 `/fix --severity blocker --apply`
+- `templates/project-brief.template.md` — 新增 "技术栈预设" + "AI-native UI" 字段
+
+### Fixed — 修复
+
+- 🔴 P0: efficiency-report.raw.md 阶段对比表 6 个 stage 全部为 `—`
+  - 根因：SubagentStop hook payload 不携带 `subagent_name` / `duration_ms`
+  - 修复：`subagent_start` lookback join + UserPromptSubmit/Stop 维护 `phase_runs`
+- 🟠 并行 tool_calls UPDATE 错配（`MAX(id)` 在 `/impl` 双 Task 错配）→ FIFO `MIN(id)`
+- 🟠 quality_metrics 同毫秒事件被 INSERT OR IGNORE 静默丢弃 → INSERT OR REPLACE
+- 🟠 commands 内嵌 80 行 inline node-e（每次需用户批准 Bash）→ marker fallback 1 行
+- 🟡 metrics-agent 工时缺失时仍输出"约 -51%"伪结论 → Hard Requirement 6 严格禁止
+- 🟡 `captureQualityIfNeeded` 路径过严漏采 → realpath 鲁棒匹配
+
+### Removed — 移除
+
+- `commands/report.md` 的 `aggregate.mjs --capture-quality` 兜底（PostToolUse 已自动捕获）
+
+---
+
 ## [0.4.1] - 2026-04-27
 
 ### Fixed

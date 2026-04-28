@@ -1,0 +1,175 @@
+# DDT 技术栈预设
+#
+# 用途：当 project-brief.md 未指定栈时，DDT 默认采用此处的预设。
+# 用户可以：
+#   1. 在 project-brief.md 的"技术栈预设"字段写入 preset 名称（如 java-modern）
+#   2. 跑 /kickoff 或 /design 时传 --preset <name>
+#   3. 在 .delivery/tech-stack.json 里完整自定义
+#   4. 让 DDT 自动检测项目根目录的 manifest 文件（package.json / pom.xml ...）
+#
+# 优先级（从高到低）：CLI --preset > project-brief 字段 > .delivery/tech-stack.json > manifest 自动检测 > 默认（java-modern）
+
+default_preset: java-modern
+
+presets:
+  java-modern:
+    label: "Java 现代企业栈（默认）"
+    backend:
+      language: java
+      version: "17"
+      framework: spring-boot
+      framework_version: "3.2.x"
+      build: maven
+      database:
+        primary: mysql
+        primary_version: "8.0"
+        cache: redis
+        cache_version: "7.x"
+      orm: mybatis-plus
+      api_style: rest-openapi
+      validation: jakarta-validation
+      logging: logback + structured json
+      observability: micrometer + prometheus
+      testing: junit5 + testcontainers
+      scaffold_cmd: "mvn -B archetype:generate -DarchetypeArtifactId=spring-boot-starter -DgroupId=com.example -DartifactId={projectName}"
+    frontend:
+      language: typescript
+      version: "5.x"
+      framework: react
+      framework_version: "18"
+      bundler: vite
+      ui:
+        css: tailwindcss
+        components: shadcn-ui
+      state: zustand
+      router: react-router
+      data_fetching: tanstack-query
+      type_generation: openapi-typescript
+      testing: vitest + react-testing-library
+      scaffold_cmd: "npm create vite@latest {projectName} -- --template react-ts"
+    ai_design: claude-design
+
+  java-traditional:
+    label: "Java 经典栈（兼容老项目）"
+    backend:
+      language: java
+      version: "11"
+      framework: spring-boot
+      framework_version: "2.7.x"
+      build: maven
+      database:
+        primary: mysql
+        primary_version: "5.7"
+        cache: redis
+      orm: mybatis
+      api_style: rest-openapi
+    frontend:
+      language: typescript
+      framework: vue
+      framework_version: "3"
+      bundler: vite
+      ui:
+        css: tailwindcss
+        components: element-plus
+      data_fetching: axios + pinia
+    ai_design: claude-design
+
+  node-modern:
+    label: "Node 全栈现代栈"
+    backend:
+      language: typescript
+      framework: nestjs
+      framework_version: "10.x"
+      build: npm
+      database:
+        primary: postgres
+        primary_version: "16"
+        cache: redis
+      orm: prisma
+      api_style: rest-openapi
+      testing: jest + supertest
+      scaffold_cmd: "nest new {projectName}"
+    frontend:
+      language: typescript
+      framework: nextjs
+      framework_version: "14"
+      app_router: true
+      ui:
+        css: tailwindcss
+        components: shadcn-ui
+      data_fetching: server-actions + tanstack-query
+      testing: vitest
+      scaffold_cmd: "npx create-next-app@latest {projectName} --ts --tailwind --app"
+    ai_design: v0
+
+  go-modern:
+    label: "Go 高性能服务"
+    backend:
+      language: go
+      version: "1.22"
+      framework: gin
+      framework_version: "1.10"
+      build: go-modules
+      database:
+        primary: postgres
+        cache: redis
+      orm: gorm
+      api_style: rest-openapi
+      testing: go-test + testify
+      scaffold_cmd: "go mod init {projectName}"
+    frontend:
+      language: typescript
+      framework: react
+      framework_version: "18"
+      bundler: vite
+      ui:
+        css: tailwindcss
+        components: shadcn-ui
+    ai_design: claude-design
+
+  python-fastapi:
+    label: "Python FastAPI + React"
+    backend:
+      language: python
+      version: "3.12"
+      framework: fastapi
+      framework_version: "0.110"
+      build: poetry
+      database:
+        primary: postgres
+        cache: redis
+      orm: sqlalchemy + alembic
+      api_style: rest-openapi
+      testing: pytest
+      scaffold_cmd: "poetry new {projectName}"
+    frontend:
+      language: typescript
+      framework: react
+      framework_version: "18"
+      bundler: vite
+      ui:
+        css: tailwindcss
+        components: shadcn-ui
+    ai_design: lovable
+
+ai_design_options:
+  claude-design:
+    label: Claude Artifact / web-artifacts-builder
+    flow: 用 Claude 生成 React + Tailwind + shadcn-ui 组件代码，直接落地 web/
+    skill: ai-native-design
+    requires_external: false
+  figma:
+    label: Figma 设计稿一键转代码
+    flow: 通过 Figma MCP 读取设计稿 → get_design_context → 生成符合 design system 的代码
+    skill: ai-native-design
+    requires_external: figma-mcp-server
+  v0:
+    label: Vercel v0
+    flow: 用 v0.dev 生成的 React 组件直接 import 到 web/components/
+    skill: ai-native-design
+    requires_external: v0-cli
+  lovable:
+    label: Lovable.dev
+    flow: 从 Lovable 项目导出 zip → 解压到 web/ → 接入 api-contract.yaml
+    skill: ai-native-design
+    requires_external: lovable-export-zip

@@ -43,6 +43,20 @@ CREATE TABLE IF NOT EXISTS subagent_runs (
   success        INTEGER
 );
 
+-- M1-6: phase_runs 表，记录精确的 slash command 阶段工时
+CREATE TABLE IF NOT EXISTS phase_runs (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id     TEXT,
+  project_id     TEXT,
+  phase          TEXT NOT NULL,
+  args           TEXT,
+  started_at     TEXT NOT NULL,
+  ended_at       TEXT,
+  duration_ms    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_phase_runs_project ON phase_runs(project_id);
+CREATE INDEX IF NOT EXISTS idx_phase_runs_session_phase ON phase_runs(session_id, phase);
+
 -- v0.4.0: quality_metrics 表重新设计，按 source 分行存储测试与审查指标
 CREATE TABLE IF NOT EXISTS quality_metrics (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,

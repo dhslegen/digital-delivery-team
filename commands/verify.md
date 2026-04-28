@@ -32,7 +32,10 @@ test -f docs/api-contract.yaml || { echo "❌ 请先运行 /design"; exit 1; }
 
 若**任一不满足**：
 
-> ❌ **禁止推进到 /ship，请修复后重跑 `/verify`**
+> ❌ **禁止推进到 /ship**，建议下一步：
+>
+> - 阻塞级 > 0 时：`/fix --severity blocker --apply` 修复后重跑 `/verify`
+> - 覆盖率不足时：补充测试用例后重跑 `/test`
 
 ```
 /verify 完成

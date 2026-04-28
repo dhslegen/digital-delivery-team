@@ -1,6 +1,6 @@
 ---
 description: 架构师命令 · 生成架构草案 + OpenAPI 契约 + 数据模型。
-argument-hint: "[--refresh] [架构倾向性说明]"
+argument-hint: "[--refresh] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [架构倾向性说明]"
 ---
 
 # /design
@@ -14,30 +14,29 @@ argument-hint: "[--refresh] [架构倾向性说明]"
 ```bash
 test -f docs/prd.md || { echo "❌ docs/prd.md 不存在，请先运行 /prd"; exit 1; }
 test -f docs/wbs.md || { echo "❌ docs/wbs.md 不存在，请先运行 /wbs"; exit 1; }
-
-# 检查上游阶段是否留下未解决 blockers
-if [ -f docs/blockers.md ]; then
-  unresolved=$(awk '/^- \*\*resolved_at\*\*: null$/' docs/blockers.md | wc -l)
-  if [ "$unresolved" -gt 0 ]; then
-    echo "❌ docs/blockers.md 中存在 $unresolved 条未解决阻塞，请先处理。"
-    echo "   未解决项来自："
-    awk '/^## /{h=$0} /^- \*\*resolved_at\*\*: null$/{print "   - "h}' docs/blockers.md
-    exit 2
-  fi
-fi
+: "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+test -d "$DDT_PLUGIN_ROOT" || { echo "❌ DDT plugin root 未解析，请重启会话或运行 /digital-delivery-team:doctor"; exit 1; }
+"$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 ```
 
 若 `docs/api-contract.yaml` 已存在且未传 `--refresh`，进入增量修订模式。
 
-## Phase 2 — 识别技术栈
-
-读取项目根目录的技术栈标识文件（按优先级）：
+## Phase 2 — 解析技术栈（M3-3 优先级链）
 
 ```bash
-ls package.json pyproject.toml go.mod Cargo.toml pom.xml 2>/dev/null | head -1
+# 提取参数中的 --preset 与 --ai-design（如果有）
+PRESET_FLAG=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--preset [a-zA-Z0-9_-]+' | head -1 | awk '{print $2}')
+AIDESIGN_FLAG=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--ai-design [a-zA-Z0-9_-]+' | head -1 | awk '{print $2}')
+
+node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
+  ${PRESET_FLAG:+--preset "$PRESET_FLAG"} \
+  ${AIDESIGN_FLAG:+--ai-design "$AIDESIGN_FLAG"} \
+  --write
 ```
 
-将识别结果传给 architect-agent 作为约束条件。
+优先级（从高到低）：CLI flag > project-brief.md "技术栈预设" > 已存在的 `.delivery/tech-stack.json` > manifest 自动检测 > 默认 `java-modern`。
+
+产出：`.delivery/tech-stack.json`（architect-agent 必读输入）。
 
 ## Phase 3 — 派发 architect-agent
 
@@ -45,7 +44,7 @@ ls package.json pyproject.toml go.mod Cargo.toml pom.xml 2>/dev/null | head -1
 
 - `docs/prd.md`（需求文档）
 - `docs/wbs.md`（工作分解结构）
-- 技术栈识别结果
+- `.delivery/tech-stack.json`（**M3 必读** 技术栈选型，禁止偏离）
 - `templates/api-contract.template.yaml`（契约模板）
 - `templates/data-model.template.md`（数据模型模板）
 - `$ARGUMENTS`（架构倾向性说明）

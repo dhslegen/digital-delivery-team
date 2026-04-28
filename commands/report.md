@@ -9,34 +9,17 @@ argument-hint: "[--stage <all|design|impl|verify|ship>]"
 
 ---
 
-## Phase 1 — 前置校验
-
-baseline 属于被交付项目，必须在项目根目录生成。若 `baseline/historical-projects.csv` 或 `baseline/estimation-rules.md` 不存在，先从插件模板复制骨架：
+## Phase 1 — 前置校验 + baseline 封盘
 
 ```bash
-if [ -z "${DDT_PLUGIN_ROOT:-}" ]; then
-  DDT_PLUGIN_ROOT="$(node -e 'const p=require("path"),f=require("fs"),o=require("os");const ok=r=>r&&f.existsSync(p.join(r,"bin","report.mjs"));const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e)){console.log(p.resolve(e));process.exit(0)}const h=p.join(o.homedir(),".claude");for(const s of [["plugins","digital-delivery-team"],["plugins","digital-delivery-team@digital-delivery-team"],["plugins","marketplace","digital-delivery-team"]]){const r=p.join(h,...s);if(ok(r)){console.log(r);process.exit(0)}}try{const cb=p.join(h,"plugins","cache");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,"digital-delivery-team");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const r=p.join(pd,v.name);if(ok(r)){console.log(r);process.exit(0)}}}}catch{}process.exit(1)')" || { echo "❌ DDT plugin root not found; set DDT_PLUGIN_ROOT"; exit 1; }
-  export DDT_PLUGIN_ROOT
-fi
+: "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+test -d "$DDT_PLUGIN_ROOT" || { echo "❌ DDT plugin root 未解析，请重启会话或运行 /digital-delivery-team:doctor"; exit 1; }
 mkdir -p baseline
 test -f baseline/historical-projects.csv || cp "$DDT_PLUGIN_ROOT/baseline/historical-projects.csv" baseline/historical-projects.csv
 test -f baseline/estimation-rules.md || cp "$DDT_PLUGIN_ROOT/baseline/estimation-rules.md" baseline/estimation-rules.md
-```
-
-若 `baseline/baseline.locked.json` 不存在，在项目根目录封盘；若已存在则跳过，保持封盘不可变：
-
-```bash
-if [ ! -f baseline/baseline.locked.json ]; then
-  node "$DDT_PLUGIN_ROOT/bin/baseline.mjs" --lock \
-    --hist baseline/historical-projects.csv \
-    --expert baseline/estimation-rules.md \
-    --out baseline/baseline.locked.json
-fi
-```
-
-读取项目 ID：
-
-```bash
+test -f baseline/baseline.locked.json || node "$DDT_PLUGIN_ROOT/bin/baseline.mjs" --lock \
+  --hist baseline/historical-projects.csv --expert baseline/estimation-rules.md \
+  --out baseline/baseline.locked.json
 export DDT_PROJECT_ID=$(cat .delivery/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
 test -n "$DDT_PROJECT_ID" || { echo "❌ 未设置 DDT_PROJECT_ID，请先运行 /prd"; exit 1; }
 ```
@@ -45,12 +28,11 @@ test -n "$DDT_PROJECT_ID" || { echo "❌ 未设置 DDT_PROJECT_ID，请先运行
 
 ```bash
 node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID"
-node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID" --capture-quality
-node "$DDT_PLUGIN_ROOT/bin/report.mjs" \
-  --project "$DDT_PROJECT_ID" \
-  --baseline baseline/baseline.locked.json \
-  --out docs/efficiency-report.raw.md
+node "$DDT_PLUGIN_ROOT/bin/report.mjs" --project "$DDT_PROJECT_ID" \
+  --baseline baseline/baseline.locked.json --out docs/efficiency-report.raw.md
 ```
+
+> M2-4：质量指标已由 PostToolUse hook 自动捕获，命令侧不再需要 `--capture-quality`。
 
 ## Phase 3 — 派发 metrics-agent
 

@@ -32,6 +32,52 @@ function ensureDir() {
  * @param {string} projectId  项目 ID
  * @param {object} data       附加数据（工具名、文件路径、耗时等）
  */
+// H1: POSIX O_APPEND 在小于 PIPE_BUF（macOS=512B / Linux=4096B）时保证原子写入；
+//      超过阈值则用 advisory lock 文件抢锁后追加，防止多 hook 并发交错。
+//      阈值取 512B 以兼容最严苛平台（macOS）。
+const ATOMIC_WRITE_THRESHOLD = 512;
+const LOCK_RETRY_INTERVAL_MS = 5;
+const LOCK_MAX_WAIT_MS = 1000;
+
+function appendWithLock(eventsFile, line) {
+  const lockFile = eventsFile + '.lock';
+  const start = Date.now();
+  let acquired = false;
+  let fd = null;
+  while (!acquired) {
+    try {
+      fd = fs.openSync(lockFile, 'wx'); // O_EXCL：原子创建，已存在则抛错
+      acquired = true;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      // 其他进程持有锁；检测 stale lock（>3s 未释放视为死锁）
+      try {
+        const stat = fs.statSync(lockFile);
+        if (Date.now() - stat.mtimeMs > 3000) {
+          try { fs.unlinkSync(lockFile); } catch (_) { /* race condition：被别人删了 */ }
+          continue;
+        }
+      } catch (_) { /* 锁文件可能刚被删除 */ }
+      if (Date.now() - start > LOCK_MAX_WAIT_MS) {
+        // 超时不阻塞 hook，降级为非锁定写入（极少数情况下可能交错，但不丢数据）
+        fs.appendFileSync(eventsFile, line, 'utf8');
+        return;
+      }
+      // 短暂自旋等待
+      const deadline = Date.now() + LOCK_RETRY_INTERVAL_MS;
+      while (Date.now() < deadline) { /* busy wait — 5ms 内可接受 */ }
+    }
+  }
+  try {
+    fs.appendFileSync(eventsFile, line, 'utf8');
+  } finally {
+    if (fd !== null) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+  }
+}
+
 function appendEvent(eventName, projectId, data) {
   try {
     ensureDir();
@@ -42,7 +88,14 @@ function appendEvent(eventName, projectId, data) {
       project_id: projectId || 'unknown',
       data: data || {}
     };
-    fs.appendFileSync(eventsFile, JSON.stringify(record) + '\n', 'utf8');
+    const line = JSON.stringify(record) + '\n';
+    if (Buffer.byteLength(line, 'utf8') <= ATOMIC_WRITE_THRESHOLD) {
+      // 小事件：依靠 POSIX O_APPEND 原子性
+      fs.appendFileSync(eventsFile, line, 'utf8');
+    } else {
+      // 大事件：advisory lock 抢锁后追加
+      appendWithLock(eventsFile, line);
+    }
   } catch (err) {
     // 写入失败不得阻塞工具执行，仅记录到 stderr
     process.stderr.write(`[delivery-hook] appendEvent failed: ${err.message}\n`);
@@ -98,6 +151,23 @@ function readRecentEvents(limit) {
     process.stderr.write(`[delivery-hook] readRecentEvents failed: ${err.message}\n`);
     return [];
   }
+}
+
+/**
+ * M1-4: 在最近 N 条事件中反向查找匹配项（用于 SubagentStop 关联 subagent_start，
+ * 以及 Stop hook 关联 phase_start 等场景）。
+ *
+ * @param {(ev:object)=>boolean} predicate 命中条件
+ * @param {object} options
+ *   - limit: 扫描最近多少条（默认 500，足够覆盖单次会话内的子代理）
+ * @returns {object|null}
+ */
+function findRecentEvent(predicate, options = {}) {
+  const events = readRecentEvents(options.limit || 500);
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (predicate(events[i])) return events[i];
+  }
+  return null;
 }
 
 function readStdinRaw() {
@@ -206,7 +276,7 @@ function runCli(run) {
 }
 
 /**
- * T-R04: 写一条 quality_metrics 事件到 events.jsonl（spec 格式，使用 type 字段）。
+ * T-R04 / H1: 写一条 quality_metrics 事件（含完整 metrics 对象，常 > 512B，必须走 lock 路径）
  */
 function appendQualityEvent(projectId, sessionId, source, stage, metrics) {
   try {
@@ -220,21 +290,81 @@ function appendQualityEvent(projectId, sessionId, source, stage, metrics) {
       stage,
       metrics,
     };
-    fs.appendFileSync(getEventsFile(), JSON.stringify(record) + '\n', 'utf8');
+    const line = JSON.stringify(record) + '\n';
+    const eventsFile = getEventsFile();
+    if (Buffer.byteLength(line, 'utf8') <= ATOMIC_WRITE_THRESHOLD) {
+      fs.appendFileSync(eventsFile, line, 'utf8');
+    } else {
+      appendWithLock(eventsFile, line);
+    }
   } catch (err) {
     process.stderr.write(`[delivery-hook] appendQualityEvent failed: ${err.message}\n`);
   }
 }
 
+// M4-2: progress.json 状态机维护（轻量版，避免 spawn 子进程）
+function readProgress(cwd) {
+  try {
+    const p = path.join(cwd, '.delivery', 'progress.json');
+    if (!fs.existsSync(p)) return null;
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch { return null; }
+}
+
+function writeProgress(cwd, progress) {
+  try {
+    const dir = path.join(cwd, '.delivery');
+    fs.mkdirSync(dir, { recursive: true });
+    progress.last_activity_at = new Date().toISOString();
+    fs.writeFileSync(path.join(dir, 'progress.json'),
+      JSON.stringify(progress, null, 2) + '\n', 'utf8');
+  } catch { /* hook 必须容错，不阻塞 */ }
+}
+
+function markPhaseStarted(cwd, phase) {
+  const progress = readProgress(cwd);
+  if (!progress || !progress.phases || !progress.phases[phase]) return;
+  const ph = progress.phases[phase];
+  if (ph.status === 'completed') return; // 已完成的不回退（可重入：再次跑视为增量补充）
+  if (ph.status !== 'in_progress') {
+    ph.status = 'in_progress';
+    ph.started_at = ph.started_at || new Date().toISOString();
+    progress.current_phase = phase;
+    writeProgress(cwd, progress);
+  }
+}
+
+function markPhaseCompleted(cwd, phase) {
+  const progress = readProgress(cwd);
+  if (!progress || !progress.phases || !progress.phases[phase]) return;
+  const ph = progress.phases[phase];
+  if (ph.status === 'completed') return;
+  ph.status = 'completed';
+  ph.completed_at = new Date().toISOString();
+  // 推进到下一个非 completed phase
+  const phaseOrder = Object.keys(progress.phases);
+  if (progress.current_phase === phase) {
+    progress.current_phase = phaseOrder.find(p =>
+      progress.phases[p].status !== 'completed' && p !== phase) || null;
+  }
+  writeProgress(cwd, progress);
+}
+
 module.exports = {
+  ATOMIC_WRITE_THRESHOLD,
   appendEvent,
   appendQualityEvent,
+  appendWithLock,
   extractUsage,
+  findRecentEvent,
   getEventsFile,
   getMetricsDir,
   hookResult,
+  markPhaseCompleted,
+  markPhaseStarted,
   numberFrom,
   parseHookInput,
+  readProgress,
   readRecentEvents,
   readStdinRaw,
   resolveCwd,

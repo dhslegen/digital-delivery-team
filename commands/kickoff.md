@@ -1,6 +1,6 @@
 ---
 description: 新项目起手 · 串行跑 /prd → /wbs → /design，完成后可进入 /impl。
-argument-hint: "[补充需求描述]"
+argument-hint: "[--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [补充需求描述]"
 ---
 
 # /kickoff
@@ -18,7 +18,7 @@ argument-hint: "[补充需求描述]"
 2. 跑 `/wbs`
    - 若失败 → 停止
 
-3. 跑 `/design`
+3. 跑 `/design $ARGUMENTS`（透传 `--preset` / `--ai-design`）
    - 若契约 lint 未通过 → 停止，返回退出码 4
    - 若 OpenAPI lint 工具缺失 → 停止，返回退出码 5
    - 若产出文件缺失 → 停止

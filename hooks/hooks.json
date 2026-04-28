@@ -86,6 +86,34 @@
         "description": "Record digital employee subagent runtime metrics",
         "id": "ddt:subagent-stop"
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:user-prompt-submit hooks/handlers/user-prompt-submit.js minimal,standard,strict"
+          }
+        ],
+        "description": "Capture DDT phase from user prompt (slash command tagging)",
+        "id": "ddt:user-prompt-submit"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'const p=require(\"path\"),f=require(\"fs\"),o=require(\"os\");const ok=r=>r&&f.existsSync(p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));const r=(()=>{const e=process.env.DDT_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;if(ok(e))return p.resolve(e);const h=p.join(o.homedir(),\".claude\");for(const s of [[\"digital-delivery-team\"],[\"digital-delivery-team@digital-delivery-team\"],[\"marketplace\",\"digital-delivery-team\"]]){const c=p.join(h,\"plugins\",...s);if(ok(c))return c}try{const cb=p.join(h,\"plugins\",\"cache\");for(const pub of f.readdirSync(cb,{withFileTypes:true})){if(!pub.isDirectory())continue;const pd=p.join(cb,pub.name,\"digital-delivery-team\");if(!f.existsSync(pd))continue;for(const v of f.readdirSync(pd,{withFileTypes:true}))if(v.isDirectory()){const c=p.join(pd,v.name);if(ok(c))return c}}}catch{}return p.resolve(\".\")})();process.env.DDT_PLUGIN_ROOT=r;process.env.CLAUDE_PLUGIN_ROOT=r;process.argv.splice(1,0,p.join(r,\"hooks\",\"plugin-hook-bootstrap.js\"));require(process.argv[1])' ddt:stop hooks/handlers/stop.js minimal,standard,strict",
+            "async": true,
+            "timeout": 15
+          }
+        ],
+        "description": "Close open DDT phase and trigger background metrics aggregation",
+        "id": "ddt:stop"
+      }
     ]
   }
 }

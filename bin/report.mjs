@@ -32,7 +32,7 @@ const outPath = args.get('out') || DEFAULT_OUT;
 const baselinePath = args.get('baseline') || DEFAULT_BASELINE;
 const projectId = args.get('project') || null;
 
-// V3 canonical stage → agent names 映射
+// V3 canonical stage → agent names 映射（subagent 维度，精度较低，作为 fallback）
 const STAGES = {
   requirements: ['product-agent', 'pm-agent'],
   architecture: ['architect-agent'],
@@ -41,6 +41,19 @@ const STAGES = {
   testing: ['test-agent', 'review-agent'],
   docs: ['docs-agent'],
 };
+
+// M1-7: stage → slash-command (phase) 映射（精确，优先来源）
+//   一个 stage 可由多个 slash command 贡献工时；编排命令（kickoff/impl/verify/ship）
+//   作为 *额外加权* 不属于任何子阶段，在 STAGE_PHASES 单独标记。
+const STAGE_PHASES = {
+  requirements: ['prd', 'wbs'],
+  architecture: ['design'],
+  frontend: ['build-web'],
+  backend: ['build-api'],
+  testing: ['test', 'review', 'verify'],
+  docs: ['package', 'report'],
+};
+const ORCHESTRATOR_PHASES = ['kickoff', 'impl', 'ship'];
 
 // 读 baseline
 let baseline = null;
@@ -60,11 +73,13 @@ const store = new DeliveryStore(DB);
 await store.openOrCreate();
 
 const actualByAgent  = projectId ? store.aggregateStageHours(projectId) : {};
+const actualByPhase  = projectId ? store.aggregatePhaseHours(projectId) : {};
 // T-R04: 改用 qualitySnapshot 分别获取测试和审查的最新行
 const { testRow, reviewRow } = projectId
   ? store.qualitySnapshot(projectId)
   : { testRow: null, reviewRow: null };
-const actual = aggregateCanonicalStages(actualByAgent);
+const actual = aggregateCanonicalStages(actualByAgent, actualByPhase);
+const orchestratorTotal = sumPhases(actualByPhase, ORCHESTRATOR_PHASES);
 const quality = evaluateQuality(testRow, reviewRow);
 
 // 构建报告
@@ -165,6 +180,26 @@ lines.push(`- **DB**: \`${DB}\``);
 lines.push(`- **Baseline**: \`${baselinePath}\``);
 lines.push(`- **Events JSONL**: \`${join(METRICS_DIR, 'events.jsonl')}\``);
 lines.push('');
+
+// M1-7: 暴露 phase 与编排工时供 metrics-agent 引用
+lines.push('## 4. 阶段与编排原始工时（精确，单位小时）');
+lines.push('');
+const phaseEntries = Object.entries(actualByPhase).sort(([a], [b]) => a.localeCompare(b));
+if (phaseEntries.length) {
+  lines.push('| Phase | 实际工时(h) |');
+  lines.push('|-------|------------|');
+  for (const [phase, hours] of phaseEntries) {
+    lines.push(`| ${phase} | ${hours.toFixed(3)} |`);
+  }
+} else {
+  lines.push('_（暂无 phase 工时数据；UserPromptSubmit hook 未捕获或会话内未触发任何 slash command）_');
+}
+lines.push('');
+if (orchestratorTotal !== null) {
+  lines.push(`> 编排命令（kickoff / impl / ship）合计：**${orchestratorTotal.toFixed(3)} h**（已计入对应阶段，不重复计算）`);
+  lines.push('');
+}
+
 lines.push('> metrics-agent 接手后将在此基础上做自然语言解读。');
 
 // 写入输出文件
@@ -172,12 +207,32 @@ mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, lines.join('\n') + '\n');
 console.log(JSON.stringify({ out: outPath, degradation: anyDegradation || quality.issues.length > 0 || quality.missing, ts }));
 
-function aggregateCanonicalStages(actualByAgent) {
+// M1-7: 优先 phase 维度（精确）→ fallback subagent 维度（粗）→ 都缺则 null
+function aggregateCanonicalStages(actualByAgent, actualByPhase) {
   return Object.fromEntries(Object.entries(STAGES).map(([stage, agents]) => {
-    const values = agents.map(agent => actualByAgent[agent]).filter(value => value !== undefined && value !== null);
-    if (!values.length) return [stage, null];
-    return [stage, values.reduce((sum, value) => sum + value, 0)];
+    const phases = STAGE_PHASES[stage] || [];
+    const phaseHours = phases.map(p => actualByPhase[p]).filter(v => v !== undefined && v !== null);
+    if (phaseHours.length) {
+      return [stage, phaseHours.reduce((sum, v) => sum + v, 0)];
+    }
+    const agentHours = agents.map(a => actualByAgent[a]).filter(v => v !== undefined && v !== null);
+    if (agentHours.length) {
+      return [stage, agentHours.reduce((sum, v) => sum + v, 0)];
+    }
+    return [stage, null];
   }));
+}
+
+function sumPhases(actualByPhase, phaseList) {
+  let sum = 0;
+  let any = false;
+  for (const p of phaseList) {
+    if (actualByPhase[p] !== undefined && actualByPhase[p] !== null) {
+      sum += actualByPhase[p];
+      any = true;
+    }
+  }
+  return any ? sum : null;
 }
 
 function evaluateQuality(testRow, reviewRow) {

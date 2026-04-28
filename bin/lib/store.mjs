@@ -91,18 +91,60 @@ export class DeliveryStore {
         break;
 
       case 'post_tool_use':
-        // 更新同项目同工具最近一条未关闭的记录
+        // M1-6 (B2): FIFO 关联（取同 session 同 tool 最早未关闭，比 MAX(id) 在并行场景更稳）
         this._db.prepare(
-          'UPDATE tool_calls SET ended_at=?, duration_ms=?, success=? WHERE id=(SELECT MAX(id) FROM tool_calls WHERE project_id=? AND session_id=? AND tool_name=? AND ended_at IS NULL)'
+          'UPDATE tool_calls SET ended_at=?, duration_ms=?, success=? WHERE id=(SELECT MIN(id) FROM tool_calls WHERE project_id=? AND session_id=? AND tool_name=? AND ended_at IS NULL)'
         ).run(ts, toNullableNumber(d.duration_ms), d.success ? 1 : 0, pid, sessionId, d.tool_name || '');
         break;
 
-      case 'subagent_stop':
+      // M1-3: subagent_start 写入 subagent_runs 占位行（duration 留空，等 stop 关联回填）
+      case 'subagent_start':
         this._db.prepare(
-          'INSERT INTO subagent_runs(session_id, project_id, subagent_name, ended_at, duration_ms, input_tokens, output_tokens, success) VALUES(?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(sessionId, pid, d.subagent_name || 'unknown', ts,
-          d.duration_ms || 0, d.tokens_input || 0, d.tokens_output || 0, d.success === false ? 0 : 1);
+          'INSERT INTO subagent_runs(session_id, project_id, subagent_name, started_at, success) VALUES(?, ?, ?, ?, ?)'
+        ).run(sessionId, pid, d.subagent_name || 'unknown', ts, 1);
         break;
+
+      case 'subagent_stop': {
+        // M1-4: 优先 UPDATE 同 session+name 最早未关闭的占位行；若不存在则 INSERT 兜底
+        const updated = this._db.prepare(
+          `UPDATE subagent_runs SET ended_at=?, duration_ms=?, input_tokens=?, output_tokens=?, success=?
+           WHERE id=(SELECT MIN(id) FROM subagent_runs
+                     WHERE project_id=? AND session_id=? AND subagent_name=? AND ended_at IS NULL)`
+        ).run(ts, d.duration_ms || 0, d.tokens_input || 0, d.tokens_output || 0,
+              d.success === false ? 0 : 1,
+              pid, sessionId, d.subagent_name || 'unknown');
+        const changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        if (changes === 0) {
+          this._db.prepare(
+            'INSERT INTO subagent_runs(session_id, project_id, subagent_name, ended_at, duration_ms, input_tokens, output_tokens, success) VALUES(?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(sessionId, pid, d.subagent_name || 'unknown', ts,
+            d.duration_ms || 0, d.tokens_input || 0, d.tokens_output || 0, d.success === false ? 0 : 1);
+        }
+        break;
+      }
+
+      // M1-5: phase_runs 写入
+      case 'phase_start':
+        this._db.prepare(
+          'INSERT INTO phase_runs(session_id, project_id, phase, args, started_at) VALUES(?, ?, ?, ?, ?)'
+        ).run(sessionId, pid, d.phase || 'unknown', d.args || '', ts);
+        break;
+
+      case 'phase_end': {
+        const updated = this._db.prepare(
+          `UPDATE phase_runs SET ended_at=?, duration_ms=?
+           WHERE id=(SELECT MIN(id) FROM phase_runs
+                     WHERE project_id=? AND session_id=? AND phase=? AND ended_at IS NULL)`
+        ).run(ts, d.duration_ms || 0, pid, sessionId, d.phase || 'unknown');
+        const changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        if (changes === 0) {
+          // 兜底：找不到对应 start 时也记录一条（duration 用 payload）
+          this._db.prepare(
+            'INSERT INTO phase_runs(session_id, project_id, phase, started_at, ended_at, duration_ms) VALUES(?, ?, ?, ?, ?, ?)'
+          ).run(sessionId, pid, d.phase || 'unknown', ts, ts, d.duration_ms || 0);
+        }
+        break;
+      }
 
       case 'quality_metrics': {
         const source    = ev.source    || d.source    || 'unknown';
@@ -120,8 +162,9 @@ export class DeliveryStore {
   }
 
   _upsertQualityRow(projectId, sessionId, stage, source, metrics, createdAt) {
+    // M1-6 (B1): 改 INSERT OR REPLACE，避免毫秒级同时戳事件被静默丢弃
     this._db.prepare(
-      `INSERT OR IGNORE INTO quality_metrics(
+      `INSERT OR REPLACE INTO quality_metrics(
         project_id, session_id, stage, source,
         coverage_pct, tests_total, tests_passed, tests_failed,
         defects_critical, defects_major, defects_minor, rework_count, acceptance_pass_pct,
@@ -155,6 +198,20 @@ export class DeliveryStore {
     const result = {};
     for (const row of rows) {
       result[row.subagent_name] = (row.total_ms || 0) / 3_600_000;
+    }
+    return result;
+  }
+
+  // M1-7: 优先来源的 phase 工时（精确到 slash command），单位小时
+  aggregatePhaseHours(projectId) {
+    const rows = this._db.prepare(
+      `SELECT phase, SUM(duration_ms) AS total_ms FROM phase_runs
+       WHERE project_id=? AND duration_ms IS NOT NULL
+       GROUP BY phase`
+    ).all(projectId);
+    const result = {};
+    for (const row of rows) {
+      result[row.phase] = (row.total_ms || 0) / 3_600_000;
     }
     return result;
   }

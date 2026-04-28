@@ -59,7 +59,8 @@ function run(raw) {
   return hookResult(raw);
 }
 
-// T-R04: 旁路观测 — 检测报告文件写入并提取质量指标
+// T-R04 / M2-4: 旁路观测 — 检测报告文件写入并提取质量指标
+//   兼容绝对/相对/符号链接路径，统一通过 normalize + endsWith 比对
 function captureQualityIfNeeded(input, cwd, projectId) {
   try {
     const toolName = input.tool_name || input.toolName || input.name || '';
@@ -67,18 +68,33 @@ function captureQualityIfNeeded(input, cwd, projectId) {
     const toolInput = input.tool_input || input.input || {};
     const filePath = toolInput.file_path || toolInput.path || '';
     if (!filePath) return;
-    const rel = path.relative(cwd, filePath);
+
+    let realPath = filePath;
+    try {
+      realPath = fs.realpathSync(path.resolve(cwd, filePath));
+    } catch (_) {
+      realPath = path.resolve(cwd, filePath);
+    }
+    const normalized = realPath.split(path.sep).join('/');
     const sessionId = resolveSessionId(input);
-    if (rel === 'tests/test-report.md' || rel.endsWith('/tests/test-report.md')) {
-      try {
-        const m = parseTestReport(fs.readFileSync(filePath, 'utf8'));
-        if (m) appendQualityEvent(projectId, sessionId, 'tests/test-report.md', 'verify', m);
-      } catch (_) {}
-    } else if (rel === 'docs/review-report.md' || rel.endsWith('/docs/review-report.md')) {
-      try {
-        const m = parseReviewReport(fs.readFileSync(filePath, 'utf8'));
-        if (m) appendQualityEvent(projectId, sessionId, 'docs/review-report.md', 'verify', m);
-      } catch (_) {}
+
+    const isTestReport = normalized.endsWith('/tests/test-report.md');
+    const isReviewReport = normalized.endsWith('/docs/review-report.md');
+    if (!isTestReport && !isReviewReport) return;
+
+    let content = '';
+    try {
+      content = fs.readFileSync(realPath, 'utf8');
+    } catch (_) {
+      return;
+    }
+
+    if (isTestReport) {
+      const m = parseTestReport(content);
+      if (m) appendQualityEvent(projectId, sessionId, 'tests/test-report.md', 'verify', m);
+    } else if (isReviewReport) {
+      const m = parseReviewReport(content);
+      if (m) appendQualityEvent(projectId, sessionId, 'docs/review-report.md', 'verify', m);
     }
   } catch (_) {}
 }
