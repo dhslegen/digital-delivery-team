@@ -72,6 +72,9 @@ if (!existsSync(DB)) {
 const store = new DeliveryStore(DB);
 await store.openOrCreate();
 
+// B3: 进程任意退出路径都释放 SQLite 句柄
+process.on('exit', () => { try { store.close(); } catch (_) { /* already closed */ } });
+
 const actualByAgent  = projectId ? store.aggregateStageHours(projectId) : {};
 const actualByPhase  = projectId ? store.aggregatePhaseHours(projectId) : {};
 // T-R04: 改用 qualitySnapshot 分别获取测试和审查的最新行

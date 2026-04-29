@@ -144,9 +144,9 @@ git add <files> && git commit -m "P<step>: <description>"
 
 ## 与 v0.6.x 的差异
 
-| v0.6.x | v0.7.0 |
+| v0.6.x（已废弃） | v0.7.0 |
 |--------|--------|
-| backend-agent self-check（写完才测） | 每文件 / 每 step 立即测 |
+| subagent self-check（写完才测） | 每文件 / 每 step 立即测 |
 | 失败由 agent 自己决定（黑盒） | 失败 AskUserQuestion 用户决策（透明） |
 | validation 命令硬编码 npm/jest | 自动检测包管理器 + 构建工具 |
 | 没有 checkpoint commit 配合 | 每 step validation 通过 = checkpoint commit |

@@ -1,6 +1,6 @@
 ---
 name: ai-native-design
-description: AI 原生 UI 设计与代码一体化工作流（claude-design / figma / v0 / lovable）。auto-loaded by frontend-agent；由 /import-design 命令显式触发。
+description: AI 原生 UI 设计与代码一体化工作流（claude-design / figma / v0 / lovable）。由 /import-design 与 /build-web main thread 在 UI 实现阶段加载（M6.4 起替代 main thread 黑盒派发，main thread 流式可见）。
 origin: DDT
 ---
 
@@ -8,7 +8,7 @@ origin: DDT
 
 ## Triggers
 
-- frontend-agent 启动 / `/build-web` 命令 / `/impl` 同时派发前后端
+- `/build-web` main thread 进入 IMPLEMENT phase（M6.4 起 main thread 直接执行而非 subagent 派发）
 - `/import-design --from <type>` 命令显式触发外部设计源导入
 - `.ddt/tech-stack.json::ai_design.type` 决定默认通道
 
@@ -28,7 +28,7 @@ origin: DDT
 
 **工作流**：
 
-1. frontend-agent 直接基于 PRD + api-contract.yaml + Tailwind/shadcn 调色板生成组件
+1. main thread 直接基于 PRD + api-contract.yaml + Tailwind/shadcn 调色板生成组件
 2. 利用 Claude artifact 工具创建复杂 UI 预览
 3. 落地代码到 `web/components/` + `web/pages/`
 4. 跑构建 + lint + 最小 happy-path 测试
@@ -51,7 +51,7 @@ origin: DDT
 **工作流**：
 
 1. 用户提供 figma URL（含 `?node-id=...`）→ `/import-design --from figma --url <url>`
-2. import-design 命令派发 frontend-agent + 调用 `mcp__figma__get_design_context`
+2. import-design 命令派发 main thread + 调用 `mcp__figma__get_design_context`
 3. agent 把 Figma 输出的 React+Tailwind 草稿与 `tech-stack.json::frontend.ui` 对齐
 4. 字段命名 / 错误码 / 状态机以 `docs/api-contract.yaml` 为准；图层文字与契约不符时写 blocker
 5. 落地 → 构建 → 测试
@@ -72,7 +72,7 @@ origin: DDT
 
 1. 用户在 brief 或 CLI 指定 `--ai-design v0`
 2. `/import-design --from v0 --url <v0-share-url>` 触发
-3. frontend-agent 解析 v0 share URL 中的组件元数据，调用 `npx shadcn@latest add <component>` 拉入 `web/components/ui/`
+3. main thread 解析 v0 share URL 中的组件元数据，调用 `npx shadcn@latest add <component>` 拉入 `web/components/ui/`
 4. 与 api-contract.yaml 对齐字段；不符则改 v0 输出，不改契约
 5. 落地 → 构建 → 测试
 
@@ -90,7 +90,7 @@ origin: DDT
 
 1. 用户在 Lovable.dev 建好原型 → 导出 zip / 拉取 git URL
 2. `/import-design --from lovable --url <github-or-zip-url>` 触发
-3. frontend-agent 解压 / clone 到临时目录，挑出 `src/` 下的组件 / 页面
+3. main thread 解压 / clone 到临时目录，挑出 `src/` 下的组件 / 页面
 4. 移植到 `web/` 同时改写：
    - 替换 lovable 默认的 supabase client 为 OpenAPI 生成的 client
    - 移除 lovable 特有的 `<Lovable.*>` 组件，用 shadcn 等价物
@@ -116,7 +116,7 @@ origin: DDT
 
 ## 与契约的对齐检查（每条 import 必跑）
 
-import-design 命令在派发 frontend-agent 后必须验证：
+import-design 命令在派发 main thread 后必须验证：
 
 1. 生成代码中**不存在** `docs/api-contract.yaml` 之外的字段（用 grep + ripgrep）
 2. 所有错误提示文案对应 `error.code` 枚举值（不出现裸字符串）

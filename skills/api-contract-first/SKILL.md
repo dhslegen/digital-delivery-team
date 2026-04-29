@@ -1,14 +1,14 @@
 ---
 name: api-contract-first
-description: Knowledge pack for designing and evolving OpenAPI 3.0 contracts that enable frontend/backend parallel development. Auto-loaded by architect-agent, frontend-agent, backend-agent.
+description: Knowledge pack for designing and evolving OpenAPI 3.0 contracts that enable frontend/backend parallel development. Auto-loaded by architect-agent；由 /build-api / /build-web main thread 在实现阶段流式加载（M6.4 起替代 backend/frontend-agent 黑盒派发）。
 origin: DDT
 ---
 
 # API Contract First
 
 ## Triggers
-- architect-agent 启动 / /design 命令
-- frontend-agent 或 backend-agent 启动（只读加载，作为契约消费方）
+- architect-agent 启动 / `/design` 命令（写契约）
+- `/build-api` / `/build-web` main thread 加载 backend-development / frontend-development skill 时只读链入（契约消费方，M6.4 起 main thread 直接执行而非 subagent）
 
 ## Core Principles
 1. **契约先于代码**：没有 lint 通过的 OpenAPI，不允许动 web/ 或 server/

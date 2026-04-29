@@ -96,7 +96,10 @@ function captureQualityIfNeeded(input, cwd, projectId) {
       const m = parseReviewReport(content);
       if (m) appendQualityEvent(projectId, sessionId, 'docs/review-report.md', 'verify', m);
     }
-  } catch (_) {}
+  } catch (err) {
+    // M3: 不阻塞工具执行（保持 hook 容错），但写 stderr 让 doctor / 调试可追踪
+    process.stderr.write(`[delivery-hook] capture-quality failed: ${err.message}\n`);
+  }
 }
 
 if (require.main === module) {

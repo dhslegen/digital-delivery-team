@@ -1,7 +1,7 @@
 // M6.2: decision-gate skill / emit-decision / 10 commands 注入决策门 / preview / kickoff interactive
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,7 +107,7 @@ test('emit-decision 拒绝无效参数', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('10 个 phase command 都注入了决策门段落', () => {
+test('10 个 phase command 都注入了完整决策门段落', () => {
   const phases = ['prd', 'wbs', 'design', 'build-api', 'build-web',
     'test', 'review', 'fix', 'package', 'report'];
   for (const phase of phases) {
@@ -122,6 +122,61 @@ test('10 个 phase command 都注入了决策门段落', () => {
       `${phase}.md 必须传正确 --phase`);
     assert.ok(text.includes('--auto'),
       `${phase}.md 必须支持 --auto 跳过`);
+  }
+});
+
+// H9: impl.md 走"委托式决策门"（引用 skill 而非内嵌 AskUserQuestion 模板）
+test('impl.md 委托式决策门：引用 skill + emit-decision + --auto', () => {
+  const text = readFileSync(join(ROOT, 'commands', 'impl.md'), 'utf8');
+  assert.ok(text.includes('## Phase 决策门 — M6.2'),
+    'impl.md 必须含决策门段落');
+  assert.ok(text.includes('decision-gate'),
+    'impl.md 必须引用 decision-gate skill');
+  assert.ok(text.includes('--phase impl'),
+    'impl.md 必须传 --phase impl');
+  assert.ok(text.includes('--auto'),
+    'impl.md 必须支持 --auto 跳过');
+});
+
+// H9: 19 命令分类完整性 — 防止未来增删命令时偷偷绕过决策门契约
+test('全 19 commands 按"决策门 / 编排聚合 / 辅助"分类无遗漏', () => {
+  const allCmds = readdirSync(join(ROOT, 'commands'))
+    .filter(f => f.endsWith('.md'))
+    .map(f => f.replace(/\.md$/, ''))
+    .sort();
+
+  // 分类：含完整决策门段落 / 编排聚合（派发别的命令）/ 辅助（只读或工具型）
+  const HAS_DECISION_GATE = new Set([
+    'prd', 'wbs', 'design', 'build-api', 'build-web',
+    'test', 'review', 'fix', 'package', 'report', 'impl',
+  ]);
+  const ORCHESTRATION_AGGREGATE = new Set([
+    'kickoff', 'verify', 'ship',  // kickoff 走"interactive 模式"非 phase 决策门；verify/ship 是聚合派发
+  ]);
+  const AUXILIARY = new Set([
+    'doctor', 'import-design', 'preview', 'relay', 'resume',
+  ]);
+
+  // 全 19 命令必须落入恰好一类
+  for (const cmd of allCmds) {
+    const inOne = [HAS_DECISION_GATE, ORCHESTRATION_AGGREGATE, AUXILIARY]
+      .filter(s => s.has(cmd)).length;
+    assert.equal(inOne, 1,
+      `命令 ${cmd} 必须恰好属于一类（决策门/编排/辅助）；当前命中 ${inOne} 类`);
+  }
+  // 三类合并必须覆盖全部命令
+  const known = new Set([...HAS_DECISION_GATE, ...ORCHESTRATION_AGGREGATE, ...AUXILIARY]);
+  for (const cmd of allCmds) {
+    assert.ok(known.has(cmd), `${cmd} 未在分类中；新增命令需同步更新此测试`);
+  }
+  assert.equal(allCmds.length, known.size,
+    `commands/ 实际 ${allCmds.length} 个 vs 分类总数 ${known.size}（重复或遗漏）`);
+
+  // 辅助命令禁止冒名顶替决策门契约 — 防止未来误加 emit-decision 调用
+  for (const cmd of AUXILIARY) {
+    const text = readFileSync(join(ROOT, 'commands', `${cmd}.md`), 'utf8');
+    assert.ok(!text.includes('## Phase 决策门 — M6.2'),
+      `辅助命令 ${cmd}.md 不应有决策门段落（如需用户确认，请改归"决策门"分类）`);
   }
 });
 

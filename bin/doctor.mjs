@@ -59,12 +59,13 @@ check('SessionStart hook 已写入 plugin-root marker', () => {
   };
 });
 
-// 4. hooks.json 注册的核心事件（M4 新增 UserPromptSubmit / Stop / SubagentStop）
-check('hooks.json 注册了核心 7 个事件', () => {
+// 4. hooks.json 注册的核心事件（M4 新增 UserPromptSubmit / Stop / SubagentStop；
+//    v0.7.0 起 PostToolUseFailure 也计入核心，共 8 类）
+check('hooks.json 注册了核心 8 类事件', () => {
   const hooksPath = join(PLUGIN_ROOT, 'hooks/hooks.json');
   const data = JSON.parse(readFileSync(hooksPath, 'utf8'));
   const required = ['SessionStart', 'SessionEnd', 'PreToolUse', 'PostToolUse',
-    'SubagentStop', 'UserPromptSubmit', 'Stop'];
+    'PostToolUseFailure', 'SubagentStop', 'UserPromptSubmit', 'Stop'];
   const missing = required.filter(ev => !data.hooks[ev]);
   return {
     ok: missing.length === 0,

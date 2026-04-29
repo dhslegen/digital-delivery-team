@@ -35,11 +35,25 @@ URL=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--url [^ ]+' | awk '{print $2}')
 TARGET=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--target [^ ]+' | awk '{print $2}')
 TARGET=${TARGET:-web/}
 
+# B4: URL 白名单校验（防 shell 注入；只允许 http/https + 标准 URL 字符）
+#     非法字符（;、|、`、$、空格等）一律拒绝；后续传给下游脚本时仍用 printf %q 转义
+if [ -n "$URL" ] && ! printf '%s' "$URL" | grep -qE '^https?://[A-Za-z0-9._~:/?#@!$&'\''()*+,;=%-]+$'; then
+  echo "❌ --url 含非法字符或非 http(s) 协议，已拒绝（防 shell 注入）"; exit 1
+fi
+# TARGET 同样限制为相对路径片段，禁绝路径穿越与 shell 元字符
+if ! printf '%s' "$TARGET" | grep -qE '^[A-Za-z0-9_./-]+/?$'; then
+  echo "❌ --target 必须是简单相对路径（如 web/、apps/web/）"; exit 1
+fi
+
 case "$FROM" in
   figma|v0|lovable) test -n "$URL" || { echo "❌ --from $FROM 必须提供 --url"; exit 1; } ;;
   claude-design) ;;
   *) echo "❌ --from 必须为 figma|v0|lovable|claude-design（实测：$FROM）"; exit 1 ;;
 esac
+
+# 后续若需把 $URL / $TARGET 嵌入 bash 子句，必须用 "$(printf '%q' "$URL")" 二次转义
+URL_Q=$(printf '%q' "$URL")
+TARGET_Q=$(printf '%q' "$TARGET")
 ```
 
 ## Phase 3 — main thread 加载 skill + 通道执行（M6.4 起改 main thread）

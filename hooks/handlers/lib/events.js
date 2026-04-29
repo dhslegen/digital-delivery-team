@@ -8,7 +8,6 @@ const MAX_STDIN = 1024 * 1024;
 
 function getMetricsDir() {
   return process.env.DDT_METRICS_DIR ||
-    process.env.DDT_METRICS_DIR ||
     path.join(os.homedir(), '.claude', 'delivery-metrics');
 }
 
@@ -104,15 +103,12 @@ function appendEvent(eventName, projectId, data) {
 
 /**
  * 从环境变量或项目本地文件读取 project_id。
- * 优先级：DDT_PROJECT_ID > DDT_PROJECT_ID > .ddt/project-id 文件
+ * 优先级：DDT_PROJECT_ID > .ddt/project-id 文件 > 'unknown'
  *
  * @param {string} cwd 当前工作目录（默认 process.cwd()）
  * @returns {string}
  */
 function resolveProjectId(cwd) {
-  if (process.env.DDT_PROJECT_ID) {
-    return process.env.DDT_PROJECT_ID;
-  }
   if (process.env.DDT_PROJECT_ID) {
     return process.env.DDT_PROJECT_ID;
   }

@@ -21,6 +21,9 @@ mkdirSync(METRICS_DIR, { recursive: true });
 const store = new DeliveryStore(DB);
 await store.openOrCreate();
 
+// B3: 进程任意退出路径都释放 SQLite 句柄（防长生命周期场景下的句柄泄漏 + 并发实例 EBUSY）
+process.on('exit', () => { try { store.close(); } catch (_) { /* already closed */ } });
+
 if (args.get('bootstrap')) {
   const name = args.get('name') || 'untitled';
   const id = `proj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
