@@ -104,7 +104,7 @@ function appendEvent(eventName, projectId, data) {
 
 /**
  * 从环境变量或项目本地文件读取 project_id。
- * 优先级：DDT_PROJECT_ID > DDT_PROJECT_ID > .delivery/project-id 文件
+ * 优先级：DDT_PROJECT_ID > DDT_PROJECT_ID > .ddt/project-id 文件
  *
  * @param {string} cwd 当前工作目录（默认 process.cwd()）
  * @returns {string}
@@ -116,7 +116,7 @@ function resolveProjectId(cwd) {
   if (process.env.DDT_PROJECT_ID) {
     return process.env.DDT_PROJECT_ID;
   }
-  const localFile = path.join(cwd || process.cwd(), '.delivery', 'project-id');
+  const localFile = path.join(cwd || process.cwd(), '.ddt', 'project-id');
   try {
     return fs.readFileSync(localFile, 'utf8').trim();
   } catch {
@@ -305,7 +305,7 @@ function appendQualityEvent(projectId, sessionId, source, stage, metrics) {
 // M4-2: progress.json 状态机维护（轻量版，避免 spawn 子进程）
 function readProgress(cwd) {
   try {
-    const p = path.join(cwd, '.delivery', 'progress.json');
+    const p = path.join(cwd, '.ddt', 'progress.json');
     if (!fs.existsSync(p)) return null;
     return JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch { return null; }
@@ -313,7 +313,7 @@ function readProgress(cwd) {
 
 function writeProgress(cwd, progress) {
   try {
-    const dir = path.join(cwd, '.delivery');
+    const dir = path.join(cwd, '.ddt');
     fs.mkdirSync(dir, { recursive: true });
     progress.last_activity_at = new Date().toISOString();
     fs.writeFileSync(path.join(dir, 'progress.json'),

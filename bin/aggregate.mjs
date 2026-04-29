@@ -25,8 +25,8 @@ if (args.get('bootstrap')) {
   const name = args.get('name') || 'untitled';
   const id = `proj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   store.createProject(id, name);
-  mkdirSync('.delivery', { recursive: true });
-  writeFileSync('.delivery/project-id', id);
+  mkdirSync('.ddt', { recursive: true });
+  writeFileSync('.ddt/project-id', id);
   console.log(id);
   process.exit(0);
 }
@@ -62,18 +62,41 @@ if (!existsSync(EVENTS)) {
   process.exit(2);
 }
 
+// M6.1.2: --rebuild 强制全量重 ingest（清空表 + 清水位线）
+if (args.get('rebuild')) {
+  if (!projectId) {
+    console.error('--rebuild 必须搭配 --project <id>，避免清空全部数据');
+    process.exit(2);
+  }
+  store.rebuildProject(projectId);
+}
+
+// M6.1.2: 增量 ingest 水位线 — 仅处理 ts > watermark 的事件
+//   防 events.jsonl 反复全量 ingest 导致 phase_runs / subagent_runs 行数膨胀
+//   （v0.5.1 实测 phase_runs 重复 4 行，工时数字膨胀 5×）
+const watermark = projectId ? store.getWatermark(projectId) : null;
 const lines = readFileSync(EVENTS, 'utf8').split('\n').filter(Boolean);
 let imported = 0;
+let skipped = 0;
+let maxTs = watermark || '';
 for (const line of lines) {
   try {
     const ev = JSON.parse(line);
-    if (!projectId || ev.project_id === projectId) {
-      store.ingestEvent(ev);
-      imported++;
+    if (projectId && ev.project_id !== projectId) continue;
+    // 水位线过滤：同 ts 视为已 ingest，避免边界重复（仅在 --project 模式启用）
+    if (watermark && ev.ts && ev.ts <= watermark) {
+      skipped++;
+      continue;
     }
+    store.ingestEvent(ev);
+    imported++;
+    if (ev.ts && ev.ts > maxTs) maxTs = ev.ts;
   } catch { /* skip bad line */ }
 }
-console.log(JSON.stringify({ imported, db: DB }));
+if (projectId && maxTs && maxTs !== watermark) {
+  store.setWatermark(projectId, maxTs);
+}
+console.log(JSON.stringify({ imported, skipped, watermark: maxTs || null, db: DB }));
 
 function captureQualityMetrics() {
   const testReport   = readIfExists('tests/test-report.md');

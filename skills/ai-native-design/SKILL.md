@@ -10,7 +10,7 @@ origin: DDT
 
 - frontend-agent 启动 / `/build-web` 命令 / `/impl` 同时派发前后端
 - `/import-design --from <type>` 命令显式触发外部设计源导入
-- `.delivery/tech-stack.json::ai_design.type` 决定默认通道
+- `.ddt/tech-stack.json::ai_design.type` 决定默认通道
 
 ## Core Principles
 

@@ -55,11 +55,11 @@ test('优先级 2：project-brief.md 技术栈预设', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('优先级 3：已存在的 .delivery/tech-stack.json', () => {
+test('优先级 3：已存在的 .ddt/tech-stack.json', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-stack-existing-'));
   try {
-    mkdirSync(join(tmp, '.delivery'), { recursive: true });
-    writeFileSync(join(tmp, '.delivery', 'tech-stack.json'),
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'tech-stack.json'),
       JSON.stringify({ preset: 'python-fastapi', ai_design: { type: 'lovable' } }));
     const r = runResolve(tmp);
     assert.equal(r.status, 0);
@@ -92,12 +92,12 @@ test('优先级 5：默认 java-modern', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('--write 写入 .delivery/tech-stack.json', () => {
+test('--write 写入 .ddt/tech-stack.json', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-stack-write-'));
   try {
     const r = runResolve(tmp, ['--preset', 'node-modern', '--write']);
     assert.equal(r.status, 0);
-    const path = join(tmp, '.delivery', 'tech-stack.json');
+    const path = join(tmp, '.ddt', 'tech-stack.json');
     assert.ok(existsSync(path));
     const stack = JSON.parse(readFileSync(path, 'utf8'));
     assert.equal(stack.preset, 'node-modern');

@@ -12,7 +12,7 @@
       "name": "digital-delivery-team",
       "source": "./",
       "description": "一人一队：10 个数字员工子代理、16 个岗位/编排/辅助命令、5 个领域 skill、7 类 hook、5 套技术栈预设、4 套 AI-native UI 通道、进度状态机与跨会话恢复。",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "author": {
         "name": "赵文昊",
         "email": "dhslegle@gmail.com"

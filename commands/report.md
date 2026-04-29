@@ -16,13 +16,15 @@ argument-hint: "[--stage <all|design|impl|verify|ship>]"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase report --action start
 mkdir -p baseline
 test -f baseline/historical-projects.csv || cp "$DDT_PLUGIN_ROOT/baseline/historical-projects.csv" baseline/historical-projects.csv
 test -f baseline/estimation-rules.md || cp "$DDT_PLUGIN_ROOT/baseline/estimation-rules.md" baseline/estimation-rules.md
 test -f baseline/baseline.locked.json || node "$DDT_PLUGIN_ROOT/bin/baseline.mjs" --lock \
   --hist baseline/historical-projects.csv --expert baseline/estimation-rules.md \
   --out baseline/baseline.locked.json
-export DDT_PROJECT_ID=$(cat .delivery/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
+export DDT_PROJECT_ID=$(cat .ddt/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
 test -n "$DDT_PROJECT_ID" || { echo "❌ 未设置 DDT_PROJECT_ID，请先运行 /prd"; exit 1; }
 ```
 
@@ -76,5 +78,12 @@ Top 3 优化建议:
 ## --refresh
 
 传入 `--refresh` 时，重新聚合并增量刷新报告解读；禁止覆盖 raw 数据、baseline 或删除已有仍有效的分析结论。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase report --action end
+```
 
 $ARGUMENTS

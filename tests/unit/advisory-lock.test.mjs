@@ -15,7 +15,7 @@ const lockMod = require(join(ROOT, 'hooks/handlers/lib/advisory-lock.js'));
 test('isProtected 仅对白名单文件返回 true', () => {
   assert.equal(lockMod.isProtected('docs/api-contract.yaml'), true);
   assert.equal(lockMod.isProtected('docs/prd.md'), true);
-  assert.equal(lockMod.isProtected('.delivery/tech-stack.json'), true);
+  assert.equal(lockMod.isProtected('.ddt/tech-stack.json'), true);
   assert.equal(lockMod.isProtected('web/components/Foo.tsx'), false);
   assert.equal(lockMod.isProtected('server/src/app.js'), false);
   assert.equal(lockMod.isProtected(''), false);

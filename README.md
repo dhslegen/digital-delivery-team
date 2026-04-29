@@ -112,7 +112,7 @@ delivery-<project-id>-<timestamp>.tar.gz   ← 一键交付包
 | `go-modern` | Gin + Postgres + GORM | React 18 + Tailwind + shadcn-ui | claude-design |
 | `python-fastapi` | FastAPI + Postgres + SQLAlchemy + Alembic | React 18 + Tailwind + shadcn-ui | lovable |
 
-**优先级链**（从高到低）：CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.delivery/tech-stack.json` → manifest 自动检测（`pom.xml`/`package.json`/`go.mod`/`pyproject.toml`）→ 默认 `java-modern`。
+**优先级链**（从高到低）：CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.ddt/tech-stack.json` → manifest 自动检测（`pom.xml`/`package.json`/`go.mod`/`pyproject.toml`）→ 默认 `java-modern`。
 
 ---
 
@@ -197,7 +197,7 @@ hooks → ~/.claude/delivery-metrics/<project-id>/events.jsonl
 
 ## 进度状态机与跨会话恢复
 
-每个 DDT 项目在 `.delivery/progress.json` 维护一份状态机：
+每个 DDT 项目在 `.ddt/progress.json` 维护一份状态机：
 
 ```json
 {
@@ -261,7 +261,7 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `DDT_METRICS_DIR` | `~/.claude/delivery-metrics/` | 度量数据目录 |
-| `DDT_PROJECT_ID` | 自动从 `.delivery/project-id` 读取 | 当前项目 ID |
+| `DDT_PROJECT_ID` | 自动从 `.ddt/project-id` 读取 | 当前项目 ID |
 | `DDT_HOOK_PROFILE` | `standard` | Hook 档位：`minimal` / `standard` / `strict` |
 | `DDT_DISABLED_HOOKS` | 空 | 禁用指定 hook id（CSV，例：`ddt:pre-tool-use`） |
 

@@ -18,6 +18,8 @@ test -f docs/wbs.md || { echo "❌ docs/wbs.md 不存在，请先运行 /wbs"; e
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase design --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 ```
 
@@ -36,9 +38,9 @@ node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
   --write
 ```
 
-优先级（从高到低）：CLI flag > project-brief.md "技术栈预设" > 已存在的 `.delivery/tech-stack.json` > manifest 自动检测 > 默认 `java-modern`。
+优先级（从高到低）：CLI flag > project-brief.md "技术栈预设" > 已存在的 `.ddt/tech-stack.json` > manifest 自动检测 > 默认 `java-modern`。
 
-产出：`.delivery/tech-stack.json`（architect-agent 必读输入）。
+产出：`.ddt/tech-stack.json`（architect-agent 必读输入）。
 
 ## Phase 3 — 派发 architect-agent
 
@@ -46,7 +48,7 @@ node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
 
 - `docs/prd.md`（需求文档）
 - `docs/wbs.md`（工作分解结构）
-- `.delivery/tech-stack.json`（**M3 必读** 技术栈选型，禁止偏离）
+- `.ddt/tech-stack.json`（**M3 必读** 技术栈选型，禁止偏离）
 - `templates/api-contract.template.yaml`（契约模板）
 - `templates/data-model.template.md`（数据模型模板）
 - `$ARGUMENTS`（架构倾向性说明）
@@ -92,5 +94,12 @@ Endpoint 数:  <n> 个
 ## --refresh
 
 传入 `--refresh` 时，重新读取 PRD、WBS 与技术栈信息，增量刷新架构、契约和数据模型；禁止替换整份产物或移除已有 ADR/变更记录。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase design --action end
+```
 
 $ARGUMENTS

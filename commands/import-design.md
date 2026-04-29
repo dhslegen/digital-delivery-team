@@ -5,7 +5,7 @@ argument-hint: "--from figma|v0|lovable|claude-design [--url <design-url>] [--ta
 
 # /import-design
 
-把 AI-native 设计源转化为符合 `docs/api-contract.yaml` 与 `.delivery/tech-stack.json` 的 React + Tailwind 组件，落地到 `web/`。
+把 AI-native 设计源转化为符合 `docs/api-contract.yaml` 与 `.ddt/tech-stack.json` 的 React + Tailwind 组件，落地到 `web/`。
 
 ---
 
@@ -13,7 +13,7 @@ argument-hint: "--from figma|v0|lovable|claude-design [--url <design-url>] [--ta
 
 ```bash
 test -f docs/api-contract.yaml || { echo "❌ 请先运行 /design 生成 API 契约"; exit 1; }
-test -f .delivery/tech-stack.json || { echo "❌ 请先运行 /design（会自动写入 tech-stack.json）"; exit 1; }
+test -f .ddt/tech-stack.json || { echo "❌ 请先运行 /design（会自动写入 tech-stack.json）"; exit 1; }
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
@@ -48,7 +48,7 @@ esac
 
 - `docs/api-contract.yaml`（必读）
 - `docs/prd.md`（UX 语义）
-- `.delivery/tech-stack.json`（必读，决定 ui 库与 ai_design 通道）
+- `.ddt/tech-stack.json`（必读，决定 ui 库与 ai_design 通道）
 - `skills/ai-native-design/SKILL.md`（必读，对应通道章节）
 - 通道参数：`--from $FROM --url $URL --target $TARGET`
 

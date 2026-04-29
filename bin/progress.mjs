@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// M4-1: .delivery/progress.json 状态机维护工具
+// M4-1: .ddt/progress.json 状态机维护工具
 //
 // schema (v1):
 // {
@@ -34,7 +34,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const PROGRESS_DIR = '.delivery';
+const PROGRESS_DIR = '.ddt';
 const PROGRESS_PATH = join(PROGRESS_DIR, 'progress.json');
 
 // 10 个 phase 与对应 artifact（用于 infer 推断）
@@ -113,7 +113,7 @@ function emptyProgress(projectId) {
 
 function readProjectIdFromFile() {
   try {
-    return readFileSync(join('.delivery', 'project-id'), 'utf8').trim();
+    return readFileSync(join('.ddt', 'project-id'), 'utf8').trim();
   } catch {
     return null;
   }

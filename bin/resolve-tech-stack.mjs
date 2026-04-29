@@ -4,13 +4,13 @@
 // 优先级（从高到低）：
 //   1. CLI flag: --preset <name>
 //   2. project-brief.md "技术栈预设" 字段
-//   3. .delivery/tech-stack.json 已有内容（保留用户已确认的选择）
+//   3. .ddt/tech-stack.json 已有内容（保留用户已确认的选择）
 //   4. project root manifest 自动检测：pom.xml/package.json/go.mod/pyproject.toml/Cargo.toml
 //   5. 默认（templates/tech-stack-presets.yaml::default_preset）
 //
 // 用法：
 //   node bin/resolve-tech-stack.mjs [--preset <name>] [--ai-design <name>] [--write]
-//   --write 会写入 .delivery/tech-stack.json；不传则只输出 JSON 到 stdout。
+//   --write 会写入 .ddt/tech-stack.json；不传则只输出 JSON 到 stdout。
 //
 // 退出码：0 = 成功；2 = preset 名无效；3 = preset 模板缺失。
 
@@ -153,7 +153,7 @@ function buildStack(presetName, aiDesignName, presetsRoot) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
-  const stackPath = join(cwd, '.delivery', 'tech-stack.json');
+  const stackPath = join(cwd, '.ddt', 'tech-stack.json');
   const briefPath = join(cwd, 'project-brief.md');
 
   const presetsRoot = loadPresets();

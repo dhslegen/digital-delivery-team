@@ -22,7 +22,7 @@ function runHook(cwd, input, env = {}) {
   });
 }
 
-test('非 DDT 项目（无 brief / 无 .delivery/project-id）不注入 additionalContext', () => {
+test('非 DDT 项目（无 brief / 无 .ddt/project-id）不注入 additionalContext', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-context-empty-'));
   try {
     const r = runHook(tmp, { session_id: 's1', cwd: tmp });
@@ -56,9 +56,9 @@ test('progress.json 存在时 context 含进度概览', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-context-progress-'));
   try {
     writeFileSync(join(tmp, 'project-brief.md'), '# Brief');
-    mkdirSync(join(tmp, '.delivery'), { recursive: true });
-    writeFileSync(join(tmp, '.delivery', 'project-id'), 'proj-test-001');
-    writeFileSync(join(tmp, '.delivery', 'progress.json'), JSON.stringify({
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'project-id'), 'proj-test-001');
+    writeFileSync(join(tmp, '.ddt', 'progress.json'), JSON.stringify({
       schema_version: 1,
       project_id: 'proj-test-001',
       current_phase: 'design',

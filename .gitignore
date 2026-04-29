@@ -13,6 +13,7 @@ node_modules/
 /w[0-9][0-9]/
 
 # DDT 项目交付产物（仅在被交付项目目录中产生；插件仓库本身不应有）
+/.ddt/
 /.delivery/
 /baseline/baseline.locked.json
 /docs/efficiency-report*.md

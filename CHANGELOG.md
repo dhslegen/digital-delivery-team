@@ -4,6 +4,66 @@
 
 ---
 
+## [0.6.0] - 2026-04-29
+
+M6 路线图前两个里程碑：核心数据采集真正稳定（M6.1） + 跨会话接力 skill（M6.5）。
+
+### Fixed — 修复
+
+- 🔴 P0：`aggregate.mjs` 无 watermark 导致 events.jsonl 反复全量 ingest，phase_runs 行数膨胀 4-5×（v0.5.1 实测 kickoff 4 行重复，工时数字膨胀 5×）
+  - 根因：每次 Stop hook 后台触发 + `/report` 显式触发，没有去重机制
+  - 修复：新增 `ingest_watermark` 表 + 增量 ingest（仅 ts > watermark 才入库）+ `--rebuild` 强制全量
+- 🔴 P0：业务阶段（PRD/WBS/Design 等）无独立 phase 工时事件
+  - 根因：`/kickoff` 内部 chain 调用不触发 UserPromptSubmit hook，phase_runs 只有粗粒度 kickoff/impl 数据
+  - 修复：新增 `bin/emit-phase.mjs` + 10 个 phase command 在 Phase 1 起、命令末尾各调一次
+
+### Added — 新增
+
+**M6.1 数据采集真正稳定**
+- `bin/lib/schema.sql::ingest_watermark` 表 — per-project last_ts 水位线
+- `bin/lib/store.mjs` 新增 `getWatermark` / `setWatermark` / `resetWatermark` / `rebuildProject`
+- `bin/aggregate.mjs --rebuild` — 清空 4 张表后重 ingest
+- `bin/aggregate.mjs` 输出新增 `skipped` 与 `watermark` 字段
+- `bin/emit-phase.mjs` — 业务阶段事件发射器（独立脚本，commands bash 直接调用，不依赖 hook）
+- 10 个 phase command 内嵌 emit-phase start/end 调用
+- 4 个 commands（build-web/build-api/test/review）补齐 marker fallback 三连
+
+**M6.5 跨会话接力 skill**
+- `skills/relay/SKILL.md` — 吸收 ECC `save-session` 13 段范式 + DDT 项目特色注入
+- `commands/relay.md` — `/relay [--out <path>] [--quiet]` 命令
+- `bin/build-relay-prompt.mjs` — 自动收集 progress.json / tech-stack.json / git log / 关键产物路径，输出可一键复制的 prompt
+
+**测试**
+- `tests/integration/m6-watermark-emit-relay.test.mjs` — 6 个用例
+- 总计 93 / 93 通过（v0.5.1 87 + 6 新增）
+
+### Changed — 改动
+
+- `bin/manifest.mjs::KNOWN_AUXILIARY` 增加 `relay`
+
+### Migration — 升级指引
+
+从 v0.5.1 升级到 v0.6.0：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. 旧 metrics.db 建议清空避免 v0.5.1 phase_runs 重复行残留：
+   ```bash
+   node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project <id> --rebuild
+   ```
+   或 `rm ~/.claude/delivery-metrics/metrics.db` 重建
+3. 老项目不需要改（emit-phase 是新事件类型，向后兼容）
+4. 试用接力：`/digital-delivery-team:relay`
+
+### 后续计划（M6.2/M6.3/M6.4）
+
+- M6.2 决策门（AskUserQuestion 集成）
+- M6.3 Spring Initializr 等价技术栈问卷（22 分组 200+ 组件）
+- M6.4 开发阶段精细化（去 subagent 黑盒 + ECC 6-phase 范式）
+
+详见 [`design/分析报告_v3.md`](../design/分析报告_v3.md)。
+
+---
+
 ## [0.5.1] - 2026-04-28
 
 修复 v0.5.0 在 Claude Code v2.1+ 真实安装路径下 SessionStart hook 解析失败的问题。
@@ -64,9 +124,9 @@
 - `--preset` / `--ai-design` CLI 参数支持（kickoff / design）
 
 **可重入与跨会话恢复（M4）**
-- `bin/progress.mjs` — `.delivery/progress.json` 状态机（10 phase，5 子命令）
+- `bin/progress.mjs` — `.ddt/progress.json` 状态机（10 phase，5 子命令）
 - `bin/resume.mjs` + `commands/resume.md` — `/resume` 跨会话恢复
-- `hooks/handlers/lib/advisory-lock.js` — `.delivery/locks/` advisory lock（warn-only）
+- `hooks/handlers/lib/advisory-lock.js` — `.ddt/locks/` advisory lock（warn-only）
 
 **测试覆盖**
 - 39 个新测试（10 unit + 16 integration），含 P0 端到端断言"6 个 stage 实际工时全非空"

@@ -22,7 +22,7 @@ test('progress --init 初始化所有 10 个 phase', () => {
   try {
     const r = run(tmp, ['--init']);
     assert.equal(r.status, 0);
-    const path = join(tmp, '.delivery', 'progress.json');
+    const path = join(tmp, '.ddt', 'progress.json');
     assert.ok(existsSync(path));
     const progress = JSON.parse(readFileSync(path, 'utf8'));
     assert.equal(progress.schema_version, 1);
@@ -41,14 +41,14 @@ test('progress --update 推进状态', () => {
     run(tmp, ['--init']);
     let r = run(tmp, ['--update', 'prd', 'in_progress']);
     assert.equal(r.status, 0);
-    let progress = JSON.parse(readFileSync(join(tmp, '.delivery/progress.json'), 'utf8'));
+    let progress = JSON.parse(readFileSync(join(tmp, '.ddt/progress.json'), 'utf8'));
     assert.equal(progress.phases.prd.status, 'in_progress');
     assert.ok(progress.phases.prd.started_at);
     assert.equal(progress.current_phase, 'prd');
 
     r = run(tmp, ['--update', 'prd', 'completed']);
     assert.equal(r.status, 0);
-    progress = JSON.parse(readFileSync(join(tmp, '.delivery/progress.json'), 'utf8'));
+    progress = JSON.parse(readFileSync(join(tmp, '.ddt/progress.json'), 'utf8'));
     assert.equal(progress.phases.prd.status, 'completed');
     assert.ok(progress.phases.prd.completed_at);
     // current_phase 推进到下一个 pending phase（wbs）
@@ -66,7 +66,7 @@ test('progress --infer 根据 docs/* 推断完成状态', () => {
 
     const r = run(tmp, ['--infer']);
     assert.equal(r.status, 0);
-    const progress = JSON.parse(readFileSync(join(tmp, '.delivery/progress.json'), 'utf8'));
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt/progress.json'), 'utf8'));
     assert.equal(progress.phases.prd.status, 'completed');
     assert.equal(progress.phases.wbs.status, 'completed');
     assert.equal(progress.phases.design.status, 'completed');

@@ -12,6 +12,12 @@ argument-hint: "[--regression-only]"
 ## Phase 1 — 前置校验
 
 ```bash
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
+export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase test --action start
 test -f docs/prd.md || { echo "❌ docs/prd.md 不存在，请先运行 /prd"; exit 1; }
 test -f docs/api-contract.yaml || { echo "❌ docs/api-contract.yaml 不存在，请先运行 /design"; exit 1; }
 
@@ -73,5 +79,12 @@ test-agent 完成后检查覆盖率。若覆盖率 < 70%：
 ## --refresh
 
 传入 `--refresh` 时，重新读取 PRD 与契约，增量更新测试计划、测试代码和测试报告；禁止删除已有有效测试。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase test --action end
+```
 
 $ARGUMENTS

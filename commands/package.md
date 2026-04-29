@@ -20,6 +20,8 @@ test -f docs/review-report.md || { echo "❌ docs/review-report.md 不存在，�
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase package --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 ```
 
@@ -73,5 +75,12 @@ Demo 时长: <DEMO_MINS>
 ## --refresh
 
 传入 `--refresh` 时，重新读取验证结果与代码树，增量刷新 README、部署指南和演示脚本；禁止删除已有仍有效的交付说明。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase package --action end
+```
 
 $ARGUMENTS

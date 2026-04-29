@@ -12,6 +12,12 @@ argument-hint: "[模块或页面范围]"
 ## Phase 1 — 前置校验
 
 ```bash
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
+export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action start
 test -f docs/api-contract.yaml || { echo "❌ docs/api-contract.yaml 不存在，请先运行 /design"; exit 1; }
 if command -v npx >/dev/null 2>&1; then
   npx --yes @redocly/cli lint docs/api-contract.yaml || exit 4
@@ -77,5 +83,12 @@ frontend-agent 职责：
 ## --refresh
 
 传入 `--refresh` 时，重新读取契约和 PRD，增量更新指定页面/模块；禁止清空 `web/` 或覆盖无关实现。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action end
+```
 
 $ARGUMENTS

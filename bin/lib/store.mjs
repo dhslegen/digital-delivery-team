@@ -222,6 +222,38 @@ export class DeliveryStore {
     ).get(projectId) || null;
   }
 
+  // M6.1: 增量 ingest 水位线 CRUD
+  getWatermark(projectId) {
+    if (!projectId) return null;
+    const row = this._db.prepare(
+      'SELECT last_ts FROM ingest_watermark WHERE project_id = ?'
+    ).get(projectId);
+    return (row && row.last_ts) || null;
+  }
+
+  setWatermark(projectId, ts) {
+    if (!projectId || !ts) return;
+    this._db.prepare(
+      `INSERT INTO ingest_watermark(project_id, last_ts, updated_at) VALUES(?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET last_ts=excluded.last_ts, updated_at=excluded.updated_at`
+    ).run(projectId, ts, new Date().toISOString());
+  }
+
+  resetWatermark(projectId) {
+    if (!projectId) return;
+    this._db.prepare('DELETE FROM ingest_watermark WHERE project_id = ?').run(projectId);
+  }
+
+  // M6.1: --rebuild 模式：清空 phase_runs / subagent_runs / tool_calls / quality_metrics 后重 ingest
+  rebuildProject(projectId) {
+    if (!projectId) return;
+    const tables = ['phase_runs', 'subagent_runs', 'tool_calls', 'quality_metrics'];
+    for (const t of tables) {
+      this._db.prepare(`DELETE FROM ${t} WHERE project_id = ?`).run(projectId);
+    }
+    this.resetWatermark(projectId);
+  }
+
   qualitySnapshot(projectId) {
     const testRow = this._db.prepare(
       `SELECT * FROM quality_metrics

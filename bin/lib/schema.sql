@@ -83,3 +83,10 @@ CREATE TABLE IF NOT EXISTS quality_metrics (
 CREATE INDEX IF NOT EXISTS idx_tool_calls_project ON tool_calls(project_id);
 CREATE INDEX IF NOT EXISTS idx_subagent_runs_project ON subagent_runs(project_id);
 CREATE INDEX IF NOT EXISTS idx_qm_project_stage ON quality_metrics(project_id, stage);
+
+-- M6.1: aggregate 增量 ingest 水位线（防 events.jsonl 反复全量 ingest 导致 phase_runs 行膨胀）
+CREATE TABLE IF NOT EXISTS ingest_watermark (
+  project_id TEXT PRIMARY KEY,
+  last_ts    TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

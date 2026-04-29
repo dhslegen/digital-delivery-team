@@ -54,7 +54,7 @@
 ## 原始数据来源
 
 - 事件日志：`~/.claude/delivery-metrics/events.jsonl`
-- 聚合数据库：`<project-root>/.delivery/metrics.db`
+- 聚合数据库：`<project-root>/.ddt/metrics.db`
 - Raw 报告：`docs/efficiency-report.raw.md`
 
 ---

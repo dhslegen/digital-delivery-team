@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// M4-3: /resume 工具 — 读 .delivery/progress.json 输出当前进度与下一步建议
+// M4-3: /resume 工具 — 读 .ddt/progress.json 输出当前进度与下一步建议
 import { existsSync, readFileSync } from 'node:fs';
 
-const PROGRESS_PATH = '.delivery/progress.json';
+const PROGRESS_PATH = '.ddt/progress.json';
 const STALE_MINUTES = 30;
 
 if (!existsSync(PROGRESS_PATH)) {
-  console.log('⚠️  .delivery/progress.json 不存在。可能原因：');
+  console.log('⚠️  .ddt/progress.json 不存在。可能原因：');
   console.log('   - 项目尚未初始化（先填 project-brief.md，重启会话或运行 /prd）');
   console.log('   - SessionStart hook 未触发，运行 /digital-delivery-team:doctor 检查');
   process.exit(0);

@@ -12,9 +12,9 @@ function read(rel) {
   return readFileSync(join(ROOT, rel), 'utf8');
 }
 
-test('architect-agent 必读 .delivery/tech-stack.json', () => {
+test('architect-agent 必读 .ddt/tech-stack.json', () => {
   const text = read('agents/architect-agent.md');
-  assert.ok(text.includes('.delivery/tech-stack.json'),
+  assert.ok(text.includes('.ddt/tech-stack.json'),
     'architect-agent 必读列表必须包含 tech-stack.json');
   assert.ok(text.includes('M3 技术栈刚性约束'),
     'architect-agent Hard Requirements 必须含 M3 刚性约束条款');
@@ -22,7 +22,7 @@ test('architect-agent 必读 .delivery/tech-stack.json', () => {
 
 test('frontend-agent 必读 tech-stack.json + ai-native-design skill', () => {
   const text = read('agents/frontend-agent.md');
-  assert.ok(text.includes('.delivery/tech-stack.json'));
+  assert.ok(text.includes('.ddt/tech-stack.json'));
   assert.ok(text.includes('skills/ai-native-design'));
   assert.ok(text.includes('M3 技术栈刚性约束'));
   assert.ok(text.includes('AI-native UI 工作流'));
@@ -30,7 +30,7 @@ test('frontend-agent 必读 tech-stack.json + ai-native-design skill', () => {
 
 test('backend-agent 必读 tech-stack.json', () => {
   const text = read('agents/backend-agent.md');
-  assert.ok(text.includes('.delivery/tech-stack.json'));
+  assert.ok(text.includes('.ddt/tech-stack.json'));
   assert.ok(text.includes('M3 技术栈刚性约束'));
 });
 

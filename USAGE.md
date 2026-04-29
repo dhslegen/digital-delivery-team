@@ -73,7 +73,7 @@ delivery-<project-id>-<timestamp>.tar.gz
 
 如果项目根目录已有 `pom.xml` / `package.json` / `go.mod` / `pyproject.toml`，DDT 会自动选择对应预设；可手动用 CLI flag 覆盖。
 
-> 优先级：CLI flag > project-brief 字段 > `.delivery/tech-stack.json` 已有内容 > manifest 自动检测 > 默认 `java-modern`。
+> 优先级：CLI flag > project-brief 字段 > `.ddt/tech-stack.json` 已有内容 > manifest 自动检测 > 默认 `java-modern`。
 
 ---
 
@@ -210,7 +210,7 @@ delivery-<project-id>-<timestamp>.tar.gz
 
 ```bash
 : "${DDT_PLUGIN_ROOT:=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
-DDT_PROJECT_ID=$(cat .delivery/project-id)
+DDT_PROJECT_ID=$(cat .ddt/project-id)
 
 node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID"
 node "$DDT_PLUGIN_ROOT/bin/report.mjs" --project "$DDT_PROJECT_ID" \
@@ -238,14 +238,14 @@ node "$DDT_PLUGIN_ROOT/bin/report.mjs" --project "$DDT_PROJECT_ID" \
 /resume                              # 看当前进度 + 下一步建议
 ```
 
-DDT 通过 `.delivery/progress.json` 自动维护状态机，由 hook 全自动驱动：
+DDT 通过 `.ddt/progress.json` 自动维护状态机，由 hook 全自动驱动：
 - **SessionStart**：根据 `docs/*` 文件存在性 infer 状态
 - **UserPromptSubmit**：检测到 phase 命令时标 `in_progress`
 - **Stop**：每个 turn 结束 infer，artifact 出现则标 `completed`
 
 **冲突保护**（advisory lock）：
 
-DDT 对 6 个 SSoT 文件加 advisory lock：`docs/api-contract.yaml` / `docs/prd.md` / `docs/wbs.md` / `docs/arch.md` / `docs/data-model.md` / `.delivery/tech-stack.json`。两个会话同时改同一个文件时会在 stderr 输出 warn（不阻塞，TTL 30 分钟）。
+DDT 对 6 个 SSoT 文件加 advisory lock：`docs/api-contract.yaml` / `docs/prd.md` / `docs/wbs.md` / `docs/arch.md` / `docs/data-model.md` / `.ddt/tech-stack.json`。两个会话同时改同一个文件时会在 stderr 输出 warn（不阻塞，TTL 30 分钟）。
 
 ---
 
@@ -270,7 +270,7 @@ A: 需要 ≥ 22.0.0（使用内置 `node:sqlite`，零 npm 依赖）。运行 `
 A: 说明该阶段没有捕获到 phase 工时事件。检查 `~/.claude/delivery-metrics/<project-id>/events.jsonl` 是否包含 `phase_start` 事件；若缺失，重启会话让 SessionStart hook 重新推断。`metrics-agent` 在工时缺失时会严格输出"不可证明"，不会用 WBS 预估替代。
 
 **Q: 想换技术栈但已经跑过 /design 怎么办？**
-A: `rm .delivery/tech-stack.json` 后重跑 `/design --preset <new-name>`。注意：架构产物会被增量刷新，但既有代码可能与新栈冲突，建议在新分支操作。
+A: `rm .ddt/tech-stack.json` 后重跑 `/design --preset <new-name>`。注意：架构产物会被增量刷新，但既有代码可能与新栈冲突，建议在新分支操作。
 
 ---
 

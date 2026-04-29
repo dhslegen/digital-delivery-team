@@ -9,7 +9,7 @@ const PLUGIN_JSON = path.join(ROOT, '.claude-plugin', 'plugin.json');
 
 const KNOWN_POSITIONAL    = new Set(['prd','wbs','design','build-web','build-api','test','review','package','report','fix']);
 const KNOWN_ORCHESTRATION = new Set(['kickoff','impl','verify','ship']);
-const KNOWN_AUXILIARY     = new Set(['doctor', 'import-design', 'resume']);
+const KNOWN_AUXILIARY     = new Set(['doctor', 'import-design', 'resume', 'relay']);
 
 function scanAgents() {
   return fs.readdirSync(path.join(ROOT, 'agents'))

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // T-H02: SessionStart handler — 记录会话开始事件、Node 版本预检、自动 bootstrap project_id
-// M2-2: 检测到 project-brief.md 但无 .delivery/project-id 时同步触发 aggregate.mjs --bootstrap
+// M2-2: 检测到 project-brief.md 但无 .ddt/project-id 时同步触发 aggregate.mjs --bootstrap
 'use strict';
 const path = require('path');
 const fs = require('fs');
@@ -24,7 +24,7 @@ function maybeInferProgress(cwd) {
     if (!root) return;
     const progressScript = path.join(root, 'bin', 'progress.mjs');
     if (!fs.existsSync(progressScript)) return;
-    const projectIdFile = path.join(cwd, '.delivery', 'project-id');
+    const projectIdFile = path.join(cwd, '.ddt', 'project-id');
     if (!fs.existsSync(projectIdFile)) return; // 未 bootstrap 的项目跳过
     spawnSync(process.execPath, [progressScript, '--init'],
       { cwd, encoding: 'utf8', timeout: 3000, env: process.env });
@@ -69,8 +69,8 @@ function checkNodeVersion() {
 function buildAdditionalContext(cwd, projectId, bootstrapped) {
   const lines = [];
   const hasBrief = fs.existsSync(path.join(cwd, 'project-brief.md'));
-  const hasProjectId = fs.existsSync(path.join(cwd, '.delivery', 'project-id'));
-  const progressPath = path.join(cwd, '.delivery', 'progress.json');
+  const hasProjectId = fs.existsSync(path.join(cwd, '.ddt', 'project-id'));
+  const progressPath = path.join(cwd, '.ddt', 'progress.json');
   let progress = null;
   try {
     if (fs.existsSync(progressPath)) {
@@ -121,18 +121,18 @@ function buildAdditionalContext(cwd, projectId, bootstrapped) {
   lines.push('- `/digital-delivery-team:doctor` — 安装自检');
   lines.push('');
   lines.push('## 关键约束');
-  lines.push('- **唯一真相源**：契约（`docs/api-contract.yaml`）/ PRD / WBS / 数据模型 / 技术栈（`.delivery/tech-stack.json`）一旦冻结禁止偏离');
+  lines.push('- **唯一真相源**：契约（`docs/api-contract.yaml`）/ PRD / WBS / 数据模型 / 技术栈（`.ddt/tech-stack.json`）一旦冻结禁止偏离');
   lines.push('- **数字员工边界**：每个 agent 只对其唯一交付物负责，不得跨产物写入（blockers.md 除外）');
   lines.push('- **不可证明则不证明**：度量数据缺失时 metrics-agent 必须输出"不可证明"，禁止用 WBS 预估替代实际工时');
 
   return lines.join('\n');
 }
 
-// M2-2: 项目首次会话时静默初始化 .delivery/project-id
+// M2-2: 项目首次会话时静默初始化 .ddt/project-id
 function maybeBootstrap(cwd) {
   try {
     const briefPath = path.join(cwd, 'project-brief.md');
-    const projectIdPath = path.join(cwd, '.delivery', 'project-id');
+    const projectIdPath = path.join(cwd, '.ddt', 'project-id');
     if (!fs.existsSync(briefPath)) return null;     // 用户尚未填写需求 → 跳过
     if (fs.existsSync(projectIdPath)) return null;  // 已经初始化过 → 跳过
 

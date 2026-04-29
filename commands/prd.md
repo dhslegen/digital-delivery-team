@@ -32,8 +32,10 @@ exit 1
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
-export DDT_PROJECT_ID=$(cat .delivery/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
-test -n "$DDT_PROJECT_ID" || { node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --bootstrap --name "$(basename "$(pwd)")"; export DDT_PROJECT_ID=$(cat .delivery/project-id); }
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase prd --action start
+export DDT_PROJECT_ID=$(cat .ddt/project-id 2>/dev/null || echo "$DDT_PROJECT_ID")
+test -n "$DDT_PROJECT_ID" || { node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --bootstrap --name "$(basename "$(pwd)")"; export DDT_PROJECT_ID=$(cat .ddt/project-id); }
 ```
 
 ## Phase 3 — 增量 / refresh 选择
@@ -81,5 +83,12 @@ product-agent 产出 `docs/prd.md`，必须包含：
 ## --refresh
 
 传入 `--refresh` 时，重新读取上游输入并增量刷新 `docs/prd.md`；禁止替换整份产物或移除已有变更记录。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase prd --action end
+```
 
 $ARGUMENTS

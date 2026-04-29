@@ -1,5 +1,5 @@
 ---
-description: 恢复命令 · 读取 .delivery/progress.json 显示当前进度与下一步建议
+description: 恢复命令 · 读取 .ddt/progress.json 显示当前进度与下一步建议
 argument-hint: ""
 ---
 

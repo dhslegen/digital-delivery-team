@@ -26,7 +26,7 @@ const FORBIDDEN_PATTERNS = [
 ];
 
 const stack = (() => {
-  const stackPath = join(cwd, '.delivery', 'tech-stack.json');
+  const stackPath = join(cwd, '.ddt', 'tech-stack.json');
   if (!existsSync(stackPath)) return null;
   try { return JSON.parse(readFileSync(stackPath, 'utf8')); } catch { return null; }
 })();

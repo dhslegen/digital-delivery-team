@@ -16,11 +16,11 @@ const PROTECTED_ARTIFACTS = new Set([
   'docs/wbs.md',
   'docs/arch.md',
   'docs/data-model.md',
-  '.delivery/tech-stack.json',
+  '.ddt/tech-stack.json',
 ]);
 
 const LOCK_TTL_MS = 30 * 60 * 1000;
-const LOCKS_DIR = '.delivery/locks';
+const LOCKS_DIR = '.ddt/locks';
 
 function isProtected(relPath) {
   if (!relPath) return false;

@@ -12,6 +12,12 @@ argument-hint: "[对比分支，默认 main]"
 ## Phase 1 — 校验
 
 ```bash
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
+export DDT_PLUGIN_ROOT
+
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase review --action start
 git rev-parse --is-inside-work-tree 2>/dev/null || { echo "❌ 非 git 仓库"; exit 1; }
 BASE=${ARGUMENTS:-main}
 git diff "$BASE"...HEAD --name-only | grep -q . || { echo "⚠️ 与 $BASE 无 diff，无需 review"; exit 0; }
@@ -72,5 +78,12 @@ review-agent 按三级分类产出 `docs/review-report.md`：
 ## --refresh
 
 传入 `--refresh` 时，重新读取最新 diff 与架构契约，增量刷新 `docs/review-report.md`；禁止删除已有仍有效的评审结论。
+
+
+## Phase 末 — 标记阶段完成（M6.1.3）
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase review --action end
+```
 
 $ARGUMENTS
