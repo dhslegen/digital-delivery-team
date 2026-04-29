@@ -4,6 +4,69 @@
 
 ---
 
+## [0.7.0] - 2026-04-29 — M6 路线图收官
+
+M6.4 开发阶段精细化 — **去 subagent 黑盒** + ECC 6-phase 范式 + validation loop + checkpoint commit。
+
+### Breaking Changes — 破坏性变更
+
+- ❗ **删除 backend-agent / frontend-agent**：从 v0.7.0 起改为 main thread 模式，知识迁到 `skills/backend-development` / `skills/frontend-development`，由 main thread auto-load
+- ❗ **`/impl` 从并行黑盒改为串行透明**：`/build-api` → 决策门 → `/build-web` → 决策门，彻底解决并发错配
+- ❗ **`/build-api` `/build-web` 重写为 ECC 6-phase**：EXPLORE → PLAN → APPROVE → IMPLEMENT → VERIFY → SUMMARY，每步流式可见，每文件 validation，每 step git checkpoint commit
+
+### Added — 新增
+
+**4 个新 skill（替代 2 个旧 agent + 抽取 ECC 范式）**
+- `skills/backend-development/SKILL.md` — 后端实现知识包
+- `skills/frontend-development/SKILL.md` — 前端实现知识包（含 4 套 AI 设计源工作流）
+- `skills/validation-loop/SKILL.md` — 每文件验证（吸收 ECC prp-implement Golden Rule "fix before moving on"）
+  - Quick / Standard / Strict 三档
+  - 自动检测包管理器（npm/pnpm/yarn/maven/gradle/poetry/cargo/go）
+  - 失败 AskUserQuestion 4 选项（修复 / 跳过 / 回滚 / 重新规划）
+- `skills/checkpoint-commit/SKILL.md` — 步骤级 git commit（吸收 ECC checkpoint）
+  - Checkpoint-Phase / Step / Validation 元信息
+  - `.ddt/checkpoints.log` 行格式
+  - 与 /relay 协同（注入 What WORKED 段）
+
+**`--module` 分块实现**
+- 复杂需求多轮独立 6-phase 跑齐前后端
+
+**测试**
+- `tests/integration/m64-build-phase.test.mjs` — 10 个用例
+- 总计 122 / 122（v0.6.2 111 + 11 新增）
+
+### Fixed — 修复
+
+- 🔴 用户失语（盲盒）：v0.5.x/v0.6.x impl agent 黑盒，用户全程是观察者 → 6-phase 让用户每节点都能介入
+- 🔴 工时不可证明根因之一：subagent 并发 lookback join 错配 → 改串行后并发场景从根上消失
+- 🟠 复杂需求一次写不完丢上下文 → --module 分块 + /relay 跨会话续作
+
+### Migration — 升级指引
+
+从 v0.6.2 升级到 v0.7.0：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. `/digital-delivery-team:doctor` 自检
+3. **行为变更最大的命令是 /impl 与 /build-api、/build-web**：
+   - 不再"同消息派发并行"
+   - 每 phase 暂停决策门（除非 --auto）
+   - 复杂需求建议 `/build-api --module <name>` 多轮跑
+4. 想要 v0.6.x 快速体验：`/impl --auto`
+
+### M6 路线图全部完成 🎉
+
+- ✅ M6.1 数据采集稳定（v0.6.0）
+- ✅ M6.5 接力 skill（v0.6.0）
+- ✅ M6.3 技术栈交互（v0.6.1）
+- ✅ M6.2 决策门（v0.6.2）
+- ✅ M6.4 开发阶段精细化（v0.7.0）
+
+v0.7.0 是 M6 整改全部 5 个里程碑落地后的"**生产就绪首版**"。
+
+详见 `design/分析报告_v3.md`。
+
+---
+
 ## [0.6.2] - 2026-04-29
 
 M6.2 用户决策门——解决"盲盒严重"痛点，让 DDT 从"包办式"转向"协作式"。

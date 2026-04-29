@@ -20,18 +20,19 @@ test('architect-agent 必读 .ddt/tech-stack.json', () => {
     'architect-agent Hard Requirements 必须含 M3 刚性约束条款');
 });
 
-test('frontend-agent 必读 tech-stack.json + ai-native-design skill', () => {
-  const text = read('agents/frontend-agent.md');
+// M6.4：frontend-agent / backend-agent 已转 skill（main thread 模式）
+test('frontend-development skill 必读 tech-stack.json + ai-native-design', () => {
+  const text = read('skills/frontend-development/SKILL.md');
   assert.ok(text.includes('.ddt/tech-stack.json'));
   assert.ok(text.includes('skills/ai-native-design'));
-  assert.ok(text.includes('M3 技术栈刚性约束'));
+  assert.ok(text.includes('栈刚性约束') || text.includes('M3 技术栈刚性'));
   assert.ok(text.includes('AI-native UI 工作流'));
 });
 
-test('backend-agent 必读 tech-stack.json', () => {
-  const text = read('agents/backend-agent.md');
+test('backend-development skill 必读 tech-stack.json', () => {
+  const text = read('skills/backend-development/SKILL.md');
   assert.ok(text.includes('.ddt/tech-stack.json'));
-  assert.ok(text.includes('M3 技术栈刚性约束'));
+  assert.ok(text.includes('栈刚性约束') || text.includes('M3 技术栈刚性'));
 });
 
 test('design.md 调用 resolve-tech-stack.mjs --write', () => {

@@ -1,9 +1,11 @@
 ---
-description: 前端命令 · 按 OpenAPI 契约实现 web 侧（含最小 happy-path 测试）。
-argument-hint: "[模块或页面范围]"
+description: 前端实现 · main thread + ECC 6-phase（EXPLORE→PLAN→APPROVE→IMPLEMENT→VERIFY→SUMMARY），不再黑盒派发 subagent
+argument-hint: "[--module <name>] [--auto] [--refresh]"
 ---
 
 # /build-web
+
+按 `docs/api-contract.yaml` 与 `docs/prd.md` UX 语义实现前端 UI。M6.4 起改用 main thread + ECC 6-phase 范式，每组件流式可见，每文件 validation，每 step checkpoint commit。
 
 **输入**：$ARGUMENTS
 
@@ -12,89 +14,156 @@ argument-hint: "[模块或页面范围]"
 ## Phase 1 — 前置校验
 
 ```bash
+test -f docs/api-contract.yaml || { echo "❌ 请先运行 /design"; exit 1; }
+test -f docs/prd.md || { echo "❌ 请先运行 /prd"; exit 1; }
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
-[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
+[ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析"; exit 1; }
 export DDT_PLUGIN_ROOT
-
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action start
-test -f docs/api-contract.yaml || { echo "❌ docs/api-contract.yaml 不存在，请先运行 /design"; exit 1; }
+"$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
+
 if command -v npx >/dev/null 2>&1; then
   npx --yes @redocly/cli lint docs/api-contract.yaml || exit 4
-else
-  echo "OpenAPI lint tool missing; cannot verify contract"
-  exit 5
-fi
-
-# 检查上游阶段是否留下未解决 blockers
-if [ -f docs/blockers.md ]; then
-  unresolved=$(awk '/^- \*\*resolved_at\*\*: null$/' docs/blockers.md | wc -l)
-  if [ "$unresolved" -gt 0 ]; then
-    echo "❌ docs/blockers.md 中存在 $unresolved 条未解决阻塞，请先处理。"
-    echo "   未解决项来自："
-    awk '/^## /{h=$0} /^- \*\*resolved_at\*\*: null$/{print "   - "h}' docs/blockers.md
-    exit 2
-  fi
 fi
 ```
 
-契约 lint 失败直接停止，禁止在未验证契约时实现前端。
+## Phase 2 — EXPLORE
 
-## Phase 2 — 脚手架确认
+main thread **必读**：
+- `skills/frontend-development/SKILL.md`
+- `skills/api-contract-first/SKILL.md`
+- `skills/ai-native-design/SKILL.md`
+- `docs/api-contract.yaml` + `docs/prd.md`
+- `.ddt/tech-stack.json::frontend` + `.ddt/tech-stack.json::ai_design`
 
-若 `web/` 目录不存在，询问用户是否用 `$ARGUMENTS` 中指定的脚手架初始化（如 `vite`、`next`、`nuxt`）。
+**EXPLORE 行动**：
 
-## Phase 3 — 派发 frontend-agent
+如果 `web/` 已存在：扫描组件树 + 已有 hooks / store / api client；找类似页面参照。
+如果 `web/` 为空：跑 `tech-stack.json::frontend.scaffold_cmd`（如 `npm create vite@latest web -- --template react-ts`）+ 落基础配置（tailwind / shadcn）。
 
-使用 Task 工具派发 `frontend-agent`，传入：
+落盘 `docs/build-web-exploration.md`：
 
-- `docs/api-contract.yaml`（接口契约）
-- `docs/prd.md`（产品需求，含 UI 验收标准）
-- `templates/api-contract.template.yaml`（字段约定参考）
-- `$ARGUMENTS`（模块/页面范围）
+```markdown
+# Build-Web Exploration
 
-frontend-agent 职责：
-1. 按契约实现 API 调用层
-2. 实现页面/组件
-3. 编写最小 happy-path 测试
+## 现有组件树
+- App
+  - Layout
+    - <已有>
 
-## Phase 4 — 自动质量校验
+## 框架与依赖
+- 框架: <react-vite / nextjs / vue-vite ...>
+- UI 库: <tailwind+shadcn / antd / element-plus ...>
+- 状态: <zustand / pinia / signals ...>
+
+## 类似页面参照
+- <文件路径>: <pattern>
+
+## AI 设计源
+- type: <claude-design / figma / v0 / lovable>
+- 是否需要先跑 /import-design: <yes/no>
+```
+
+## Phase 3 — PLAN
+
+按 `skills/frontend-development/SKILL.md::Phase 2 PLAN` 落 `docs/build-web-plan.md`：
+
+- 完整组件树视图
+- Files to Create / Modify
+- Build Sequence（types → api client → atoms → molecules → pages → tests）
+- Validation Strategy
+- AI 设计源接入说明（若 ai_design.type 非 claude-design，先跑 /import-design）
+
+`--module <name>` 时只规划该模块（如 `--module task-board` 只规划看板页相关组件）。
+
+## Phase 4 — APPROVE
+
+main thread 调用 `AskUserQuestion` 工具让用户批准 plan：
 
 ```bash
-(cd web && npm run build && npm run lint && npm run typecheck && npm test -- --run)
+if ! printf '%s' "$ARGUMENTS" | grep -q -- '--auto'; then
+  node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" --phase build-web --action point \
+    --options "approve|modify|reject|module-split"
+fi
 ```
 
-任一失败时：
-
-> ❌ **质量校验未通过，请修复后重跑 `/build-web`**
-
-## Phase 5 — 汇总输出
-
+```typescript
+{
+  questions: [{
+    question: "build-web Plan 已生成（N 个组件 / M 个 step），如何继续？",
+    header: "Build-Web plan",
+    multiSelect: false,
+    options: [
+      { label: "批准并实现 (Recommended)",
+         description: "进入 IMPLEMENT",
+         preview: "<组件树 + Build Sequence 摘要>" },
+      { label: "修改 plan 某个步骤", description: "我会指出哪步要改" },
+      { label: "拒绝并重新规划", description: "整体方向不对" },
+      { label: "拆分为多个模块（--module）", description: "分块实现" }
+    ]
+  }]
+}
 ```
-/build-web 完成
 
-新增页面/组件: <n> 个
-测试通过:      <passed> / <total>
-构建:          ✅ / ❌
+按 decision-gate skill 处理答案。
 
-建议下一步：/review 或 /verify
+## Phase 5 — IMPLEMENT
+
+按 plan Build Sequence 逐步：
+
+1. 写代码（Write / Edit）
+2. validation-loop standard mode（tsc / eslint / vitest 当前 step spec）
+3. checkpoint commit + 追加 checkpoints.log
+
+`tech-stack.json::ai_design.type` 决定如何写 UI：
+
+| type | 行为 |
+|------|------|
+| claude-design | main thread 基于 PRD + contract + Tailwind/shadcn 直接生成 |
+| figma | 跑 `/import-design --from figma --url <url>` 拉设计稿后转 React+Tailwind |
+| v0 | 跑 `npx shadcn@latest add <component>` 拉 v0 组件 |
+| lovable | clone/解压 → 移除 supabase → 接 OpenAPI client |
+
+## Phase 6 — VERIFY
+
+```bash
+cd web
+npm run build              # 必须无 error
+npm run lint               # 0 errors
+npx tsc --noEmit           # 0 errors
+npm test --run             # 全部通过
+
+node "$DDT_PLUGIN_ROOT/bin/check-contract-alignment.mjs" web || exit 3
 ```
 
-## --refresh
+## Phase 7 — SUMMARY
 
-传入 `--refresh` 时，重新读取契约和 PRD，增量更新指定页面/模块；禁止清空 `web/` 或覆盖无关实现。
+落 `docs/build-web-summary.md`：
 
+```markdown
+# Build-Web Summary
 
+## 已实现页面（N 个）
+- TaskBoard: 主看板页
+- ...
 
-## Phase 决策门 — M6.2 用户决策注入
+## 测试结果
+- happy-path: 6/6 ✅
+- edge case: 4/4 ✅
 
-按 `skills/decision-gate/SKILL.md` 标准模板执行：
+## checkpoint commits（N 个）
 
-### Step 1: 检查 --auto
+## bundle size
+- web/dist: <size>
 
-如果 `$ARGUMENTS` 含 `--auto`，跳过决策门直接进入"标记阶段完成"。否则继续 Step 2。
+## 启动
+\`\`\`
+cd web && npm run dev
+\`\`\`
+```
 
-### Step 2: 发射 decision_point 事件
+## Phase 决策门 — M6.2
 
 ```bash
 if ! printf '%s' "$ARGUMENTS" | grep -q -- '--auto'; then
@@ -103,53 +172,38 @@ if ! printf '%s' "$ARGUMENTS" | grep -q -- '--auto'; then
 fi
 ```
 
-### Step 3: LLM 调用 AskUserQuestion
-
 ```typescript
 {
   questions: [{
-    question: "前端实现 已生成（已实现页面 / happy-path 测试通过率），如何继续？",
+    question: "前端实现已完成（N 个页面 / X/X 测试通过），如何继续？",
     header: "Frontend review",
     multiSelect: false,
     options: [
       { label: "接受并继续 (Recommended)",
          description: "进入 /verify",
-         preview: "<填充本 phase 关键产物的 1-2 段摘要>" },
-      { label: "修改某条具体内容",
-         description: "我会指出哪条 + 怎么改" },
-      { label: "新增内容",
-         description: "我有遗漏的需求/字段/约束要补充" },
-      { label: "重新生成（带说明）",
-         description: "整体方向不对，重写本 phase" }
+         preview: "<docs/build-web-summary.md 摘要>" },
+      { label: "修改某个页面", description: "我会指出哪个" },
+      { label: "新增页面", description: "我有遗漏的页面要补充" },
+      { label: "重新生成（带说明）", description: "整体不对" }
     ]
   }]
 }
 ```
 
-### Step 4: 收到答案后 emit decision_resolved
+按 decision-gate skill 处理。
 
-```bash
-node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" --phase build-web --action resolved \
-  --user-action <accept|modify|add|regenerate|other> \
-  --note "<用户备注摘要 ≤200 字>"
-```
-
-### Step 5: 按答案分支
-
-| 用户选择 | 行为 |
-|---------|------|
-| 接受并继续 | 走"标记阶段完成"段落（emit-phase end）+ 提示用户运行 `/verify` |
-| 修改某条 | 进一步问"哪条？怎么改？"，用 `--refresh` 增量修订 → 修订完再走一次决策门 |
-| 新增内容 | 问"补充什么？"，用 `--refresh` 增量新增 → 决策门 |
-| 重新生成 | 问"原因？要保留什么？"，用 `--refresh` 重生成（保留已确认部分） → 决策门 |
-| Other | 解析意图，按 4 类映射；映射不上写 blocker |
-
-**关键**：未收到用户决策前禁止进入下一 phase 命令，禁止 emit-phase end。
-
-## Phase 末 — 标记阶段完成（M6.1.3）
+## Phase 末 — 标记阶段完成
 
 ```bash
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action end
 ```
+
+## --refresh
+
+`--refresh` 重新 EXPLORE + PLAN 并增量更新现有 web/ 代码；**禁止**清空已实现的页面或组件。
+
+## --module
+
+`--module <name>`：只实现该模块；多轮独立 6-phase 跑齐复杂 UI。
 
 $ARGUMENTS

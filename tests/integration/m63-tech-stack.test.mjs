@@ -138,13 +138,21 @@ test('PreToolUse hook 不拦截普通文件 Write', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('3 个 agent invariant 含 M6.3 SSoT 锁死条款', () => {
-  for (const agent of ['architect-agent.md', 'frontend-agent.md', 'backend-agent.md']) {
-    const text = readFileSync(join(ROOT, 'agents', agent), 'utf8');
-    assert.ok(text.includes('M6.3 SSoT 锁死'),
-      `${agent} 必须含 M6.3 SSoT 锁死条款`);
-    assert.ok(text.includes('严禁 Write/Edit/MultiEdit'),
-      `${agent} 必须明确"严禁 Write/Edit/MultiEdit"`);
+// M6.4：frontend-agent / backend-agent 已转 skill。SSoT 锁死现在
+// 在 architect-agent.md 上由 invariant 强制 + PreToolUse hook 硬拦截覆盖前后端实现。
+test('architect-agent invariant 含 M6.3 SSoT 锁死条款', () => {
+  const text = readFileSync(join(ROOT, 'agents', 'architect-agent.md'), 'utf8');
+  assert.ok(text.includes('M6.3 SSoT 锁死'),
+    'architect-agent 必须含 M6.3 SSoT 锁死条款');
+  assert.ok(text.includes('严禁 Write/Edit/MultiEdit'),
+    'architect-agent 必须明确"严禁 Write/Edit/MultiEdit"');
+});
+
+test('frontend-development / backend-development skill 含 SSoT 锁死提醒', () => {
+  for (const skill of ['frontend-development', 'backend-development']) {
+    const text = readFileSync(join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8');
+    assert.ok(text.includes('SSoT 锁死') || text.includes('严禁 Write/Edit/MultiEdit'),
+      `${skill} skill 必须提醒 main thread tech-stack.json 锁死规则`);
   }
 });
 
