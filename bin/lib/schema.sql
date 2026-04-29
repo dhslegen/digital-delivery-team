@@ -90,3 +90,16 @@ CREATE TABLE IF NOT EXISTS ingest_watermark (
   last_ts    TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+-- M6.2: 用户决策门事件（point + resolved 配对，每个 phase 可以多次发生）
+CREATE TABLE IF NOT EXISTS decisions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id   TEXT,
+  project_id   TEXT NOT NULL,
+  phase        TEXT NOT NULL,
+  point_ts     TEXT,             -- decision_point 时间戳
+  resolved_ts  TEXT,             -- decision_resolved 时间戳（可为空 = 用户暂未选择）
+  user_action  TEXT,             -- accept / modify / add / regenerate / other
+  note         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_project_phase ON decisions(project_id, phase);

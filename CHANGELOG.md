@@ -4,6 +4,66 @@
 
 ---
 
+## [0.6.2] - 2026-04-29
+
+M6.2 用户决策门——解决"盲盒严重"痛点，让 DDT 从"包办式"转向"协作式"。
+
+### Added — 新增
+
+**决策门 skill 与执行体**
+- `skills/decision-gate/SKILL.md` — 标准 4 选项决策门模板（接受 / 修改 / 新增 / 重新生成 + 自动 Other）+ 处理逻辑表 + Don't/Do 清单
+- `bin/emit-decision.mjs` — 决策事件发射器（point/resolved 配对），同时写全局 events.jsonl + 项目本地 `.ddt/decisions.jsonl`
+- `bin/lib/schema.sql::decisions` 表 — 持久化决策记录（用于 metrics-agent 分析"哪个 phase 改最多次"）
+- `bin/lib/store.mjs` — 处理 decision_point/resolved 事件，FIFO 关联 point→resolved
+
+**10 个 phase command 注入决策门段落**
+- prd / wbs / design / build-api / build-web / test / review / fix / package / report
+- 每个命令在"Phase 末"标记完成之前必须走决策门（除非 `--auto`）
+- 决策门 5 步流程：检查 --auto → emit point → AskUserQuestion 4 选项 → emit resolved → 按选择分支处理
+
+**/kickoff 改 interactive 默认**
+- 默认每个内部 phase（prd/wbs/design）跑完都暂停决策门
+- `--auto` flag 跳过所有决策门走旧串行 chain（兼容老用户）
+
+**/preview 命令 + bin/preview.mjs**
+- `/preview <prd|wbs|design|impl|test|review|fix|package|report|all>`
+- 输出指定 phase 产物的关键指标摘要（用户故事数 / ADR 数 / 覆盖率 / 阻塞条目 ...）
+- 含 vs HEAD 的 diff stat
+- 决策门前的辅助工具：让用户不用打开多文件就能扫一眼
+
+### Fixed — 修复
+
+- 🟠 v0.5.x "盲盒严重"：agent 包办所有 phase 决策，用户全程是观察者
+  - 修复：每个 phase 落盘后强制走决策门（除非 --auto），让用户参与关键节点
+
+### Tests
+
+- `tests/integration/m62-decision-gate.test.mjs` — 9 个用例：skill 加载 / emit-decision / decisions 表 / 10 commands 注入 / kickoff interactive / preview 输出 / manifest
+- `tests/unit/commands-slim.test.mjs` 基线从 90 调整到 140（决策门段落约 50 行/个，平均 117 行）
+- 总计 111 / 111 通过（v0.6.1 102 + 9 新增）
+
+### Migration — 升级指引
+
+从 v0.6.1 升级到 v0.6.2：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. **行为变更**：默认 `/kickoff` 与各 phase 命令在产物落盘后会暂停问你。如果你想要 v0.6.1 的"一键自动"体验：
+   ```
+   /kickoff --auto
+   /prd --auto
+   /design --auto
+   ...
+   ```
+3. 试用 `/preview all` 查看项目所有 phase 摘要
+
+### 后续计划（M6.4）
+
+- M6.4 开发阶段精细化（去 subagent 黑盒 + ECC 6-phase 范式：EXPLORE→PLAN→APPROVE→IMPLEMENT→VERIFY→SUMMARY）
+
+详见 `design/分析报告_v3.md`。
+
+---
+
 ## [0.6.1] - 2026-04-29
 
 M6.3 技术栈交互式选型 — Spring Initializr 等价 4 步问卷 + tech-stack.json 硬锁死。

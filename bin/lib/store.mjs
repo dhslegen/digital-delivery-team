@@ -123,6 +123,31 @@ export class DeliveryStore {
         break;
       }
 
+      // M6.2: 决策门事件 — point 创建占位行；resolved 关联 FIFO 最早未关闭的 point
+      case 'decision_point':
+        this._db.prepare(
+          'INSERT INTO decisions(session_id, project_id, phase, point_ts) VALUES(?, ?, ?, ?)'
+        ).run(sessionId, pid, d.phase || 'unknown', ts);
+        break;
+
+      case 'decision_resolved': {
+        const updated = this._db.prepare(
+          `UPDATE decisions SET resolved_ts=?, user_action=?, note=?
+           WHERE id=(SELECT MIN(id) FROM decisions
+                     WHERE project_id=? AND session_id=? AND phase=? AND resolved_ts IS NULL)`
+        ).run(ts, d.user_action || 'unknown', d.note || '',
+              pid, sessionId, d.phase || 'unknown');
+        const changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        if (changes === 0) {
+          // 兜底：找不到对应 point 时也记录一条
+          this._db.prepare(
+            'INSERT INTO decisions(session_id, project_id, phase, point_ts, resolved_ts, user_action, note) VALUES(?, ?, ?, ?, ?, ?, ?)'
+          ).run(sessionId, pid, d.phase || 'unknown', ts, ts,
+                d.user_action || 'unknown', d.note || '');
+        }
+        break;
+      }
+
       // M1-5: phase_runs 写入
       case 'phase_start':
         this._db.prepare(

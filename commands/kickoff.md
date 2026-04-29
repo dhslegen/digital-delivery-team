@@ -1,6 +1,6 @@
 ---
-description: 新项目起手 · 串行跑 /prd → /wbs → /design，完成后可进入 /impl。
-argument-hint: "[--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [补充需求描述]"
+description: 新项目起手 · 串行跑 /prd → /wbs → /design；默认 interactive（每步决策门），--auto 跳过决策门。
+argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [补充需求描述]"
 ---
 
 # /kickoff
@@ -26,18 +26,29 @@ argument-hint: "[--preset java-modern|node-modern|go-modern|python-fastapi|java-
 
 收集到答案后，把结果写入 `/tmp/ddt-user-components.json`（schema：`{preset, backend, frontend, ai_design}`），后续 `/design` 阶段会自动 merge。
 
+### M6.2 执行模式
+
+- **默认 interactive 模式**：每个内部 phase（prd / wbs / design）跑完后**必须暂停**走决策门（`skills/decision-gate/SKILL.md`），未确认前禁止进入下一步
+- **--auto 模式**：传 `--auto` 时跳过所有决策门，按旧串行 chain 跑（兼容 v0.5.x 老用户的"一键起手"体验）
+
 ### Step 1：跑 `/prd $ARGUMENTS`
 - 若 `project-brief.md` 缺失 → 停止，提示用户填写
 - 若存在阻塞项（`docs/blockers.md` 非空）→ 停止，提示处理阻塞
+- /prd 命令内部已含决策门（除非 --auto）；用户接受后再继续 Step 2
+- **未传 --auto 时**：LLM 必须等待 /prd 决策门返回 `accept` 后才推进到 /wbs
 
 ### Step 2：跑 `/wbs`
 - 若失败 → 停止
+- /wbs 内部决策门同上
+- **未传 --auto 时**：LLM 必须等待 /wbs 决策门返回 `accept` 后才推进到 /design
 
 ### Step 3：跑 `/design $ARGUMENTS`（透传 `--preset` / `--ai-design`）
 - /design 内部 Phase 2b 会基于 Step 0 收集的 components JSON 写入 `.ddt/tech-stack.json`
 - 若契约 lint 未通过 → 停止，返回退出码 4
 - 若 OpenAPI lint 工具缺失 → 停止，返回退出码 5
 - 若产出文件缺失 → 停止
+- /design 内部决策门同上
+- **未传 --auto 时**：LLM 必须等待 /design 决策门返回 `accept` 后才输出 kickoff 汇总
 
 4. 汇总输出：
 

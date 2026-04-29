@@ -80,6 +80,67 @@ review-agent 按三级分类产出 `docs/review-report.md`：
 传入 `--refresh` 时，重新读取最新 diff 与架构契约，增量刷新 `docs/review-report.md`；禁止删除已有仍有效的评审结论。
 
 
+
+## Phase 决策门 — M6.2 用户决策注入
+
+按 `skills/decision-gate/SKILL.md` 标准模板执行：
+
+### Step 1: 检查 --auto
+
+如果 `$ARGUMENTS` 含 `--auto`，跳过决策门直接进入"标记阶段完成"。否则继续 Step 2。
+
+### Step 2: 发射 decision_point 事件
+
+```bash
+if ! printf '%s' "$ARGUMENTS" | grep -q -- '--auto'; then
+  node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" --phase review --action point \
+    --options "accept|modify|add|regenerate"
+fi
+```
+
+### Step 3: LLM 调用 AskUserQuestion
+
+```typescript
+{
+  questions: [{
+    question: "评审报告 已生成（阻塞级 / 警告级 / 建议级三级条目数），如何继续？",
+    header: "Review review",
+    multiSelect: false,
+    options: [
+      { label: "接受并继续 (Recommended)",
+         description: "进入 /fix 或 /package",
+         preview: "<填充本 phase 关键产物的 1-2 段摘要>" },
+      { label: "修改某条具体内容",
+         description: "我会指出哪条 + 怎么改" },
+      { label: "新增内容",
+         description: "我有遗漏的需求/字段/约束要补充" },
+      { label: "重新生成（带说明）",
+         description: "整体方向不对，重写本 phase" }
+    ]
+  }]
+}
+```
+
+### Step 4: 收到答案后 emit decision_resolved
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" --phase review --action resolved \
+  --user-action <accept|modify|add|regenerate|other> \
+  --note "<用户备注摘要 ≤200 字>"
+```
+
+### Step 5: 按答案分支
+
+| 用户选择 | 行为 |
+|---------|------|
+| 接受并继续 | 走"标记阶段完成"段落（emit-phase end）+ 提示用户运行 `/fix 或 /package` |
+| 修改某条 | 进一步问"哪条？怎么改？"，用 `--refresh` 增量修订 → 修订完再走一次决策门 |
+| 新增内容 | 问"补充什么？"，用 `--refresh` 增量新增 → 决策门 |
+| 重新生成 | 问"原因？要保留什么？"，用 `--refresh` 重生成（保留已确认部分） → 决策门 |
+| Other | 解析意图，按 4 类映射；映射不上写 blocker |
+
+**关键**：未收到用户决策前禁止进入下一 phase 命令，禁止 emit-phase end。
+
 ## Phase 末 — 标记阶段完成（M6.1.3）
 
 ```bash

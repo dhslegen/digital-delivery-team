@@ -34,13 +34,16 @@ test('commands 全部使用 .ddt-plugin-root marker fallback', () => {
   }
 });
 
-test('commands 平均行数 ≤ 90（M2-3 瘦身基线）', () => {
+test('commands 平均行数 ≤ 140（M6.2 决策门后基线）', () => {
+  // M2-3 瘦身后基线 ~80（无决策门）
+  // M6.2 给 10 个 phase 加决策门段落 ~50 行/个，平均 ≈ 117
+  // 设 140 留余量给后续 M6.4 改造
   const files = readdirSync(COMMANDS).filter(f => f.endsWith('.md'));
   const totalLines = files.reduce((sum, f) =>
     sum + readFileSync(join(COMMANDS, f), 'utf8').split('\n').length, 0);
   const avg = totalLines / files.length;
-  assert.ok(avg <= 90,
-    `commands 平均行数 ${avg.toFixed(1)} 超过基线 90 行（请检查是否有命令膨胀）`);
+  assert.ok(avg <= 140,
+    `commands 平均行数 ${avg.toFixed(1)} 超过基线 140 行（M6.2 后允许 ≤ 140，再涨说明可能膨胀）`);
 });
 
 test('M2 新增的 fix.md 与 doctor.md 已就位', () => {
