@@ -11,17 +11,33 @@ argument-hint: "[--preset java-modern|node-modern|go-modern|python-fastapi|java-
 
 ## 执行步骤
 
-1. 跑 `/prd $ARGUMENTS`
-   - 若 `project-brief.md` 缺失 → 停止，提示用户填写
-   - 若存在阻塞项（`docs/blockers.md` 非空）→ 停止，提示处理阻塞
+### Step 0：技术栈预选（M6.3 新增）
 
-2. 跑 `/wbs`
-   - 若失败 → 停止
+**LLM 必须执行**：在跑 `/prd` 之前，先检查 `project-brief.md` 中的 "技术栈预设" 字段。
 
-3. 跑 `/design $ARGUMENTS`（透传 `--preset` / `--ai-design`）
-   - 若契约 lint 未通过 → 停止，返回退出码 4
-   - 若 OpenAPI lint 工具缺失 → 停止，返回退出码 5
-   - 若产出文件缺失 → 停止
+| 字段值 | 行为 |
+|--------|------|
+| 具体 preset（`java-modern` / `node-modern` ...） | 跳过问卷，按 preset 解析 |
+| `interactive` 或缺失 | **必须**用 `AskUserQuestion` 工具发起 4 步问卷（Spring Initializr 等价：语言 → 数据库 → 前端 → UI） |
+| `custom` 且 brief 已填详细字段 | 按详细字段解析，不再问 |
+| `custom` 但 brief 字段不全 | 用 AskUserQuestion 补全缺失字段 |
+
+具体 4 步问卷模板见 `commands/design.md::Phase 2b`，或直接读取 `templates/tech-stack-options.yaml::askuserquestion_flow`。
+
+收集到答案后，把结果写入 `/tmp/ddt-user-components.json`（schema：`{preset, backend, frontend, ai_design}`），后续 `/design` 阶段会自动 merge。
+
+### Step 1：跑 `/prd $ARGUMENTS`
+- 若 `project-brief.md` 缺失 → 停止，提示用户填写
+- 若存在阻塞项（`docs/blockers.md` 非空）→ 停止，提示处理阻塞
+
+### Step 2：跑 `/wbs`
+- 若失败 → 停止
+
+### Step 3：跑 `/design $ARGUMENTS`（透传 `--preset` / `--ai-design`）
+- /design 内部 Phase 2b 会基于 Step 0 收集的 components JSON 写入 `.ddt/tech-stack.json`
+- 若契约 lint 未通过 → 停止，返回退出码 4
+- 若 OpenAPI lint 工具缺失 → 停止，返回退出码 5
+- 若产出文件缺失 → 停止
 
 4. 汇总输出：
 

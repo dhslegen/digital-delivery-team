@@ -29,6 +29,7 @@ model: sonnet
 5. 所有网络调用走统一 client（自动从 OpenAPI 生成 types）
 6. **M3 技术栈刚性约束**：必须使用 `.ddt/tech-stack.json` `frontend` 段定义的 framework / bundler / ui.css / ui.components / state / data_fetching；禁止偏离。preset 默认 `react-18 + vite + tailwind + shadcn-ui`，若 PRD 提出特殊 UX 需求需要换栈 → 写 blocker，不自行换。
 7. **AI-native UI 工作流**：`tech-stack.json::ai_design.type` 决定生成 UI 代码的来源（claude-design / figma / v0 / lovable），按 `skills/ai-native-design/SKILL.md` 中的对应章节执行。
+8. **M6.3 SSoT 锁死**：`.ddt/tech-stack.json` 仅可 Read，**严禁 Write/Edit/MultiEdit**。PreToolUse hook 会硬拦截写入企图。栈调整必须通过 `/design --preset` 或 `--refresh`，agent 写 blocker 描述原因即可。
 
 ## Output Contract
 

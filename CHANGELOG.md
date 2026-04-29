@@ -4,6 +4,64 @@
 
 ---
 
+## [0.6.1] - 2026-04-29
+
+M6.3 技术栈交互式选型 — Spring Initializr 等价 4 步问卷 + tech-stack.json 硬锁死。
+
+### Added — 新增
+
+**Spring Initializr 等价 22 分组组件清单**
+- `templates/tech-stack-options.yaml` — 新增（与 v0.6.0 的 tech-stack-presets.yaml 共存）
+  - 后端：Java/Node/Python/Go × 多框架 × 22 分组组件（Web/Security/SQL/NoSQL/Messaging/I-O/Ops/Observability/Testing/Cloud/AI ...）
+  - 前端：React/Vue/Angular/Svelte/Solid × 多 UI 库 × 多状态管理 × 多数据获取
+  - AI-native UI：claude-design / figma / v0 / lovable
+  - `askuserquestion_flow` 段：4 步问卷模板（语言 → 数据库 → 前端 → UI）+ 推荐选项 + preview 字段
+
+**AskUserQuestion 交互式问卷**
+- `commands/kickoff.md` Step 0：检测 brief 中 "技术栈预设" 字段，若为 `interactive` 或缺失 → LLM 主动调用 AskUserQuestion 4 步问卷
+- `commands/design.md` Phase 2b：详细 4 步问卷模板 + components-json 写入流程
+
+**tech-stack.json 硬锁死（双层防御）**
+- `hooks/handlers/pre-tool-use.js` 增加硬拦截：检测到 Write/Edit/MultiEdit 目标是 `.ddt/tech-stack.json` 时返回 `permissionDecision: deny`（Claude Code v2.1+ PreToolUse hook 决策 API）
+- `architect-agent.md` / `frontend-agent.md` / `backend-agent.md` 三个 agent 的 Hard Requirements 增加"M6.3 SSoT 锁死"条款：禁止 Write/Edit/MultiEdit `.ddt/tech-stack.json`，仅 `bin/resolve-tech-stack.mjs` 唯一允许写入
+
+**resolve-tech-stack.mjs 扩展**
+- 新增 `--components-json <path>` 参数：合并 AskUserQuestion 收集的具体组件到 preset
+- 新增 `user_customized: true` / `components: [...]` 字段标记自定义
+- 新增 `interactive` 字段值：brief 写 interactive 时不取 brief.preset，等待 components-json
+
+**project-brief 模板结构化**
+- 新增 8 个具体字段（后端语言/框架/构建/DB/缓存/ORM/认证/测试 + 前端 6 个 + 自由说明）
+- 保留 `技术栈预设` 快捷字段；推荐 3 条路径（最快 preset / 推荐 interactive 问卷 / 专家自定义）
+
+### Fixed — 修复
+
+- 🟠 实测 v0.5.x 中 LLM 多次直接 Edit `.ddt/tech-stack.json` 把 nestjs 改 express，违反 SSoT 原则
+  - 修复：双层防御（PreToolUse hook hard gate + agent invariant）
+
+### Tests
+
+- `tests/integration/m63-tech-stack.test.mjs` — 9 个用例：options.yaml 结构 / components-json 合并 / interactive 字段处理 / hook 硬拦截 / agent invariant / commands 引导
+- 总计 102 / 102 通过（v0.6.0 93 + 9 新增）
+
+### Migration — 升级指引
+
+从 v0.6.0 升级到 v0.6.1：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. 现有项目无需改动（preset 路径完全兼容）
+3. 试用交互式问卷：在 brief 中把"技术栈预设"改为 `interactive`，跑 `/kickoff` → AI 会主动 AskUserQuestion 4 步问卷
+4. 注意：v0.6.1 起 agent 不能直接 Edit `.ddt/tech-stack.json`；如已存在 LLM 改过的 tech-stack.json，建议 `rm` 后重跑 `/design --refresh`
+
+### 后续计划（M6.2/M6.4）
+
+- M6.2 决策门（每个 phase 落盘后用 AskUserQuestion 询问"接受/修改/重生成"）
+- M6.4 开发阶段精细化（去 subagent 黑盒 + ECC 6-phase 范式）
+
+详见 `design/分析报告_v3.md`。
+
+---
+
 ## [0.6.0] - 2026-04-29
 
 M6 路线图前两个里程碑：核心数据采集真正稳定（M6.1） + 跨会话接力 skill（M6.5）。

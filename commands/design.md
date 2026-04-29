@@ -25,7 +25,9 @@ node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase design --action start
 
 若 `docs/api-contract.yaml` 已存在且未传 `--refresh`，进入增量修订模式。
 
-## Phase 2 — 解析技术栈（M3-3 优先级链）
+## Phase 2 — 解析技术栈（M3-3 优先级链 + M6.3 交互式问卷）
+
+### Step 2a：先尝试自动解析
 
 ```bash
 # 提取参数中的 --preset 与 --ai-design（如果有）
@@ -38,9 +40,72 @@ node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
   --write
 ```
 
-优先级（从高到低）：CLI flag > project-brief.md "技术栈预设" > 已存在的 `.ddt/tech-stack.json` > manifest 自动检测 > 默认 `java-modern`。
+### Step 2b：M6.3 交互式问卷（关键）
 
-产出：`.ddt/tech-stack.json`（architect-agent 必读输入）。
+**LLM 必须执行**：检查 `project-brief.md` 中的 "技术栈预设" 字段：
+
+- 若值为 `interactive` 或 `custom`：**必须**用 `AskUserQuestion` 工具发起 Spring Initializr 等价 4 步问卷
+- 若值为具体 preset（如 `java-modern`）但 `project-brief.md` 同时含 "后端框架"、"前端框架"等具体字段且与 preset 默认值冲突：用 AskUserQuestion 问 1 题确认偏好
+- 若值为 `none` 或 `interactive` 且 brief 无具体字段：**强制**走 4 步问卷，不允许 LLM 自行选栈
+
+#### AskUserQuestion 4 步问卷模板
+
+数据来源：`templates/tech-stack-options.yaml::askuserquestion_flow`（含 4 个 step 的完整选项 + preview）
+
+**Step 1：主语言栈**（4 选项 + Other）
+- Java + Spring Boot 3 (Recommended)
+- Node + TypeScript
+- Python + FastAPI
+- Go (Gin / Fiber)
+
+**Step 2：数据库 + 缓存**（4 选项 + Other）
+- PostgreSQL 16 + Redis 7 (Recommended)
+- MySQL 8 + Redis 7
+- SQLite（轻量）
+- MongoDB
+
+**Step 3：前端框架**（4 选项 + Other）
+- React 18 + Vite (Recommended)
+- Next.js 14 (App Router)
+- Vue 3 + Vite
+- Angular 19
+
+**Step 4：UI 组件库**（动态：根据 step 3 调整）
+- 若选 React：tailwind+shadcn-ui (Recommended) / antd-5 / mui-5 / chakra-ui-2
+- 若选 Vue：element-plus (Recommended) / naive-ui / antd-vue / primevue
+- 若选 Angular：angular-material (Recommended) / primeng / ng-zorro
+
+每个选项都附 `preview` 字段展示完整 stack 摘要（如 "Spring Boot 3.5 + Maven + Java 21 + MyBatis-Plus + MySQL 8 + Redis 7"）。
+
+#### 收集后写入 .ddt/tech-stack.json
+
+收集 4 个答案后，构造 components JSON 并写入：
+
+```bash
+# LLM 把 AskUserQuestion 收集的答案写入临时文件
+cat > /tmp/ddt-user-components.json <<JSON
+{
+  "preset": "<step1 推断出的预设>",
+  "backend": { "language": "...", "framework": "...", "database": { "primary": "..." } },
+  "frontend": { "framework": "...", "ui": { "components": "..." } },
+  "ai_design": { "type": "..." }
+}
+JSON
+
+node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
+  --components-json /tmp/ddt-user-components.json \
+  --write
+
+rm /tmp/ddt-user-components.json
+```
+
+### 优先级链（从高到低）
+
+CLI flag > **AskUserQuestion 收集结果** > project-brief.md "技术栈预设"（值非 interactive/custom） > 已存在的 `.ddt/tech-stack.json` > manifest 自动检测 > 默认 `java-modern`。
+
+### 产出
+
+`.ddt/tech-stack.json`（architect-agent 必读输入；**仅 resolve-tech-stack.mjs 可写入，agent 禁止编辑**）。
 
 ## Phase 3 — 派发 architect-agent
 

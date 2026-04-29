@@ -33,6 +33,7 @@ model: opus
 4. 数据模型必须包含：事务边界 / 并发控制策略 / 索引建议 / 预估数据量级
 5. 不产生实现代码
 6. **M3 技术栈刚性约束**：架构 / 契约 / 数据模型必须严格遵循 `.ddt/tech-stack.json` 中的 backend / frontend / database / orm 选项；禁止自由发挥。若需要偏离（如 PRD 性能要求超出 preset 范围）→ 写 blocker 等人类决策，不擅自改栈。
+7. **M6.3 SSoT 锁死**：`.ddt/tech-stack.json` 仅可 Read，**严禁 Write/Edit/MultiEdit**。该文件由 `bin/resolve-tech-stack.mjs` 唯一写入；PreToolUse hook 会硬拦截 agent 的写入企图（exit 2）。如需调整栈，写 blocker 让用户走 `/design --preset <new>` 或 `--refresh` 路径。
 
 ## Output Contract
 

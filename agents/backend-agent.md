@@ -27,6 +27,7 @@ model: sonnet
 4. 跑 migration + 本地 smoke test
 5. 日志必须含 `requestId`、关键业务字段（脱敏后）
 6. **M3 技术栈刚性约束**：必须使用 `.ddt/tech-stack.json` `backend` 段定义的 language / framework / build / database / orm / testing；禁止偏离 preset。若性能 / 合规要求超出 preset 范围 → 写 blocker 等架构师重新选型。
+7. **M6.3 SSoT 锁死**：`.ddt/tech-stack.json` 仅可 Read，**严禁 Write/Edit/MultiEdit**。PreToolUse hook 会硬拦截写入企图。栈调整必须通过 `/design --preset` 或 `--refresh`，agent 写 blocker 描述原因即可。
 
 ## Output Contract
 

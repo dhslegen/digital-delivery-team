@@ -14,6 +14,25 @@ const {
 } = require('./lib/events');
 const { tryAcquire } = require('./lib/advisory-lock');
 
+// M6.3.5: 硬拦截 .ddt/tech-stack.json 的 Write/Edit/MultiEdit
+//   仅 resolve-tech-stack.mjs 自身允许写入；agent / LLM 直接 Edit 一律拒绝。
+//   实测 v0.5.x 中 LLM 多次直接 Edit 把 nestjs 改 express，违反 SSoT 原则。
+const TECH_STACK_RELATIVE_PATHS = new Set([
+  '.ddt/tech-stack.json',
+]);
+
+function isProtectedTechStackPath(cwd, filePath) {
+  if (!filePath) return false;
+  try {
+    const path = require('path');
+    const abs = path.resolve(cwd, filePath);
+    const rel = path.relative(cwd, abs).split(path.sep).join('/');
+    return TECH_STACK_RELATIVE_PATHS.has(rel);
+  } catch {
+    return false;
+  }
+}
+
 function run(raw) {
   let advisoryWarning = '';
   try {
@@ -26,6 +45,28 @@ function run(raw) {
     const subagentType = toolInput.subagent_type || '';
     const description = toolInput.description ? String(toolInput.description).slice(0, 100) : '';
     const filePath = toolInput.file_path || toolInput.path || '';
+
+    // M6.3.5: 硬拦截 .ddt/tech-stack.json 编辑
+    if (['Write', 'Edit', 'MultiEdit'].includes(toolName) &&
+        isProtectedTechStackPath(cwd, filePath)) {
+      const reason = '.ddt/tech-stack.json 是技术栈 SSoT，禁止 agent 直接编辑。' +
+        '正确方式：(1) 修改 project-brief.md 后重跑 /design --refresh；' +
+        '(2) 跑 /design --preset <name> 切换预设；' +
+        '(3) 用 AskUserQuestion 问卷重新收集（design.md::Phase 2b）。';
+      // Claude Code v2.1+ PreToolUse hook decision API
+      const decision = {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: reason,
+        },
+      };
+      return {
+        stdout: JSON.stringify(decision),
+        stderr: `[delivery-hook] BLOCKED: ${reason}\n`,
+        exitCode: 0,
+      };
+    }
 
     appendEvent('pre_tool_use', projectId, {
       session_id: sessionId,

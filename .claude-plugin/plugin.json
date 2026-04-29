@@ -1,6 +1,6 @@
 {
   "name": "digital-delivery-team",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "一人一队：全栈工程师 + 数字员工交付插件。10 个数字员工子代理 + 16 个岗位/编排/辅助命令 + 5 个领域知识 skill + 7 类自动度量 hook + 5 套技术栈预设 + 4 套 AI-native UI 通道 + 进度状态机与跨会话恢复。",
   "author": {
     "name": "赵文昊"

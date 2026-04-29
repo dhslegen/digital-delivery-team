@@ -1,0 +1,450 @@
+# DDT 技术栈选项树（Spring Initializr 等价）
+#
+# 用途：当 project-brief.md 用 preset 不够细，或用户想自定义具体组件时，
+#   提供 Spring Initializr 等价的"分层选择"。
+#
+# 与 tech-stack-presets.yaml 的关系：
+#   - presets.yaml：5 套主流栈快捷包（保留，给"快速启动"用户）
+#   - options.yaml（本文件）：组件级清单，给"自定义"用户用 AskUserQuestion 问卷
+#
+# 数据来源：
+#   - Spring Initializr 实测：https://start.spring.io/metadata/client（22 分组 200+ 组件）
+#   - 各前端框架官方推荐组合
+#   - 截止：2026-04-29
+
+schema_version: 1
+default_preset: java-modern    # /kickoff 无任何 brief 字段时的兜底
+
+# ────────────────────────────────────────────────────────────
+# AskUserQuestion 4 步问卷的"L1 高频"层
+# 每步 4 选项 + 自动 "Other"（用户可填 ID 自定义）
+# 选项 label 末尾标 "(Recommended)" 的为推荐
+# ────────────────────────────────────────────────────────────
+
+askuserquestion_flow:
+  step_1_language:
+    header: "Backend Lang"
+    question: "选择主语言栈（决定后端运行时与生态）"
+    options:
+      - id: java-spring-boot-3
+        label: "Java + Spring Boot 3 (Recommended)"
+        description: "企业级、大型团队、复杂业务；Spring Boot 3.5 / Java 17+"
+        preview: "Spring Boot 3.5 + Maven + Java 21 + MyBatis-Plus + MySQL 8 + Redis 7"
+      - id: node-typescript
+        label: "Node + TypeScript"
+        description: "全栈、SaaS、快速迭代；Express / Nest.js / Fastify"
+        preview: "Nest.js 10 / Express 5 + TypeScript + Prisma + Postgres"
+      - id: python-fastapi
+        label: "Python + FastAPI"
+        description: "AI / 数据 / 原型；FastAPI + SQLAlchemy + pydantic v2"
+        preview: "FastAPI 0.110 + SQLAlchemy + pydantic v2 + Postgres"
+      - id: go-modern
+        label: "Go (Gin / Fiber)"
+        description: "高性能、低延迟、容器化部署"
+        preview: "Gin 1.10 + GORM + Postgres + testify"
+
+  step_2_database:
+    header: "Database"
+    question: "选择主数据库 + 缓存"
+    multiSelect: false
+    options:
+      - id: postgres+redis
+        label: "PostgreSQL 16 + Redis 7 (Recommended)"
+        description: "通用关系型 + 缓存；推荐用于绝大多数业务"
+      - id: mysql+redis
+        label: "MySQL 8 + Redis 7"
+        description: "国内系企业常见；与 Spring Boot 3 / 2.7 配合好"
+      - id: sqlite
+        label: "SQLite（轻量）"
+        description: "原型 / 单机 / 测试；无 cache 需求"
+      - id: mongodb
+        label: "MongoDB"
+        description: "文档型；非结构化 / 内容管理"
+
+  step_3_frontend_framework:
+    header: "Frontend"
+    question: "选择前端框架"
+    options:
+      - id: react-vite
+        label: "React 18 + Vite (Recommended)"
+        description: "通用 SPA；与 Spring Boot / Nest.js / FastAPI 都搭"
+        preview: "React 18 + Vite + TypeScript + react-router 7"
+      - id: react-nextjs-14
+        label: "Next.js 14 (App Router)"
+        description: "现代化 SSR/SSG；与 v0 设计源完美匹配"
+        preview: "Next.js 14 App Router + Server Actions + RSC"
+      - id: vue-vite
+        label: "Vue 3 + Vite"
+        description: "中文社区主流；与 Element Plus / Naive UI 配合好"
+        preview: "Vue 3 + Pinia + Vite + TypeScript"
+      - id: angular-19
+        label: "Angular 19"
+        description: "大型企业；强类型 + 依赖注入"
+
+  step_4_ui_library:
+    header: "UI Lib"
+    question: "选择 UI 组件库（动态：根据 step_3 调整选项）"
+    # 实际 LLM 调用时根据 step_3 选择动态填充 options
+    options_by_frontend:
+      react-vite:
+        - id: tailwind+shadcn
+          label: "Tailwind + shadcn/ui (Recommended)"
+          description: "现代化 / 与 Claude artifact 友好 / AI 设计源主流"
+        - id: antd
+          label: "Ant Design 5"
+          description: "国内系企业管理后台主流"
+        - id: mui
+          label: "Material UI 5"
+          description: "国际系 / Material Design"
+        - id: chakra-ui
+          label: "Chakra UI 2"
+          description: "可访问性优先 / 主题简洁"
+      react-nextjs-14:
+        - id: tailwind+shadcn
+          label: "Tailwind + shadcn/ui (Recommended)"
+          description: "Next.js 14 标配，与 v0 完美兼容"
+        - id: antd
+          label: "Ant Design 5"
+          description: "管理后台"
+        - id: mui
+          label: "Material UI 5"
+          description: "Material Design"
+      vue-vite:
+        - id: element-plus
+          label: "Element Plus (Recommended)"
+          description: "Vue 3 国内主流；中后台标配"
+        - id: naive-ui
+          label: "Naive UI"
+          description: "Vue 3 现代化、TypeScript 友好"
+        - id: antd-vue
+          label: "Ant Design Vue"
+          description: "Antd 风格 Vue 版"
+        - id: tailwind+headless-vue
+          label: "Tailwind + HeadlessUI Vue"
+          description: "Tailwind 用户首选"
+      angular-19:
+        - id: angular-material
+          label: "Angular Material (Recommended)"
+          description: "Google 官方"
+        - id: primeng
+          label: "PrimeNG"
+          description: "组件最丰富"
+        - id: ng-zorro
+          label: "NG-ZORRO"
+          description: "国内 Antd 风格 Angular 版"
+
+# ────────────────────────────────────────────────────────────
+# 后端组件树（按 Spring Initializr 22 分组扩展，含主流非-Java 栈）
+# ────────────────────────────────────────────────────────────
+
+backend:
+  java:
+    spring-boot-3:
+      versions: ["3.5.14"]                       # release 版
+      java_versions: [17, 21, 25]
+      build: [maven, gradle, gradle-kotlin]
+      languages: [java, kotlin, groovy]
+      packaging: [jar, war]
+      categories:
+        # 与 Spring Initializr 22 分组一一对应
+        developer_tools:
+          [lombok, devtools, configuration-processor, docker-compose, modulith, native, dgs-codegen]
+        web:
+          [spring-web, webflux, spring-restclient, spring-webclient, graphql, data-rest,
+           session-data-redis, session-data-mongodb, session-jdbc]
+        template_engines:
+          [thymeleaf, freemarker, mustache, groovy-templates, jte]
+        security:
+          [security, oauth2-client, oauth2-resource-server, oauth2-authorization-server,
+           security-saml2, spring-security-webauthn, ldap, data-ldap]
+        sql:
+          [data-jpa, data-jdbc, jdbc, r2dbc, data-r2dbc, mybatis,
+           liquibase, flyway,
+           postgresql, mysql, mariadb, oracle, sqlserver, db2, h2, hsql, derby]
+        nosql:
+          [data-redis, data-redis-reactive, mongodb, data-mongodb, data-mongodb-reactive,
+           elasticsearch, data-elasticsearch, cassandra, data-cassandra, neo4j]
+        messaging:
+          [integration, amqp, amqp-streams, kafka, kafka-streams,
+           activemq, artemis, pulsar, pulsar-reactive]
+        io:
+          [batch, batch-jdbc, hazelcast, validation, mail, quartz, cache, spring-shell]
+        ops:
+          [actuator, sbom-cyclone-dx, codecentric-spring-boot-admin-client,
+           codecentric-spring-boot-admin-server, sentry, cloudfoundry]
+        observability:
+          [datadog, dynatrace, influx, graphite, new-relic, otlp-metrics, prometheus,
+           datasource-micrometer]
+        testing:
+          [restdocs, testcontainers, cloud-contract-verifier, cloud-contract-stub-runner,
+           unboundid-ldap]
+        cloud:
+          [cloud-starter, cloud-function, cloud-task,
+           cloud-config-client, cloud-config-server,
+           cloud-eureka, cloud-eureka-server,
+           cloud-gateway, cloud-gateway-reactive, cloud-feign, cloud-loadbalancer,
+           cloud-resilience4j,
+           cloud-bus, cloud-stream]
+        cloud_provider:
+          [azure-support, azure-active-directory, azure-cosmos-db, azure-keyvault, azure-storage,
+           cloud-gcp, cloud-gcp-pubsub, cloud-gcp-storage]
+        ai:
+          [spring-ai-anthropic, spring-ai-azure-openai, spring-ai-bedrock,
+           spring-ai-deepseek, spring-ai-tika, spring-ai-mcp]
+      defaults:
+        # 推荐默认组合（preset=java-modern 时使用）
+        java_version: 21
+        build: maven
+        language: java
+        packaging: jar
+        components: [lombok, devtools, validation, actuator, prometheus,
+                     spring-web, data-jpa, mybatis, postgresql, data-redis,
+                     security, testcontainers]
+
+    spring-boot-2.7:
+      versions: ["2.7.18"]
+      java_versions: [11, 17]
+      build: [maven, gradle]
+      languages: [java, kotlin]
+      packaging: [jar, war]
+      # 兼容旧项目，分组同 spring-boot-3 但去除 reactive / 4.x 新组件
+      categories:
+        # 仅列出 2.7 实际可用的（去除 R2DBC/AI/Tanzu/部分 Modulith）
+        web: [spring-web, webflux, data-rest]
+        sql: [data-jpa, data-jdbc, jdbc, mybatis, liquibase, flyway,
+              postgresql, mysql-5.7, oracle, sqlserver, h2]
+        nosql: [data-redis, mongodb, elasticsearch]
+        messaging: [kafka, amqp, activemq]
+        security: [security, oauth2-client, oauth2-resource-server, ldap]
+        observability: [actuator, prometheus, datadog]
+        testing: [testcontainers, restdocs]
+      defaults:
+        java_version: 11
+        build: maven
+        components: [lombok, validation, actuator,
+                     spring-web, data-jpa, mybatis, mysql-5.7, data-redis]
+
+  node:
+    nestjs:
+      versions: ["10.x", "11.x"]
+      typescript: true
+      orm: [prisma, typeorm, mikro-orm, drizzle, knex]
+      database: [postgres, mysql, sqlite, mongodb]
+      validation: [class-validator, zod, joi]
+      auth: [passport-jwt, oauth2, none]
+      testing: [jest, vitest, supertest]
+      api_doc: [swagger-ui, scalar, redocly]
+      defaults:
+        version: "10.x"
+        orm: prisma
+        database: postgres
+        validation: class-validator
+        testing: jest
+
+    express:
+      versions: ["4.x", "5.x"]
+      typescript: true
+      orm: [prisma, drizzle, knex, better-sqlite3, sequelize, raw]
+      database: [postgres, mysql, sqlite, mongodb]
+      validation: [zod, joi, yup, express-validator]
+      auth: [passport, jwt, oauth2, none]
+      testing: [vitest, jest, supertest]
+      defaults:
+        version: "5.x"
+        orm: prisma
+        database: postgres
+        validation: zod
+        testing: vitest
+
+    fastify:
+      versions: ["4.x", "5.x"]
+      typescript: true
+      orm: [prisma, drizzle, knex]
+      database: [postgres, mysql, sqlite]
+      validation: [zod, typebox, joi]
+      testing: [vitest, tap]
+      defaults:
+        version: "5.x"
+        orm: prisma
+        database: postgres
+        validation: typebox
+
+  python:
+    fastapi:
+      versions: ["0.110+"]
+      orm: [sqlalchemy, sqlmodel, tortoise-orm, peewee, raw]
+      database: [postgres, mysql, sqlite, mongodb]
+      validation: [pydantic-v2]
+      auth: [oauth2-jwt, fastapi-users, none]
+      testing: [pytest, pytest-asyncio, httpx]
+      defaults:
+        orm: sqlalchemy
+        database: postgres
+        validation: pydantic-v2
+        testing: pytest
+
+    django:
+      versions: ["5.x", "4.2-lts"]
+      orm: [django-orm]
+      database: [postgres, mysql, sqlite]
+      api: [drf, ninja, none]
+      auth: [django-auth, allauth, jwt]
+      testing: [pytest-django, django-test]
+      defaults:
+        version: "5.x"
+        api: drf
+        database: postgres
+
+    flask:
+      versions: ["3.x"]
+      orm: [sqlalchemy, peewee]
+      database: [postgres, mysql, sqlite]
+      api: [flask-restx, flask-smorest, raw]
+      defaults:
+        orm: sqlalchemy
+        api: flask-smorest
+
+  go:
+    gin:
+      versions: ["1.10+"]
+      orm: [gorm, sqlx, ent, sqlc]
+      database: [postgres, mysql, sqlite]
+      validation: [validator, ozzo]
+      testing: [testify, gomock, ginkgo]
+      defaults:
+        orm: gorm
+        database: postgres
+        testing: testify
+
+    fiber:
+      versions: ["3.x"]
+      orm: [gorm, sqlx, ent]
+      database: [postgres, mysql]
+      defaults:
+        orm: gorm
+
+    echo:
+      versions: ["4.x"]
+      orm: [gorm, sqlx, ent]
+      defaults:
+        orm: gorm
+
+# ────────────────────────────────────────────────────────────
+# 前端组件树
+# ────────────────────────────────────────────────────────────
+
+frontend:
+  react:
+    framework_variants:
+      vite:
+        versions: [18, 19]
+        bundler: vite
+      nextjs-14-app:
+        version: 14
+        router: app-router
+      nextjs-14-pages:
+        version: 14
+        router: pages-router
+      remix:
+        version: 2
+      react-router-7:
+        version: 7
+    typescript: [true, false]
+    ui_lib:
+      - tailwind+shadcn-ui    # Recommended
+      - tailwind+headless-ui
+      - antd-5
+      - mui-5
+      - chakra-ui-2
+      - mantine-7
+      - park-ui
+      - none
+    state_management: [zustand, jotai, redux-toolkit, valtio, recoil, context-only]
+    data_fetching: [tanstack-query, swr, rtk-query, axios+context, server-actions]
+    testing: [vitest+rtl, jest+rtl, playwright]
+    e2e: [playwright, cypress, none]
+    defaults:
+      framework_variant: vite
+      typescript: true
+      ui_lib: tailwind+shadcn-ui
+      state_management: zustand
+      data_fetching: tanstack-query
+      testing: vitest+rtl
+      e2e: playwright
+
+  vue:
+    framework_variants:
+      vite:
+        version: 3
+      nuxt-3:
+        version: 3
+      nuxt-4:
+        version: 4
+    typescript: [true, false]
+    ui_lib:
+      - element-plus            # Recommended（中文社区）
+      - naive-ui
+      - antd-vue
+      - primevue
+      - varlet                  # 移动端
+      - vant                    # 移动端
+      - tailwind+headlessui-vue
+    state_management: [pinia, vuex-4]
+    data_fetching: [vueuse-fetch, axios+pinia, apollo-vue]
+    testing: [vitest+vue-test-utils, playwright]
+    defaults:
+      framework_variant: vite
+      typescript: true
+      ui_lib: element-plus
+      state_management: pinia
+      data_fetching: vueuse-fetch
+
+  angular:
+    versions: [17, 18, 19]
+    ui_lib: [angular-material, primeng, ng-zorro, tailwind+spartan]
+    state_management: [ngrx, ngxs, signals]
+    testing: [karma, jest, playwright]
+    defaults:
+      version: 19
+      ui_lib: angular-material
+      state_management: signals
+
+  svelte:
+    framework_variants:
+      vite:
+        version: 5
+      sveltekit-2:
+        version: 2
+    ui_lib: [skeleton, flowbite-svelte, melt-ui, tailwind+headless]
+    defaults:
+      framework_variant: sveltekit-2
+      ui_lib: skeleton
+
+  solid:
+    framework_variants:
+      vite:
+        version: 1
+      solidstart:
+        version: 1
+    ui_lib: [tailwind+kobalte, suid]
+    defaults:
+      framework_variant: solidstart
+      ui_lib: tailwind+kobalte
+
+# ────────────────────────────────────────────────────────────
+# AI-native UI 通道（保持与 v0.5 一致）
+# ────────────────────────────────────────────────────────────
+
+ai_design:
+  claude-design:
+    description: Claude artifact / web-artifacts-builder 直接生成
+    requires_external: false
+  figma:
+    description: Figma MCP get_design_context → React+Tailwind
+    requires_external: figma-mcp-server
+  v0:
+    description: v0 share URL → npx shadcn add
+    requires_external: v0 share URL
+  lovable:
+    description: Lovable export → 移除 supabase → 接 OpenAPI client
+    requires_external: lovable export zip
