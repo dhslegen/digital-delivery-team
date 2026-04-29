@@ -82,8 +82,10 @@ node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
 收集 4 个答案后，构造 components JSON 并写入：
 
 ```bash
-# LLM 把 AskUserQuestion 收集的答案写入临时文件
-cat > /tmp/ddt-user-components.json <<JSON
+# LLM 把 AskUserQuestion 收集的答案写入项目本地临时文件
+# PR-C：使用项目本地路径而非全局临时目录，多项目并行 kickoff 不再互相覆盖；跑完即删。
+mkdir -p .ddt
+cat > .ddt/components.json.tmp <<JSON
 {
   "preset": "<step1 推断出的预设>",
   "backend": { "language": "...", "framework": "...", "database": { "primary": "..." } },
@@ -93,10 +95,10 @@ cat > /tmp/ddt-user-components.json <<JSON
 JSON
 
 node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
-  --components-json /tmp/ddt-user-components.json \
+  --components-json .ddt/components.json.tmp \
   --write
 
-rm /tmp/ddt-user-components.json
+rm .ddt/components.json.tmp
 ```
 
 ### 优先级链（从高到低）

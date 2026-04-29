@@ -24,7 +24,7 @@ argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fast
 
 具体 4 步问卷模板见 `commands/design.md::Phase 2b`，或直接读取 `templates/tech-stack-options.yaml::askuserquestion_flow`。
 
-收集到答案后，把结果写入 `/tmp/ddt-user-components.json`，**必须使用嵌套对象 schema**：
+收集到答案后，把结果写入 `.ddt/components.json.tmp`（项目本地路径，多项目并行不冲突，跑完即删），**必须使用嵌套对象 schema**：
 
 ```json
 {

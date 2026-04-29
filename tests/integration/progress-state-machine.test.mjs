@@ -75,6 +75,39 @@ test('progress --infer 根据 docs/* 推断完成状态', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+// PR-C P1-1: --infer 自愈 project_id（从 unknown 修复为真实 .ddt/project-id 值）
+test('PR-C: --infer 在 progress.project_id=unknown 而 .ddt/project-id 已就绪时自愈', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-heal-'));
+  try {
+    // 模拟 SessionStart 时序差：先 --init（无 .ddt/project-id 落 "unknown"），后 .ddt/project-id 才就绪
+    run(tmp, ['--init']);
+    const before = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(before.project_id, 'unknown', '初始 unknown 才有意义');
+
+    // 模拟 bootstrap 在 --init 之后才完成（实测 ddt-real-audit 真实场景）
+    writeFileSync(join(tmp, '.ddt', 'project-id'), 'proj-real-id-xyz');
+
+    // --infer 应主动覆盖
+    const r = run(tmp, ['--infer']);
+    assert.equal(r.status, 0);
+    const after = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(after.project_id, 'proj-real-id-xyz', '--infer 应自愈 project_id');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-C: --infer 不覆盖已正确的 project_id', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-keep-'));
+  try {
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'project-id'), 'proj-correct-id');
+    run(tmp, ['--init']);
+    // --infer 应保持 project_id 不变
+    run(tmp, ['--infer']);
+    const after = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(after.project_id, 'proj-correct-id');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
 test('progress --update 拒绝无效 phase 与 status', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-bad-'));
   try {

@@ -131,6 +131,13 @@ function inferPhaseStatus(phase, currentStatus) {
 
 function infer() {
   const progress = readProgress() || emptyProgress();
+  // PR-C: 自愈 project_id —— 第一次 --init 时若 SessionStart hook 时序差让 .ddt/project-id
+  //   还没就绪，会落 "unknown"。后续 --infer 时若 .ddt/project-id 已就绪且与现状不一致，
+  //   主动覆盖为真实 ID，避免 progress.json::project_id 永远停留 unknown 与实际数据脱节。
+  const fileId = readProjectIdFromFile();
+  if (fileId && progress.project_id !== fileId) {
+    progress.project_id = fileId;
+  }
   for (const phase of PHASE_ORDER) {
     const cur = progress.phases[phase];
     const newStatus = inferPhaseStatus(phase, cur ? cur.status : 'pending');

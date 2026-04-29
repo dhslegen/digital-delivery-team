@@ -135,6 +135,26 @@ test('PR-A: 嵌套对象格式（官方 schema）保持兼容', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+// PR-C P1-2: 临时文件路径迁移 — /tmp/ddt-user-components.json → .ddt/components.json.tmp
+test('PR-C: kickoff.md / design.md 不再使用 /tmp 全局路径（多项目并行不冲突）', () => {
+  const kickoffPath = join(ROOT, 'commands', 'kickoff.md');
+  const designPath  = join(ROOT, 'commands', 'design.md');
+  const kickoffText = readFileSync(kickoffPath, 'utf8');
+  const designText  = readFileSync(designPath, 'utf8');
+
+  // 不应再出现 /tmp/ddt-user-components 路径
+  assert.doesNotMatch(kickoffText, /\/tmp\/ddt-user-components/,
+    'kickoff.md 应使用项目本地路径 .ddt/components.json.tmp');
+  assert.doesNotMatch(designText, /\/tmp\/ddt-user-components/,
+    'design.md 应使用项目本地路径 .ddt/components.json.tmp');
+
+  // 应使用项目本地路径
+  assert.match(kickoffText, /\.ddt\/components\.json\.tmp/,
+    'kickoff.md 应引导写到 .ddt/components.json.tmp');
+  assert.match(designText, /\.ddt\/components\.json\.tmp/,
+    'design.md 应使用 .ddt/components.json.tmp');
+});
+
 test('PR-A: 写入前 assertCleanStack 拦截数字索引污染', () => {
   // 构造一个 preset 本身不污染、但用户故意把 backend 改成 array 的边界场景
   // array 经过 normalize 应被拒（不是字符串也不是对象）
