@@ -42,17 +42,21 @@ case "$FROM" in
 esac
 ```
 
-## Phase 3 — 派发 frontend-agent + 通道指令
+## Phase 3 — main thread 加载 skill + 通道执行（M6.4 起改 main thread）
 
-使用 Task 工具派发 `frontend-agent`，传入：
+> **M6.4 变更**：v0.6.x 用 frontend-agent subagent 黑盒派发，工时不可控、用户看不到中间步骤。
+> v0.7.0 起改 main thread 直接加载 skill 流式实现，与 `/build-web` 6-phase 范式对齐。
+
+main thread **必读**：
 
 - `docs/api-contract.yaml`（必读）
 - `docs/prd.md`（UX 语义）
 - `.ddt/tech-stack.json`（必读，决定 ui 库与 ai_design 通道）
-- `skills/ai-native-design/SKILL.md`（必读，对应通道章节）
-- 通道参数：`--from $FROM --url $URL --target $TARGET`
+- `skills/ai-native-design/SKILL.md`（必读，按 `--from` 找对应通道章节）
+- `skills/frontend-development/SKILL.md`（实现规范、契约对齐 hard requirements）
+- `skills/api-contract-first/SKILL.md`（契约消费方约束）
 
-frontend-agent 按 SKILL.md 中"四种通道"对应章节执行：
+main thread 按 ai-native-design SKILL 中"四种通道"对应章节执行：
 
 | `--from` | 行动 |
 |----------|------|
@@ -60,6 +64,9 @@ frontend-agent 按 SKILL.md 中"四种通道"对应章节执行：
 | `figma` | 调用 `mcp__figma__get_design_context` 拉取节点上下文，转 React+Tailwind |
 | `v0` | 解析 v0 share URL，跑 `npx shadcn@latest add <components>` 拉入 `web/components/ui/` |
 | `lovable` | clone / 解压 → 提取 `src/` → 重写为 shadcn 等价 + 接 OpenAPI client |
+
+**生成流式可见**：每写一个组件就用 Write/Edit 工具落到 `$TARGET` 下，用户能在主对话流看到每一步；
+不要批量缓冲后一次性写。生成完毕进入 Phase 4 契约对齐自动校验。
 
 ## Phase 4 — 契约对齐自动校验
 
