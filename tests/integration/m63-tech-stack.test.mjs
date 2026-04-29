@@ -67,6 +67,94 @@ test('--components-json 与 preset 合并写入 tech-stack.json', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+// PR-A · M6.3.4 · components-json schema 校验 + 字符串展开污染防御
+test('PR-A: 扁平字符串 backend/frontend 自动映射为嵌套对象', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-flatstr-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend: 'java-spring-boot',          // 扁平字符串
+      frontend: 'html-css',                 // 扁平字符串
+      ai_design: false,                     // 布尔（"不需要"）
+      database: 'none',                     // 顶层扁平 → 应 merge 到 backend.database
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0, `failed: ${r.stderr}`);
+    assert.match(r.stderr, /扁平字符串 "java-spring-boot".*已映射/, 'backend 警告');
+    assert.match(r.stderr, /扁平字符串 "html-css".*已映射/,         'frontend 警告');
+
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    // 关键反向断言：禁止数字索引 key（字符串展开污染信号）
+    for (const key of Object.keys(stack.backend))  assert.ok(!/^\d+$/.test(key), `backend 不应含数字 key: ${key}`);
+    for (const key of Object.keys(stack.frontend)) assert.ok(!/^\d+$/.test(key), `frontend 不应含数字 key: ${key}`);
+    assert.equal(stack.backend.framework, 'spring-boot');
+    assert.equal(stack.backend.language,  'java');
+    assert.equal(stack.backend.database.primary, 'none', '"无数据库"应清空 preset 默认 mysql');
+    assert.equal(stack.frontend.framework, 'none', '"纯 HTML/CSS"应覆盖 preset react');
+    assert.equal(stack.ai_design.type, 'claude-design', 'ai_design=false 应 fallback claude-design');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-A: 未识别的扁平字符串应被拒绝', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-bad-string-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend: 'unknown-stack-xyz',
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 2, '未识别字符串必须 exit 2');
+    assert.match(r.stderr, /未识别字符串.*请改写为嵌套对象/);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-A: 嵌套对象格式（官方 schema）保持兼容', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-nested-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend:  { language: 'java', framework: 'spring-boot', database: { primary: 'postgres' } },
+      frontend: { framework: 'react', ui: { components: 'shadcn-ui' } },
+      ai_design:{ type: 'claude-design' },
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0, `failed: ${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /扁平字符串/, '嵌套对象不应触发字符串警告');
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    assert.equal(stack.backend.database.primary, 'postgres');
+    assert.equal(stack.frontend.ui.components,   'shadcn-ui');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-A: 写入前 assertCleanStack 拦截数字索引污染', () => {
+  // 构造一个 preset 本身不污染、但用户故意把 backend 改成 array 的边界场景
+  // array 经过 normalize 应被拒（不是字符串也不是对象）
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-array-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend: ['java', 'spring-boot'],   // 数组而非对象/字符串
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 2, '数组类型 backend 必须被拒');
+    // normalizeSection 走 typeof object 分支会把数组当对象，最后由 assertCleanStack 拦下数字 key
+    // 或在 normalizeSection 数组分支显式拒绝
+    assert.ok(/数字索引|类型非法/.test(r.stderr), 'stderr 应说明数字索引或类型非法');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
 test('brief 写 interactive 时不取 brief.preset，等待 components-json', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-interactive-'));
   try {

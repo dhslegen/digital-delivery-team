@@ -24,7 +24,18 @@ argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fast
 
 具体 4 步问卷模板见 `commands/design.md::Phase 2b`，或直接读取 `templates/tech-stack-options.yaml::askuserquestion_flow`。
 
-收集到答案后，把结果写入 `/tmp/ddt-user-components.json`（schema：`{preset, backend, frontend, ai_design}`），后续 `/design` 阶段会自动 merge。
+收集到答案后，把结果写入 `/tmp/ddt-user-components.json`，**必须使用嵌套对象 schema**：
+
+```json
+{
+  "preset": "<step1 推断的 preset 名>",
+  "backend":  { "language": "...", "framework": "...", "database": { "primary": "..." } },
+  "frontend": { "framework": "...", "ui": { "components": "..." } },
+  "ai_design": { "type": "claude-design | figma | v0 | lovable" }
+}
+```
+
+**严禁**写成扁平字符串（如 `"backend": "java-spring-boot"`）—— `resolve-tech-stack.mjs` 会拒绝并退出 2，污染源默认 preset 的字段。后续 `/design` 阶段会 merge。
 
 ### M6.2 执行模式
 

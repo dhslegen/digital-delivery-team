@@ -154,14 +154,140 @@ function buildStack(presetName, aiDesignName, presetsRoot) {
 }
 
 // M6.3.3: 用 AskUserQuestion 收集到的具体组件清单，可与 preset 合并产出最终 tech-stack
+// PR-A 修复（M6.3.4）：LLM 经常写出扁平字符串 schema（如 backend: "java-spring-boot"），
+//   spread 操作会把字符串展开成 {0:'j',1:'a',...} 字符索引对象污染 tech-stack.json，
+//   静默丢弃用户偏好。这里增加 schema 校验 + 扁平字符串自动映射 + 异常拒绝。
 function readComponentsJson(path) {
   if (!path || !existsSync(path)) return null;
+  let raw;
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
+    raw = JSON.parse(readFileSync(path, 'utf8'));
   } catch (err) {
     console.error(`❌ --components-json 解析失败：${err.message}`);
     process.exit(2);
   }
+  return normalizeComponents(raw);
+}
+
+// 扁平字符串 → 嵌套对象的映射表。
+// LLM 在 AskUserQuestion 后倾向写出扁平 schema，这里给每个常见字面量定义到嵌套对象的展开规则。
+// 未命中的字符串 → 报错并退出，强制 LLM/用户改写为合法格式（避免静默吞掉）。
+const BACKEND_STRING_MAP = {
+  'java-spring-boot':  { language: 'java',       framework: 'spring-boot' },
+  'java-quarkus':      { language: 'java',       framework: 'quarkus' },
+  'java-micronaut':    { language: 'java',       framework: 'micronaut' },
+  'kotlin-spring-boot':{ language: 'kotlin',     framework: 'spring-boot' },
+  'kotlin-ktor':       { language: 'kotlin',     framework: 'ktor' },
+  'node-express':      { language: 'typescript', framework: 'express' },
+  'node-nestjs':       { language: 'typescript', framework: 'nestjs' },
+  'node-fastify':      { language: 'typescript', framework: 'fastify' },
+  'node-hono':         { language: 'typescript', framework: 'hono' },
+  'python-fastapi':    { language: 'python',     framework: 'fastapi' },
+  'python-django':     { language: 'python',     framework: 'django' },
+  'python-flask':      { language: 'python',     framework: 'flask' },
+  'go-gin':            { language: 'go',         framework: 'gin' },
+  'go-echo':           { language: 'go',         framework: 'echo' },
+  'go-fiber':          { language: 'go',         framework: 'fiber' },
+  'rust-axum':         { language: 'rust',       framework: 'axum' },
+  'rust-actix':        { language: 'rust',       framework: 'actix-web' },
+};
+
+const FRONTEND_STRING_MAP = {
+  'html-css':       { framework: 'none',    bundler: 'none' },
+  'react-vite':     { framework: 'react',   bundler: 'vite' },
+  'react-nextjs':   { framework: 'react',   bundler: 'nextjs' },
+  'vue-vite':       { framework: 'vue',     bundler: 'vite' },
+  'vue-nuxt':       { framework: 'vue',     bundler: 'nuxt' },
+  'svelte-kit':     { framework: 'svelte',  bundler: 'sveltekit' },
+  'solid-start':    { framework: 'solid',   bundler: 'solidstart' },
+  'angular':        { framework: 'angular' },
+};
+
+const AI_DESIGN_STRING_MAP = {
+  'claude-design': { type: 'claude-design' },
+  'figma':         { type: 'figma' },
+  'v0':            { type: 'v0' },
+  'lovable':       { type: 'lovable' },
+  'none':          { type: 'claude-design' },     // 用户选"不需要"= claude-design 默认通道
+};
+
+// 把字符串 / 布尔 / 顶层扁平字段规范成 design.md::Phase 2b 期望的嵌套对象 schema
+function normalizeComponents(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    console.error('❌ --components-json 必须是对象');
+    process.exit(2);
+  }
+  const out = { ...raw };
+
+  out.backend  = normalizeSection('backend',  raw.backend,  BACKEND_STRING_MAP);
+  out.frontend = normalizeSection('frontend', raw.frontend, FRONTEND_STRING_MAP);
+  out.ai_design = normalizeAiDesign(raw.ai_design);
+
+  // 处理顶层扁平字段（database / language / framework / orm / cache / auth / testing）
+  // 把它们 merge 进 backend 嵌套对象，保持向后兼容
+  if (typeof raw.database === 'string') {
+    out.backend = out.backend || {};
+    out.backend.database = raw.database === 'none'
+      ? { primary: 'none' }
+      : { primary: raw.database };
+    delete out.database;
+  }
+  for (const flat of ['language', 'framework', 'orm', 'cache', 'auth', 'testing', 'build']) {
+    if (typeof raw[flat] === 'string' && !raw.backend) {
+      out.backend = out.backend || {};
+      out.backend[flat] = raw[flat];
+      delete out[flat];
+    }
+  }
+
+  return out;
+}
+
+function normalizeSection(name, value, stringMap) {
+  if (value === undefined || value === null || value === false) return undefined;
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const mapped = stringMap[value];
+    if (mapped) {
+      console.error(`⚠️  components-json.${name} 是扁平字符串 "${value}"，已映射为 ${JSON.stringify(mapped)}`);
+      return mapped;
+    }
+    console.error(`❌ components-json.${name} 是未识别字符串 "${value}"。请改写为嵌套对象，如 { language, framework, ... }`);
+    process.exit(2);
+  }
+  console.error(`❌ components-json.${name} 类型非法（${typeof value}）。期望对象或扁平字符串`);
+  process.exit(2);
+}
+
+// 最终防线：禁止 backend/frontend/ai_design 含纯数字索引 key（典型字符串展开污染信号）
+function assertCleanStack(stack) {
+  for (const section of ['backend', 'frontend', 'ai_design']) {
+    const obj = stack[section];
+    if (!obj || typeof obj !== 'object') continue;
+    for (const key of Object.keys(obj)) {
+      if (/^\d+$/.test(key)) {
+        console.error(`❌ tech-stack.${section} 含数字索引 key "${key}"，疑似字符串展开污染。` +
+          '请检查 components-json 输入是否把字符串当作对象传入了。');
+        process.exit(2);
+      }
+    }
+  }
+}
+
+function normalizeAiDesign(value) {
+  if (value === undefined || value === null || value === false) return { type: 'claude-design' };
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const mapped = AI_DESIGN_STRING_MAP[value];
+    if (mapped) {
+      console.error(`⚠️  components-json.ai_design 是扁平字符串 "${value}"，已映射为 ${JSON.stringify(mapped)}`);
+      return mapped;
+    }
+    console.error(`❌ components-json.ai_design 未识别字符串 "${value}"。允许值：${Object.keys(AI_DESIGN_STRING_MAP).join(' / ')}`);
+    process.exit(2);
+  }
+  console.error(`❌ components-json.ai_design 类型非法（${typeof value}）`);
+  process.exit(2);
 }
 
 function main() {
@@ -235,6 +361,9 @@ function main() {
     }
     stack.user_customized = true;
   }
+
+  // PR-A 第二层防御：写入前校验最终对象不含数字索引 key（防字符串展开污染漏网）
+  assertCleanStack(stack);
 
   const json = JSON.stringify(stack, null, 2);
   if (args.write) {
