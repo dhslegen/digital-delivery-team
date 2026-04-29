@@ -90,10 +90,6 @@ cat /tmp/relay.md | pbcopy        # macOS 复制到剪贴板
 
 两者互补，不重叠。
 
-## 自动注入
-
-`/relay` 自动注入 progress / tech-stack / 关键产物路径，输出 13 段式接力 prompt。
-
 ## 可重入
 
 `/relay` 是只读 + 写新文件，可任意多次调用。每次生成新文件不覆盖旧文件。

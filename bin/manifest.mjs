@@ -128,7 +128,7 @@ if (mode === '--check') {
   }
 
   if (!errors.length) {
-    console.log('plugin manifest is consistent with the expected DDT plugin surface.');
+    console.log('plugin manifest is consistent with the DDT plugin surface.');
     process.exit(0);
   } else {
     console.error(errors.join('\n'));

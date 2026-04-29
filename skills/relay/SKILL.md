@@ -178,11 +178,6 @@ Last session ended: <ISO timestamp>
 如有疑问按 Blockers 处理或新增 blocker（追加到 docs/blockers.md），不要猜测。
 ```
 
-## DDT 范式
-
-- `/relay` 是 **DDT 项目专用**接力（自动捕获 .ddt/* 与契约相关产物 + 13 段式结构化 prompt）
-- 专注 DDT 项目背景的精准接力，不依赖外部插件。
-
 ## 与 /resume 的差异
 
 | 命令 | 用途 | 输出位置 |
