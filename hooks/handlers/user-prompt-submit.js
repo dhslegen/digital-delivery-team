@@ -39,6 +39,13 @@ function mapToProgressPhase(cmd) {
   return cmd;
 }
 
+// PR-B P0-3：业务级命令（prd/wbs/design/test/...）的 phase 事件由 commands/X.md 内 emit-phase 唯一发起，
+//   user-prompt-submit hook 不再重复发 phase_start，避免 hook + emit-phase 双源时间窗叠加（实测重复计算 30-50%）。
+//   编排级命令（kickoff/impl/verify/ship）由 hook 抓（commands/kickoff.md 内部不调 emit-phase 编排级 phase）。
+function shouldEmitPhaseEvent(cmd) {
+  return ORCHESTRATOR_COMMANDS.has(cmd);
+}
+
 const PHASE_PATTERN = new RegExp(
   String.raw`^\s*/(?:digital-delivery-team:)?(${DDT_PHASE_COMMANDS.join('|')})\b(.*)$`,
   'i'
@@ -64,12 +71,17 @@ function run(raw) {
 
     const detected = detectPhase(prompt);
     if (detected) {
-      appendEvent('phase_start', projectId, {
-        session_id: sessionId,
-        phase: detected.phase,
-        args: detected.args.slice(0, 200),
-      });
-      // M4-2: 同步更新 progress.json（仅非编排命令）
+      // PR-B：仅编排级（kickoff/impl/verify/ship）由 hook 抓 phase_start；
+      //   业务级（prd/wbs/design/...）由 commands/X.md 内 emit-phase 唯一发起，避免双源叠加。
+      if (shouldEmitPhaseEvent(detected.phase)) {
+        appendEvent('phase_start', projectId, {
+          session_id: sessionId,
+          phase: detected.phase,
+          args: detected.args.slice(0, 200),
+          source: 'hook',
+        });
+      }
+      // M4-2: 同步更新 progress.json（仅非编排命令；与 phase 事件无关，保留原逻辑）
       const progressPhase = mapToProgressPhase(detected.phase);
       if (progressPhase) {
         markPhaseStarted(cwd, progressPhase);

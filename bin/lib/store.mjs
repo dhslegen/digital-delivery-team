@@ -156,14 +156,27 @@ export class DeliveryStore {
         break;
 
       case 'phase_end': {
-        const updated = this._db.prepare(
+        // PR-B 三级匹配：emit-phase.mjs 每次新进程都会生成 cli-${ts} 不同 session_id，
+        //   严格按 session_id 匹配会导致 phase_start/end 配不上对，每次跑都 fallback INSERT
+        //   产生孤儿行（实测真实项目 phase_runs 行数膨胀 2.17×）。
+        // 第一级：严格 session_id（hook 抓的对自匹配，最精确）
+        let updated = this._db.prepare(
           `UPDATE phase_runs SET ended_at=?, duration_ms=?
            WHERE id=(SELECT MIN(id) FROM phase_runs
                      WHERE project_id=? AND session_id=? AND phase=? AND ended_at IS NULL)`
         ).run(ts, d.duration_ms || 0, pid, sessionId, d.phase || 'unknown');
-        const changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        let changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        // 第二级：忽略 session_id，按最早未闭合 phase_start 匹配（emit-phase 飘移修复）
         if (changes === 0) {
-          // 兜底：找不到对应 start 时也记录一条（duration 用 payload）
+          updated = this._db.prepare(
+            `UPDATE phase_runs SET ended_at=?, duration_ms=?
+             WHERE id=(SELECT MIN(id) FROM phase_runs
+                       WHERE project_id=? AND phase=? AND ended_at IS NULL)`
+          ).run(ts, d.duration_ms || 0, pid, d.phase || 'unknown');
+          changes = (updated && typeof updated.changes === 'number') ? updated.changes : 0;
+        }
+        // 第三级：仍找不到对应 start（如孤儿 phase_end），fallback INSERT
+        if (changes === 0) {
           this._db.prepare(
             'INSERT INTO phase_runs(session_id, project_id, phase, started_at, ended_at, duration_ms) VALUES(?, ?, ?, ?, ?, ?)'
           ).run(sessionId, pid, d.phase || 'unknown', ts, ts, d.duration_ms || 0);

@@ -27,6 +27,45 @@ test('detectPhase 大小写兼容', () => {
   assert.deepEqual(detectPhase('/PRD'), { phase: 'prd', args: '' });
 });
 
+// PR-B: hook 单源化契约 — 业务级命令的 phase 事件由 emit-phase 唯一发起
+test('PR-B: user-prompt-submit hook 不发业务级 phase_start（避免与 emit-phase 双源叠加）', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const url = require('node:url');
+  const { spawnSync } = require('node:child_process');
+  const here = path.dirname(url.fileURLToPath(import.meta.url));
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'ddt-hook-'));
+  const HOOK = path.resolve(here, '../../hooks/handlers/user-prompt-submit.js');
+  try {
+    fs.mkdirSync(path.join(sandbox, '.ddt'), { recursive: true });
+    fs.writeFileSync(path.join(sandbox, '.ddt', 'project-id'), 'pr-b-test');
+
+    // 业务级 /prd
+    spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ session_id: 's1', cwd: sandbox, prompt: '/prd' }),
+      encoding: 'utf8',
+      env: { ...process.env, DDT_METRICS_DIR: sandbox },
+    });
+    // 编排级 /kickoff
+    spawnSync(process.execPath, [HOOK], {
+      input: JSON.stringify({ session_id: 's2', cwd: sandbox, prompt: '/kickoff' }),
+      encoding: 'utf8',
+      env: { ...process.env, DDT_METRICS_DIR: sandbox },
+    });
+
+    const events = fs.readFileSync(path.join(sandbox, 'events.jsonl'), 'utf8')
+      .split('\n').filter(Boolean).map(l => JSON.parse(l))
+      .filter(ev => ev.event === 'phase_start');
+    const prdEvents     = events.filter(ev => ev.data?.phase === 'prd');
+    const kickoffEvents = events.filter(ev => ev.data?.phase === 'kickoff');
+    assert.equal(prdEvents.length, 0,
+      'hook 不应为业务级 /prd 发 phase_start（由 commands/prd.md 内 emit-phase 唯一发起）');
+    assert.equal(kickoffEvents.length, 1,
+      'hook 必须为编排级 /kickoff 发 phase_start');
+  } finally { fs.rmSync(sandbox, { recursive: true, force: true }); }
+});
+
 test('detectPhase 不命中非 phase 命令返回 null', () => {
   assert.equal(detectPhase('/help'), null);
   assert.equal(detectPhase('/unknown-command'), null);
