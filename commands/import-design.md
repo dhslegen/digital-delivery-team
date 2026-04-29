@@ -56,7 +56,7 @@ frontend-agent 按 SKILL.md 中"四种通道"对应章节执行：
 
 | `--from` | 行动 |
 |----------|------|
-| `claude-design` | 直接基于 PRD + 契约 + Tailwind 生成；可调用 `web-artifacts-builder` skill |
+| `claude-design` | 直接基于 PRD + 契约 + Tailwind 生成 React + shadcn 组件 |
 | `figma` | 调用 `mcp__figma__get_design_context` 拉取节点上下文，转 React+Tailwind |
 | `v0` | 解析 v0 share URL，跑 `npx shadcn@latest add <components>` 拉入 `web/components/ui/` |
 | `lovable` | clone / 解压 → 提取 `src/` → 重写为 shadcn 等价 + 接 OpenAPI client |

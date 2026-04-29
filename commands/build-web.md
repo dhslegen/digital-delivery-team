@@ -1,11 +1,11 @@
 ---
-description: 前端实现 · main thread + ECC 6-phase（EXPLORE→PLAN→APPROVE→IMPLEMENT→VERIFY→SUMMARY），不再黑盒派发 subagent
+description: 前端实现 · main thread + 6-phase（EXPLORE→PLAN→APPROVE→IMPLEMENT→VERIFY→SUMMARY），不再黑盒派发 subagent
 argument-hint: "[--module <name>] [--auto] [--refresh]"
 ---
 
 # /build-web
 
-按 `docs/api-contract.yaml` 与 `docs/prd.md` UX 语义实现前端 UI。M6.4 起改用 main thread + ECC 6-phase 范式，每组件流式可见，每文件 validation，每 step checkpoint commit。
+按 `docs/api-contract.yaml` 与 `docs/prd.md` UX 语义实现前端 UI。M6.4 起改用 main thread + 6-phase 范式，每组件流式可见，每文件 validation，每 step checkpoint commit。
 
 **输入**：$ARGUMENTS
 

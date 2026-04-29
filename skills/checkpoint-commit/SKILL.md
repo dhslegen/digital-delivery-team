@@ -1,13 +1,12 @@
 ---
 name: checkpoint-commit
-description: 每完成一个 plan 步骤自动 git commit，记录到 .ddt/checkpoints.log；支持 git revert 回滚到任意 checkpoint。auto-loaded by build-api / build-web / fix 等 IMPLEMENT phase。吸收 ECC checkpoint 范式。
+description: 每完成一个 plan 步骤自动 git commit，记录到 .ddt/checkpoints.log；支持 git revert 回滚到任意 checkpoint。auto-loaded by build-api / build-web / fix 等 IMPLEMENT phase。DDT 步骤级 git commit 范式。
 origin: DDT
 ---
 
 # Checkpoint Commit · 步骤级提交
 
-> 吸收 ECC `commands/checkpoint.md` 范式：
-> > 每个工作阶段创建 git checkpoint commit，记录到 .claude/checkpoints.log
+> DDT 步骤级 commit 范式：每个 plan step 完成（validation 通过）后创建 git checkpoint commit，记录到 .ddt/checkpoints.log
 >
 > M6.4 整改：v0.6.x backend-agent 一次性大 commit，出问题难回滚。
 > v0.7.0 改 main thread + 每 step checkpoint，让回滚到"上一个绿色状态"成为一行 git revert。
@@ -122,10 +121,6 @@ git reset --hard <P1.1 sha>
 
 提供 helper 命令 `bin/checkpoint-rollback.mjs --to <step-id>`（v0.7+ 待实现）。
 
-## 与 ECC checkpoint 的关系
-
-ECC `commands/checkpoint.md` 用 `.claude/checkpoints.log`，DDT 用 `.ddt/checkpoints.log`（项目本地，与 progress.json 同位置便于 /relay 自动捕获）。
-
 ## 与 validation-loop / build-api 的集成
 
 build-api 的 IMPLEMENT phase 每个 step：
@@ -163,6 +158,5 @@ build-api 的 IMPLEMENT phase 每个 step：
 
 ## Templates & References
 
-- ECC `commands/checkpoint.md`
 - `skills/validation-loop/SKILL.md`
 - `bin/build-relay-prompt.mjs`（自动读 checkpoints.log）

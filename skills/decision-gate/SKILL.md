@@ -109,10 +109,6 @@ node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" \
 - ✅ "Other" 选项的处理逻辑要写死在每个命令的 markdown 里
 - ✅ /kickoff --auto 跳过；显式调用单 phase 命令时不跳过（除非传 --auto）
 
-## 与 ECC plan 命令的关系
-
-ECC `commands/plan.md` 也用"WAIT for user CONFIRM before proceeding"——本 skill 是 DDT 在每个 phase 都启用此机制的标准化实现。
-
 ## 在 commands.md 中引用方式
 
 ```markdown

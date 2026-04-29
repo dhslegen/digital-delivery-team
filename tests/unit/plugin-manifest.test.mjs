@@ -22,7 +22,7 @@ test('bin/manifest.mjs --check exits 0 (manifest matches filesystem)', () => {
   assert.equal(result.status, 0, `manifest --check failed:\n${result.stderr}`);
 });
 
-test('plugin.json uses ECC-style top-level component paths', () => {
+test('plugin.json uses the expected DDT top-level component paths', () => {
   const plugin = JSON.parse(readFileSync(PLUGIN_JSON, 'utf8'));
   assert.deepEqual(plugin.skills, ['./skills/']);
   assert.deepEqual(plugin.commands, ['./commands/']);

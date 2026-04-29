@@ -6,7 +6,7 @@ origin: DDT
 
 # DDT Relay · 跨会话接力 skill
 
-> 灵感与模板结构吸收自 ECC `commands/save-session.md` 的 13 段式范式，叠加 DDT 项目特定背景注入（progress.json / tech-stack.json / 关键产物路径自动捕获）。
+> DDT 13 段式接力 prompt 范式：覆盖 What WORKED / What Did NOT Work / Decisions / Next Step 等关键信息，叠加 DDT 项目特定背景注入（progress.json / tech-stack.json / 关键产物路径自动捕获）。
 
 ## 何时触发
 
@@ -178,13 +178,10 @@ Last session ended: <ISO timestamp>
 如有疑问按 Blockers 处理或新增 blocker（追加到 docs/blockers.md），不要猜测。
 ```
 
-## 与 ECC save-session 的关系
+## DDT 范式
 
-- ECC `save-session` 是**通用**接力（任何项目都能用）
-- DDT `relay` 是**DDT 项目专用**接力（自动捕获 .ddt/* 与契约相关产物）
-- 两者可共存：DDT relay 复用 ECC 的 13 段思想 + 注入 DDT 特色字段
-
-如果用户同时安装了 ECC，建议优先用 DDT `relay`（更精准），偶尔也可跑 ECC `save-session` 作为通用备份。
+- `/relay` 是 **DDT 项目专用**接力（自动捕获 .ddt/* 与契约相关产物 + 13 段式结构化 prompt）
+- 专注 DDT 项目背景的精准接力，不依赖外部插件。
 
 ## 与 /resume 的差异
 

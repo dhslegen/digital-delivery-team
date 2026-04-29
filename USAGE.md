@@ -373,7 +373,7 @@ A: 选 "Other"（自定义文本），输入"我想看 X 详情"——LLM 会再
 A: 默认在 `~/.claude/delivery-metrics/`。可通过 `DDT_METRICS_DIR` 环境变量修改。项目本地数据在 `.ddt/`（progress / tech-stack / decisions / checkpoints / locks / relay）。
 
 **Q: 如何临时关闭某个 hook？**
-A: 设 `DDT_DISABLED_HOOKS=ddt:pre-tool-use`（CSV 多个）。DDT 用独立命名空间，不读 ECC 变量。
+A: 设 `DDT_DISABLED_HOOKS=ddt:pre-tool-use`（CSV 多个）。DDT 用独立命名空间，不读取其他插件命名空间的环境变量。
 
 **Q: Node.js 版本不够怎么办？**
 A: 需要 ≥ 22.0.0（使用内置 `node:sqlite`，零 npm 依赖）。运行 `nvm install 22 && nvm use 22` 升级。

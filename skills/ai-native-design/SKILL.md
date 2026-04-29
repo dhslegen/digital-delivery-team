@@ -29,7 +29,7 @@ origin: DDT
 **工作流**：
 
 1. frontend-agent 直接基于 PRD + api-contract.yaml + Tailwind/shadcn 调色板生成组件
-2. 利用 `web-artifacts-builder` skill（如已安装）创建复杂 artifact 预览
+2. 利用 Claude artifact 工具创建复杂 UI 预览
 3. 落地代码到 `web/components/` + `web/pages/`
 4. 跑构建 + lint + 最小 happy-path 测试
 
@@ -45,7 +45,7 @@ origin: DDT
 
 **前置依赖**：
 
-- `figma-mcp-server` 已配置（参考 ECC `mcp-configs/`）
+- `figma-mcp-server` 已配置（在 `~/.claude/mcp-configs/` 添加 figma MCP 配置）
 - 设计稿启用 Code Connect 映射（更佳）
 
 **工作流**：
@@ -129,5 +129,3 @@ import-design 命令在派发 frontend-agent 后必须验证：
 - `templates/api-contract.template.yaml`（契约模板，含 ErrorCode enum）
 - `templates/tech-stack-presets.yaml`（preset 中的 ai_design 默认值）
 - `commands/import-design.md`（触发命令）
-- ECC `skills/web-artifacts-builder`（claude-design 通道的辅助 skill）
-- ECC `mcp-configs/figma.json`（figma MCP 配置参考）

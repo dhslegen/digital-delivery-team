@@ -128,7 +128,7 @@ if (mode === '--check') {
   }
 
   if (!errors.length) {
-    console.log('plugin manifest is consistent with ECC-style plugin surface.');
+    console.log('plugin manifest is consistent with the expected DDT plugin surface.');
     process.exit(0);
   } else {
     console.error(errors.join('\n'));
@@ -145,7 +145,7 @@ if (mode === '--check') {
   pluginJson.skills = expectedSurface.skills;
   pluginJson.commands = expectedSurface.commands;
   fs.writeFileSync(PLUGIN_JSON, JSON.stringify(pluginJson, null, 2) + '\n', 'utf8');
-  console.log('plugin.json ECC-style surface updated.');
+  console.log('plugin.json DDT surface updated.');
 } else {
   console.log(JSON.stringify({ plugin: expectedSurface, components: scanned }, null, 2));
 }

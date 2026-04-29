@@ -1,13 +1,12 @@
 ---
 name: validation-loop
-description: 每写一个文件立即跑 build/lint/type-check/test，失败立即停下让用户决策。auto-loaded by build-api / build-web / fix 等 IMPLEMENT phase。吸收 ECC prp-implement 的 validation loop 理念。
+description: 每写一个文件立即跑 build/lint/type-check/test，失败立即停下让用户决策。auto-loaded by build-api / build-web / fix 等 IMPLEMENT phase。DDT 每文件验证 + 失败立即停的 validation loop。
 origin: DDT
 ---
 
 # Validation Loop · 每步验证
 
-> 灵感来自 ECC `commands/prp-implement.md` 的 Golden Rule:
-> > If a validation fails, fix it before moving on. Never accumulate broken state.
+> Golden Rule: If a validation fails, fix it before moving on. Never accumulate broken state.
 >
 > M6.4 整改：v0.6.x 的 backend-agent / frontend-agent 是写完才测，
 > 一旦有 bug 已经写了 10 个文件，根因排查困难。
@@ -135,15 +134,13 @@ node "$DDT_PLUGIN_ROOT/bin/validate.mjs" --mode standard --files <list> || {
 git add <files> && git commit -m "P<step>: <description>"
 ```
 
-## ECC 来源
+## DDT 范式说明
 
-本 skill 直接吸收 ECC 两个范式：
+本 skill 在 `/build-api` `/build-web` `/fix` 等命令的 IMPLEMENT phase 中标准化以下三大原则：
 
-- ECC `skills/verification-loop`：分级验证模式（quick / standard / strict / pre-commit）
-- ECC `commands/prp-implement`：Golden Rule "fix before moving on"
-- ECC `commands/build-fix`：检测包管理器 + 一次一错 + 卡住即停
-
-> 本 skill 是 DDT 在 `/build-api` `/build-web` `/fix` 等命令中标准化使用上述范式的实现。
+- 分级验证模式（quick / standard / strict / pre-commit）
+- Golden Rule "fix before moving on"
+- 检测包管理器 + 一次一错 + 卡住即停
 
 ## 与 v0.6.x 的差异
 

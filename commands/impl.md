@@ -48,7 +48,7 @@ fi
 
 main thread 调用 `/build-api $ARGUMENTS_FILTERED`（过滤掉 --web-only）。
 
-`/build-api` 内部走 ECC 6-phase（EXPLORE → PLAN → APPROVE → IMPLEMENT → VERIFY → SUMMARY）+ 决策门：
+`/build-api` 内部走 6-phase（EXPLORE → PLAN → APPROVE → IMPLEMENT → VERIFY → SUMMARY）+ 决策门：
 - 用户在 PLAN 阶段批准 plan
 - IMPLEMENT 每 step validation + checkpoint
 - SUMMARY 后决策门 4 选项
@@ -65,7 +65,7 @@ fi
 
 main thread 调用 `/build-web $ARGUMENTS_FILTERED`（过滤掉 --api-only）。
 
-`/build-web` 内部同样走 ECC 6-phase + 决策门。
+`/build-web` 内部同样走 6-phase + 决策门。
 
 **未传 --auto 时 main thread 必须等待 build-web 决策门返回 `accept` 才进入 Step 3**。
 

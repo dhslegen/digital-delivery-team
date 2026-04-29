@@ -1,5 +1,5 @@
 ---
-description: 接力命令 · 跨会话/跨 AI 不失忆。生成可复制的接力 prompt（吸收 ECC save-session 13 段范式）
+description: 接力命令 · 跨会话/跨 AI 不失忆。生成可复制的接力 prompt（DDT 13 段式接力 prompt 范式）
 argument-hint: "[--out <path>] [--quiet]"
 ---
 
@@ -30,7 +30,7 @@ node "$DDT_PLUGIN_ROOT/bin/build-relay-prompt.mjs" $ARGUMENTS
 - **屏幕**：完整 prompt（用户可一键复制）
 - **文件**：`.ddt/relay-<YYYYMMDD-HHMMSS>.md`（归档备份）
 
-## 13 段式模板（吸收 ECC save-session 范式）
+## 13 段式模板
 
 DDT 自动填的 4 段：
 1. 项目背景（项目 ID / 当前 phase / 已完成 phase / 技术栈摘要 / 关键产物路径）
@@ -90,11 +90,9 @@ cat /tmp/relay.md | pbcopy        # macOS 复制到剪贴板
 
 两者互补，不重叠。
 
-## 与 ECC save-session 的关系
+## 自动注入
 
-ECC `save-session` 是通用接力（任何项目）。DDT `/relay` 是**DDT 专用**版（自动注入 progress / tech-stack / 关键产物路径）。
-
-如同时安装 ECC，建议优先 `/relay`（更精准）；偶尔可跑 ECC `save-session` 作通用备份。
+`/relay` 自动注入 progress / tech-stack / 关键产物路径，输出 13 段式接力 prompt。
 
 ## 可重入
 

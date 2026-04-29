@@ -4,7 +4,7 @@
 
 为 Claude Code 提供 **契约先行（Contract-First）+ 数字员工分工（Agent-Owned）+ 自动度量（Hooks-Driven）+ 人机协作（Decision-Gated）** 的端到端交付工作流。**一句话**：从产品需求到上线交付，由 8 个数字员工接力完成，每个关键节点你都能介入决策，每个阶段自动度量，每条产物可追溯。
 
-8 数字员工 · 19 命令 · 11 技能 · 8 类 Hook · 5 套技术栈预设 · 4 套 AI-native UI 通道 · ECC 6-phase 开发范式 · 决策门 · 进度状态机 · 跨会话接力 · Node 22+ 零 npm 依赖
+8 数字员工 · 19 命令 · 11 技能 · 8 类 Hook · 5 套技术栈预设 · 4 套 AI-native UI 通道 · 6-phase 开发范式 · 决策门 · 进度状态机 · 跨会话接力 · Node 22+ 零 npm 依赖
 
 [![Tests](https://img.shields.io/badge/tests-122%2F122%20passing-brightgreen)](#testing) [![Version](https://img.shields.io/badge/version-0.7.0-blue)](./CHANGELOG.md) [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
@@ -74,7 +74,7 @@ delivery-<project-id>-<timestamp>.tar.gz   ← 一键交付包
 
 ## v0.7.0 三大核心能力
 
-### 1. ECC 6-phase 开发范式（去 subagent 黑盒）
+### 1. 6-phase 开发范式（去 subagent 黑盒）
 
 `/build-api` 与 `/build-web` 不再用 subagent 黑盒派发，改为 main thread 流式 6-phase：
 
@@ -103,7 +103,7 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 ### 3. 跨会话接力（不失忆）
 
 ```text
-/relay                      # 输出 13 段式接力 prompt（吸收 ECC save-session）
+/relay                      # 输出 13 段式接力 prompt
                             # 自动注入 progress.json / tech-stack.json / git log / 关键产物路径
 ```
 
@@ -193,7 +193,7 @@ CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.ddt/t
 
 | 通道 | 适用场景 | 工作流要点 |
 |------|---------|----------|
-| `claude-design` ⭐ | 默认零依赖 | Claude artifact / web-artifacts-builder 直接生成 React + Tailwind + shadcn |
+| `claude-design` ⭐ | 默认零依赖 | Claude artifact 直接生成 React + Tailwind + shadcn |
 | `figma` | 设计稿驱动 | Figma MCP `get_design_context` → 转 React + Tailwind |
 | `v0` | Next.js 现代化 UI | 解析 v0 share URL → `npx shadcn add` → 接 OpenAPI client |
 | `lovable` | UI 重的 ToC | Lovable 导出 → 移除 supabase 依赖 → 接 OpenAPI client |
@@ -256,10 +256,10 @@ project-brief.md
 | `ai-native-design` | 4 套 AI 设计源工作流（claude/figma/v0/lovable） | DDT |
 | **`backend-development`** | 后端实现知识包（替代 backend-agent，v0.7.0） | DDT |
 | **`frontend-development`** | 前端实现知识包（替代 frontend-agent，v0.7.0） | DDT |
-| **`validation-loop`** | 每文件 build/lint/test，失败立即停 | 吸收 ECC prp-implement |
-| **`checkpoint-commit`** | 每 step git commit + .ddt/checkpoints.log | 吸收 ECC checkpoint |
+| **`validation-loop`** | 每文件 build/lint/test，失败立即停 | DDT (v0.7.0) |
+| **`checkpoint-commit`** | 每 step git commit + .ddt/checkpoints.log | DDT (v0.7.0) |
 | **`decision-gate`** | 标准 4 选项决策门模板 | DDT (v0.6.2) |
-| **`relay`** | 跨会话接力 13 段式 prompt | 吸收 ECC save-session |
+| **`relay`** | 跨会话接力 13 段式 prompt | DDT (v0.6.0) |
 
 ---
 
@@ -371,7 +371,7 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 | `DDT_HOOK_PROFILE` | `standard` | Hook 档位：`minimal` / `standard` / `strict` |
 | `DDT_DISABLED_HOOKS` | 空 | 禁用指定 hook id（CSV，例：`ddt:pre-tool-use`） |
 
-> 度量脚本与 hook 开关都使用独立 `DDT_*` 命名空间，不读取 ECC 变量，也不依赖 MCP server 或远程上报。
+> 度量脚本与 hook 开关都使用独立 `DDT_*` 命名空间，不读取其他插件命名空间的环境变量，也不依赖 MCP server 或远程上报。
 
 ---
 
@@ -439,8 +439,8 @@ npm run test:integration  # 仅 integration
 
 - [USAGE.md](./USAGE.md) — 场景化使用示例
 - [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录
-- 设计原则：契约先行 + 数字员工分工 + 自动度量 + 决策门 + ECC 6-phase 范式
-- 核心来源：吸收 ECC（everything-claude-code）的 8 个范式（feature-dev / prp-plan / prp-implement / save-session / resume-session / checkpoint / verify-loop / springboot-tdd）+ Spring Initializr 22 分组组件 + Claude Code AskUserQuestion 工具
+- 设计原则：契约先行 + 数字员工分工 + 自动度量 + 决策门 + 6-phase 范式（EXPLORE/PLAN/APPROVE/IMPLEMENT/VERIFY/SUMMARY）
+- 数据来源：Spring Initializr 22 分组 200+ 组件清单 + Claude Code AskUserQuestion 工具 schema
 
 ---
 

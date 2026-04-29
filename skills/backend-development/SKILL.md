@@ -25,7 +25,7 @@ origin: DDT
 - `contexts/delivery.md`（DDT 全局上下文）
 - `rules/delivery/agent-invariants.md`（6 条全局不变量）
 - `rules/delivery/contract-integrity.md`（契约完整性）
-- 当前栈对应的 TDD skill（如 `skills/springboot-tdd`，若 ECC 已安装）
+- 当前栈对应的 TDD 范式（参考栈相关测试框架文档）
 
 ## Hard Requirements（main thread 必须遵守）
 
@@ -202,6 +202,3 @@ curl http://localhost:3001/health
 - `skills/api-contract-first/SKILL.md`（契约优先原则）
 - `skills/validation-loop/SKILL.md`（每步验证）
 - `skills/checkpoint-commit/SKILL.md`（git checkpoint）
-- ECC `skills/springboot-tdd`（如已安装，Java 项目首选）
-- ECC `commands/feature-dev.md`（6-phase 范式参考来源）
-- ECC `commands/prp-implement.md`（validation loop 范式参考）

@@ -40,7 +40,7 @@ test('each outer entry has a unique id', () => {
   }
 });
 
-test('each inner hook command uses ECC-style inline DDT bootstrap', () => {
+test('each inner hook command uses the inline DDT bootstrap', () => {
   const data = JSON.parse(readFileSync(HOOKS_JSON, 'utf8'));
   const entries = collectOuterEntries(data.hooks);
   for (const { entry } of entries) {

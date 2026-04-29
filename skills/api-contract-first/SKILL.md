@@ -17,7 +17,7 @@ origin: DDT
 
 ## Design Rules
 
-### URL 结构（继承 ECC api-design 规范）
+### URL 结构（DDT 标准）
 ```
 # 资源名：名词、复数、小写、kebab-case
 GET    /api/v1/users

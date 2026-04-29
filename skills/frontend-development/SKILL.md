@@ -123,4 +123,3 @@ origin: DDT
 - `skills/ai-native-design/SKILL.md`
 - `skills/validation-loop/SKILL.md`
 - `skills/checkpoint-commit/SKILL.md`
-- ECC `skills/web-artifacts-builder`（claude-design 通道辅助）
