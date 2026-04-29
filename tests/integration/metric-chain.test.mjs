@@ -83,6 +83,58 @@ test('metric-chain: aggregate → baseline → report all pass', async () => {
     for (const heading of ['阶段级对比', '质量守门', '原始数据链接']) {
       assert.ok(content.includes(heading), `report missing section containing '${heading}'`);
     }
+    // P2-1: 数据快照声明必须出现，避免 raw / final 时点不一致引发歧义
+    assert.match(content, /数据快照说明/, 'P2-1: 必须含数据快照说明段');
+    assert.match(content, /本次 \/report 自身工时.{0,40}尚未计入/, 'P2-1: 必须明确说明本次 /report 工时尚未计入');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// P2-2 编排开销专项测试 — 用真实 phase_runs 验证 kickoff_total - SUM(子 phase) 公式
+test('P2-2: 编排开销 = kickoff 总工时 - 子 phase 合计', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-overhead-'));
+  try {
+    // 模拟 phase_runs：kickoff 1200000ms，prd 300000ms，wbs 400000ms，design 400000ms
+    // 编排开销 = 1200 - (300+400+400) = 100s = 0.0278h
+    const events = [
+      { event: 'phase_start', project_id: 'p1', ts: '2026-04-25T00:00:00Z',
+        data: { session_id: 's1', phase: 'kickoff' } },
+      { event: 'phase_start', project_id: 'p1', ts: '2026-04-25T00:01:00Z',
+        data: { session_id: 's1', phase: 'prd' } },
+      { event: 'phase_end',   project_id: 'p1', ts: '2026-04-25T00:06:00Z',
+        data: { session_id: 's1', phase: 'prd', duration_ms: 300000 } },
+      { event: 'phase_start', project_id: 'p1', ts: '2026-04-25T00:06:00Z',
+        data: { session_id: 's1', phase: 'wbs' } },
+      { event: 'phase_end',   project_id: 'p1', ts: '2026-04-25T00:13:00Z',
+        data: { session_id: 's1', phase: 'wbs', duration_ms: 400000 } },
+      { event: 'phase_start', project_id: 'p1', ts: '2026-04-25T00:13:00Z',
+        data: { session_id: 's1', phase: 'design' } },
+      { event: 'phase_end',   project_id: 'p1', ts: '2026-04-25T00:20:00Z',
+        data: { session_id: 's1', phase: 'design', duration_ms: 400000 } },
+      { event: 'phase_end',   project_id: 'p1', ts: '2026-04-25T00:20:00Z',
+        data: { session_id: 's1', phase: 'kickoff', duration_ms: 1200000 } },
+    ];
+    writeFileSync(join(tmp, 'events.jsonl'),
+      events.map(e => JSON.stringify(e)).join('\n') + '\n');
+
+    const env = { ...process.env, DDT_METRICS_DIR: tmp };
+    spawnSync(process.execPath, [join(ROOT, 'bin', 'aggregate.mjs'), '--project', 'p1'],
+      { cwd: ROOT, env, encoding: 'utf8' });
+    const baselineOut = join(tmp, 'baseline.locked.json');
+    spawnSync(process.execPath, [join(ROOT, 'bin', 'baseline.mjs'), '--out', baselineOut],
+      { cwd: ROOT, env, encoding: 'utf8' });
+    const reportOut = join(tmp, 'efficiency-report.raw.md');
+    spawnSync(process.execPath,
+      [join(ROOT, 'bin', 'report.mjs'), '--project', 'p1', '--baseline', baselineOut, '--out', reportOut],
+      { cwd: ROOT, env, encoding: 'utf8' });
+
+    const content = readFileSync(reportOut, 'utf8');
+    assert.match(content, /编排开销拆解/, '必须含编排开销拆解段');
+    assert.match(content, /kickoff.*0\.333.*0\.306.*0\.028/,
+      'kickoff 行应展示 总工时 / 子合计 / 编排开销三列');
+    assert.match(content, /编排开销合计：0\.028 h/,
+      '编排开销合计应为 1200ms - (300+400+400)ms = 100s = 0.028h');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

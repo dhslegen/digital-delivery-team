@@ -83,6 +83,27 @@ const { testRow, reviewRow } = projectId
   : { testRow: null, reviewRow: null };
 const actual = aggregateCanonicalStages(actualByAgent, actualByPhase);
 const orchestratorTotal = sumPhases(actualByPhase, ORCHESTRATOR_PHASES);
+// P2-2: 编排开销 = 每个编排命令工时 - 该命令实际包含的子 phase 工时
+//   每个编排命令对应一组明确的子 phase（容器关系）：
+//     kickoff = prd + wbs + design   （需求 + 架构）
+//     impl    = build-web + build-api（前后端实现）
+//     ship    = package              （打包发布）
+//   编排开销 = 用户交互 + 决策门暂停 + 阶段切换间隙（可独立优化的协调成本）
+const ORCHESTRATOR_TO_CHILDREN = {
+  kickoff: ['prd', 'wbs', 'design'],
+  impl:    ['build-web', 'build-api'],
+  ship:    ['package'],
+};
+const orchestrationBreakdown = [];
+let orchestrationOverheadTotal = 0;
+for (const [orch, children] of Object.entries(ORCHESTRATOR_TO_CHILDREN)) {
+  const orchHours  = actualByPhase[orch] || 0;
+  if (orchHours === 0) continue;
+  const childHours = children.reduce((sum, c) => sum + (actualByPhase[c] || 0), 0);
+  const overhead   = Math.max(0, orchHours - childHours);
+  orchestrationOverheadTotal += overhead;
+  orchestrationBreakdown.push({ orch, orchHours, childHours, overhead, children });
+}
 const quality = evaluateQuality(testRow, reviewRow);
 
 // 构建报告
@@ -198,10 +219,29 @@ if (phaseEntries.length) {
   lines.push('_（暂无 phase 工时数据；UserPromptSubmit hook 未捕获或会话内未触发任何 slash command）_');
 }
 lines.push('');
-if (orchestratorTotal !== null) {
-  lines.push(`> 编排命令（kickoff / impl / ship）合计：**${orchestratorTotal.toFixed(3)} h**（已计入对应阶段，不重复计算）`);
+if (orchestrationBreakdown.length) {
+  lines.push('### 编排开销拆解');
+  lines.push('');
+  lines.push('| 编排命令 | 总工时(h) | 子阶段合计(h) | 编排开销(h) | 子 phase |');
+  lines.push('|---------|----------|--------------|------------|---------|');
+  for (const row of orchestrationBreakdown) {
+    lines.push(`| ${row.orch} | ${row.orchHours.toFixed(3)} | ${row.childHours.toFixed(3)} | **${row.overhead.toFixed(3)}** | ${row.children.join(' + ')} |`);
+  }
+  lines.push('');
+  lines.push(`> **编排开销合计：${orchestrationOverheadTotal.toFixed(3)} h**（用户交互 + 决策门暂停 + 阶段切换间隙；可独立优化）`);
+  lines.push('> 子阶段工时已分别计入阶段对比表，不重复计算。');
   lines.push('');
 }
+
+// P2-1: 数据快照声明 — 让 metrics-agent / 用户清楚 raw 数据的时点边界
+lines.push('## 5. 数据快照说明');
+lines.push('');
+lines.push(`- **raw 报告生成时点**：${ts}`);
+lines.push('- **统计口径**：仅含已配对完成的 phase（phase_start + phase_end 都已落盘）');
+lines.push('- **本次 /report 自身工时**：尚未计入本快照——`/report` phase_end 在 raw 写完后才发射，');
+lines.push('  下次 `/report` 跑时才会被纳入工时统计。这不是 bug，而是事件配对模型的边界条件。');
+lines.push('- **建议**：若需含本次 /report 完整工时，跑完一次 `/report` 后再跑 `/report --refresh` 即可。');
+lines.push('');
 
 lines.push('> metrics-agent 接手后将在此基础上做自然语言解读。');
 

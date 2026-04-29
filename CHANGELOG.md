@@ -4,6 +4,103 @@
 
 ---
 
+## [0.7.1] - 2026-04-29 — 真实测试驱动的 P0/P1/P2 修复批
+
+基于 v0.7.0 真实跑通 `/kickoff + /report` 后发现的 5 个度量准确性问题，5 个 PR 合并发布：
+
+### Fixed — 修复（按优先级）
+
+🔴 **P0-1 修 `tech-stack.json` 字符串展开污染（PR-A）**
+- 根因：LLM 在 AskUserQuestion 后写 `backend: "java-spring-boot"` 扁平字符串，
+  resolve-tech-stack.mjs 的 spread 把字符串展开成 `{0:'j',1:'a',...}` 字符索引对象，
+  preset 默认值被保留，用户偏好（无数据库 / 纯 HTML/CSS）静默丢失。
+- 修法：三层防御
+  1. `readComponentsJson` 入口 schema 校验 + 17/8/5 条扁平字符串映射表
+  2. `assertCleanStack` 写入前最终关卡（拒绝纯数字索引 key）
+  3. `commands/kickoff.md` Step 0 显式标注嵌套对象 schema + "严禁扁平字符串"
+- 测试：m63-tech-stack +4 用例（扁平映射 / 拒绝未识别 / 嵌套兼容 / 数组拦截）
+
+🔴 **P0-2 修 phase_runs 表行数膨胀 2.17×（PR-B）**
+- 根因：emit-phase.mjs 每次新进程生成 `cli-${ts}` 不同 session_id，
+  store.mjs phase_end UPDATE 严格 session_id 匹配失败 → fallback INSERT 孤儿行。
+- 修法：bin/lib/store.mjs 三级匹配：严格 session → 降级 phase → fallback INSERT。
+  飘移情况下 phase_runs 行数 = 实际执行次数。
+- 测试：audit-smoke.mjs +1 用例（不设 DDT_SESSION_ID 仍 phase_runs=2 行）
+
+🔴 **P0-3 修 hook + emit-phase 双源时间窗叠加（PR-B）**
+- 根因：用户直接 `/report` 时 user-prompt-submit hook 抓 phase_start，
+  commands/report.md 又调 emit-phase 抓一次，两个时间窗 SUM 累加，工时虚增 30-50%。
+- 修法：hooks/handlers/user-prompt-submit.js 单源化——业务级（prd/wbs/...）不发 phase_start，
+  由 commands/X.md 内 emit-phase 唯一发起；编排级（kickoff/impl/...）保持 hook 抓。
+- 测试：phase-detection +1 hook 单源化契约用例；audit-smoke +1 双源去重用例
+
+🟠 **P1-1 修 `progress.json::project_id = "unknown"` 飘移（PR-C）**
+- 根因：SessionStart hook 时序差让 --init 时 .ddt/project-id 还未就绪，
+  写 unknown 后 --infer 不重读，永远停留 unknown 与实际数据脱节。
+- 修法：bin/progress.mjs::infer() 增加自愈逻辑：每次 --infer 读 .ddt/project-id 校验，
+  不一致则覆盖。幂等且无副作用——已正确的 ID 不被改。
+- 测试：progress-state-machine +2 用例（自愈 + 不覆盖正确值）
+
+🟠 **P1-2 临时文件路径迁移到项目本地（PR-C）**
+- 根因：commands/kickoff.md / design.md 把用户技术栈选择写到 /tmp/ddt-user-components.json，
+  多项目并行 /kickoff 互相覆盖。
+- 修法：路径迁移到 `.ddt/components.json.tmp`，跑完即删。
+- 测试：m63-tech-stack +1 路径校验用例
+
+🟡 **P2-1 raw 报告时点声明（PR-D）**
+- bin/report.mjs 输出新增"## 5. 数据快照说明"段，明确"本次 /report 自身工时
+  尚未计入快照（phase_end 在 raw 写完后才发射），下次 /report 跑时才完整捕获"。
+- agents/metrics-agent.md Hard Requirement 第 8 条：必须保留此说明在 final 报告。
+- 测试：metric-chain +2 行断言（数据快照说明 + 时点声明文字）
+
+🟡 **P2-2 编排开销显式拆解（PR-D）**
+- 根因：之前 raw 只输出"编排合计 0.32h，已计入对应阶段，不重复计算"，
+  误导用户认为这 0.32h 是重复数据。实际 0.32h 含 prd+wbs+design 子 phase + 用户交互间隙。
+- 修法：bin/report.mjs 引入 ORCHESTRATOR_TO_CHILDREN 映射，按 kickoff/impl/ship 逐个拆解：
+  ```
+  | 编排命令 | 总工时 | 子阶段合计 | 编排开销 | 子 phase |
+  | kickoff | 0.320  | 0.251      | 0.069    | prd + wbs + design |
+  ```
+  编排开销 = 用户交互 + 决策门暂停 + 阶段切换间隙（可独立优化的协调成本）。
+- agents/metrics-agent.md Hard Requirement 第 7 条：必须在 final 引用此数字。
+- 测试：metric-chain +1 用例（验证 1200ms - (300+400+400)ms = 0.028h）
+
+### Tooling — 工具链增强
+
+- `bin/audit-smoke.mjs`（新增）：6+2 用例的审计链路冒烟测试，npm run audit:smoke。
+- `bin/sync-about.mjs`（新增）：plugin.json description → GitHub About 单一真相源同步。
+- `tests/unit/about-counts.test.mjs`（新增）：3 用例锁定 manifest 数字一致性。
+- `bin/manifest.mjs`：日志输出去掉外部插件名，统一 DDT 自有描述。
+
+### 测试
+
+- 总用例：v0.7.0 142 → v0.7.1 **151**（+9）
+- audit-smoke：6 → **8** 用例（+2 PR-B 红线测试）
+
+### Migration — 升级指引
+
+从 v0.7.0 升级到 v0.7.1：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. `/digital-delivery-team:doctor` 自检
+3. **真实数据修复（推荐）**：跑过 v0.7.0 的项目，建议在项目目录跑：
+   ```
+   node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project <id> --rebuild
+   node "$DDT_PLUGIN_ROOT/bin/progress.mjs" --infer
+   ```
+   让 phase_runs 按新降级匹配重建，progress.json 自愈 project_id。
+4. 升级后再跑 `/report` 看效果：
+   - phase_runs 行数：膨胀 2× → 实际次数（-50%）
+   - report SUM 工时：双源累加 → 单源（-30~50%）
+   - 多项目并行 /kickoff：临时文件冲突 → 各自 .ddt/ 隔离
+   - raw 报告：含"编排开销拆解"段（kickoff_overhead = total - sum 子 phase）
+
+### 设计
+
+参考：`design/真实测试Audit.md`（实测案例 + 5 大问题根因 + 优化方案）
+
+---
+
 ## [0.7.0] - 2026-04-29 — M6 路线图收官
 
 M6.4 开发阶段精细化 — **去 subagent 黑盒** + 6-phase 范式 + validation loop + checkpoint commit。
