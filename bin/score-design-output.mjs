@@ -154,6 +154,13 @@ export function scoreSpacing(tokens, files) {
 }
 
 // 4. 组件复用
+//
+// W7.5 R12：之前的 regex 直接 match(/...g) 拿不到行号，markdown 表头分隔行 |---|---|---|
+//   会被误匹配（虽然不命中 [A-Z]，但 `| <Foo> |` 这种带尖括号占位的"示例条目"或表头列名
+//   含 PascalCase 词时会被算作"已登记"）。本版改成行级解析：
+//   - 跳过分隔行 `|---|---|...|`
+//   - 跳过紧跟 header 的 separator 后的第一行之前的所有行（即只读 body 行）
+//   - 排除占位符 `<DataTable>` 中的 `_` 与 `(未扫描...)` 等明显 placeholder 行
 export function scoreComponentReuse(inventoryText, files) {
   let score = 10;
   const issues = [];
@@ -162,13 +169,8 @@ export function scoreComponentReuse(inventoryText, files) {
     issues.push('components-inventory.md 缺失（无法对照复用率）');
     return { score: Math.max(0, score), issues };
   }
-  // 从 inventory 提取已登记组件名
-  const registered = new Set();
-  const componentRows = inventoryText.match(/\|\s*([A-Z][A-Za-z]+|<[A-Z][A-Za-z]+>)\s*\|/g) || [];
-  for (const row of componentRows) {
-    const m = row.match(/[A-Z][A-Za-z]+/);
-    if (m) registered.add(m[0]);
-  }
+  const registered = parseInventoryComponents(inventoryText);
+
   // 检测 tsx 是否有同名组件多次"重新定义"
   const definedTimes = {};
   for (const f of files) {
@@ -185,7 +187,45 @@ export function scoreComponentReuse(inventoryText, files) {
       issues.push(`组件 ${name} 被重新定义 ${count} 次（应复用 inventory 已登记的）`);
     }
   }
-  return { score: Math.max(0, score), issues };
+  return { score: Math.max(0, score), issues, registered: [...registered] };
+}
+
+// 解析 inventory.md 提取真实组件名（跳过分隔行 / placeholder 行）
+//   markdown 表格结构：
+//     | 组件 | 路径 | ... |   ← header（中文，跳过）
+//     |------|------|-----|   ← separator（必跳过）
+//     | Button | ... |        ← body（取首列）
+export function parseInventoryComponents(text) {
+  const lines = text.split('\n');
+  const out = new Set();
+  let inTableBody = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // 检测分隔行：纯 | --- | --- | ... |（容许两端空格）
+    if (/^\s*\|(\s*:?-+:?\s*\|)+\s*$/.test(line)) {
+      inTableBody = true;
+      continue;
+    }
+    // 检测非表格行：重置 body 状态
+    if (!/^\s*\|/.test(line)) {
+      inTableBody = false;
+      continue;
+    }
+    if (!inTableBody) continue;
+    // 现在是 body 行：取首列
+    const cells = line.split('|').slice(1, -1).map(c => c.trim());
+    if (cells.length === 0) continue;
+    const firstCell = cells[0];
+    // 跳过 placeholder 行（含 _未扫描..._ / (示例条目编译时会替换) / 完全空）
+    if (!firstCell || /^_\(.*\)_$/.test(firstCell) || /^_.*_$/.test(firstCell)) continue;
+    if (/^\s*$/.test(firstCell)) continue;
+    // 提取首列中的 PascalCase 标识符（处理 `Button` / `<DataTable>` / 反引号包裹）
+    // 去掉 markdown 反引号 / 尖括号 / 反引号包裹的标签符号
+    const cleaned = firstCell.replace(/[`<>]/g, '');
+    const m = cleaned.match(/^([A-Z][A-Za-z0-9]+)/);
+    if (m) out.add(m[1]);
+  }
+  return out;
 }
 
 // 5. 响应式
@@ -333,29 +373,65 @@ export function scoreDensity(briefText, files) {
 }
 
 // 10. 打磨度（anti-patterns 检测）
+//
+// W7.5 R12：补齐 11 条 anti-patterns（之前只覆盖 5 条，scoring 不够锋利）
+//   每命中 1 条扣 1 分（max -10），与 §10.20 评分模型对齐
 export function scorePolish(files) {
   let score = 10;
   const issues = [];
   const tripped = [];
-  // 11 条 anti-patterns 简化检测（grep 关键词）
+  // 11 条 anti-patterns 简化检测（grep 关键词；启发式，false positive 可接受）
   const checks = [
-    { id: 'purple-gradient-default', regex: /from-purple-\d+\s+to-blue-\d+/i,             desc: '紫蓝默认渐变' },
-    { id: 'glass-morphism-overuse',  regex: /backdrop-blur(-[a-z]+)?/g,                   desc: 'glass morphism', threshold: 5 },
-    { id: 'uniform-radius',          regex: /rounded-(?!none|full|sm|md|lg|xl)\d+/g,      desc: '硬编码圆角值' },
-    { id: 'centered-hero-on-stock-gradient', regex: /min-h-screen.*flex.*items-center.*justify-center.*bg-gradient/s, desc: '居中 hero on gradient' },
-    { id: 'generic-sans-serif',      regex: /font-(?:sans|mono)\s+/g,                     desc: '通用 font-sans/mono', threshold: 50 },
+    // 1. 紫蓝默认渐变（"AI 风" 标志）
+    { id: 'purple-gradient-default', regex: /from-(?:purple|violet|indigo)-\d+\s+to-(?:blue|cyan|pink)-\d+/i,
+      desc: '紫蓝默认渐变（AI slop 标志）' },
+    // 2. glass morphism 滥用
+    { id: 'glass-morphism-overuse',  regex: /backdrop-blur(-[a-z]+)?/g,
+      desc: 'glass morphism', threshold: 5 },
+    // 3. 硬编码圆角值（rounded-12 / rounded-24 等不在 design tokens 里的）
+    { id: 'uniform-radius',          regex: /rounded-(?!none|full|sm|md|lg|xl|2xl|3xl)\d+/g,
+      desc: '硬编码圆角值' },
+    // 4. scroll-jacking（与 scoreMotion 不冲突——这里是"声明式"检测）
+    { id: 'scroll-jacking',          regex: /scroll-snap-type|scrollIntoView\s*\(\s*\{[^}]*behavior:\s*['"]smooth/g,
+      desc: 'scroll-jacking 关键词', threshold: 3 },
+    // 5. 居中 hero 在通用渐变上
+    { id: 'centered-hero-on-stock-gradient',
+      regex: /min-h-screen[\s\S]{0,80}?items-center[\s\S]{0,80}?justify-center[\s\S]{0,80}?bg-gradient/,
+      desc: '居中 hero on stock gradient' },
+    // 6. 通用 font-sans / font-mono 大量使用（无 visual_direction 锚定）
+    { id: 'generic-sans-serif',      regex: /\bfont-(?:sans|mono)\b/g,
+      desc: '通用 font-sans/mono 滥用', threshold: 50 },
+    // 7. 通用情绪色（saas-hero 标志：teal-500 / sky-500 / emerald-500 + warm gray 组合）
+    { id: 'generic-emotional-color', regex: /\b(?:bg|text|border)-(?:teal|sky|emerald|amber)-(?:400|500|600)\b/g,
+      desc: '通用情绪色（teal/sky/emerald saas 默认）', threshold: 8 },
+    // 8. 可互换 saas hero（"Trusted by ..." / "Build faster with ..." 等模板文案）
+    { id: 'interchangeable-saas-hero',
+      regex: /(?:Trusted by|Build faster|Ship faster|Loved by|Join \d+,?\d* (?:teams|developers|companies))/i,
+      desc: '可互换 saas hero 文案' },
+    // 9. 通用 card 堆叠（grid grid-cols-3 + 3 个无差异 card；启发式：rounded + border + p- 同时大量出现）
+    { id: 'generic-card-piles',      regex: /(?:rounded-\w+\s+border\s+p-\d+){3,}/g,
+      desc: '通用 card 堆叠' },
+    // 10. 随机点缀色（无 design system 的 accent；非 tokens 中定义的 hex 字面）
+    { id: 'random-accent-without-system',
+      regex: /(?:bg|text|border)-\[#[0-9a-f]{3,8}\]/gi,
+      desc: '随机点缀色（[#xxx] arbitrary value）', threshold: 3 },
+    // 11. 无目的动效（每个 button / div 都加 transition）
+    { id: 'motion-without-purpose',  regex: /\btransition-all\b/g,
+      desc: 'transition-all 无目的动效', threshold: 10 },
   ];
   for (const f of files) {
     if (!f.path.endsWith('.tsx') && !f.path.endsWith('.jsx')) continue;
     for (const check of checks) {
+      if (tripped.includes(check.id)) continue;       // 已扣过分
       const matches = f.content.match(check.regex);
       if (matches) {
         const hits = matches.length;
         const threshold = check.threshold || 1;
-        if (hits >= threshold && !tripped.includes(check.id)) {
+        if (hits >= threshold) {
           tripped.push(check.id);
           score -= 1;
-          issues.push(`anti-pattern #${ANTI_PATTERNS_DETAILS.findIndex(p => p.id === check.id) + 1} (${check.desc}) 命中`);
+          const apIdx = ANTI_PATTERNS_DETAILS.findIndex(p => p.id === check.id);
+          issues.push(`anti-pattern${apIdx >= 0 ? ' #' + (apIdx + 1) : ''} (${check.desc}) 命中（${hits} 处）`);
         }
       }
     }
