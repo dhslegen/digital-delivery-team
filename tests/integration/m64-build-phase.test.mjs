@@ -99,11 +99,13 @@ test('manifest --check 仍通过（agent 减少 + skill 增加）', () => {
   assert.equal(r.status, 0, `manifest --check failed: ${r.stderr}`);
 });
 
-test('agents 总数 = 8（v0.6.x 10 个减 backend/frontend）', () => {
+test('agents 总数 = 9（v0.7 8 个 + v0.8 design-brief-agent）', () => {
   const fs = require('node:fs');
   const agents = fs.readdirSync(join(ROOT, 'agents')).filter(f => f.endsWith('.md'));
-  assert.equal(agents.length, 8,
-    `agents 应为 8 个（删除 backend/frontend），实际 ${agents.length}: ${agents.join(', ')}`);
+  assert.equal(agents.length, 9,
+    `agents 应为 9 个（v0.7 8 个 + v0.8 design-brief-agent），实际 ${agents.length}: ${agents.join(', ')}`);
+  assert.ok(agents.includes('design-brief-agent.md'),
+    'v0.8 W6 应含 design-brief-agent');
 });
 
 test('skills 总数 ≥ 9（含 4 个 M6.4 新 skill）', () => {
