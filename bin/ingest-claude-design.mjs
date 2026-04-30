@@ -26,10 +26,15 @@
 //   4 = 解压失败 / zip 损坏
 //   5 = staging 目录已存在未传 --refresh
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs';
-import { join, basename, extname } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync, lstatSync, realpathSync } from 'node:fs';
+import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+
+// W7.5 R10：单 jsx/css 读全文上限。超过 5MB 的文件不可能是合法的 React/CSS 源码——
+//   要么是 minified bundle，要么是带嵌入数据的产物，要么是恶意压缩炸弹。
+//   红线检测时跳过，避免 OOM。
+const MAX_FILE_BYTES_FOR_INSPECTION = 5_000_000;
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -108,19 +113,20 @@ export function scanBundleContent(dir) {
 }
 
 // 红线检测（v0.8 §5.1.7）
+//   W7.5 R10：读文件前 statSync 校验大小，> 5MB 跳过并记 skipped flag
 export function detectRedFlags(scan) {
   const flags = [];
   // 1. 单 jsx > 1000 行（违反 Claude Design 自身约束）
   for (const f of scan.jsx) {
     try {
-      const lines = readFileSync(f.abs, 'utf8').split('\n').length;
-      if (lines > 1000) flags.push(`${f.rel}: ${lines} 行（超 Claude Design 1000 行约束）`);
-    } catch { /* skip */ }
-  }
-  // 2. 含 fetch / axios（应走 OpenAPI client）
-  for (const f of scan.jsx) {
-    try {
+      if (f.size > MAX_FILE_BYTES_FOR_INSPECTION) {
+        flags.push(`${f.rel}: ${f.size} 字节（超 ${MAX_FILE_BYTES_FOR_INSPECTION} 阈值，跳过红线检查；可能是 minified bundle）`);
+        continue;
+      }
       const text = readFileSync(f.abs, 'utf8');
+      const lines = text.split('\n').length;
+      if (lines > 1000) flags.push(`${f.rel}: ${lines} 行（超 Claude Design 1000 行约束）`);
+      // 2. 含 fetch / axios（应走 OpenAPI client）
       if (/\bfetch\s*\(\s*['"]\/api\//.test(text) || /\baxios\.(get|post|put|patch|delete)\s*\(/.test(text)) {
         flags.push(`${f.rel}: 含 fetch/axios 直连（应走 web/lib/api-client.ts）`);
       }
@@ -130,13 +136,80 @@ export function detectRedFlags(scan) {
   const tokensFile = scan.css.find(f => /tokens\.css$/i.test(f.rel));
   if (tokensFile) {
     try {
-      const text = readFileSync(tokensFile.abs, 'utf8');
-      if (!/--[a-z-]+:/i.test(text)) {
-        flags.push(`${tokensFile.rel}: 不是标准 CSS variables（缺 --xxx 声明）`);
+      if (tokensFile.size > MAX_FILE_BYTES_FOR_INSPECTION) {
+        flags.push(`${tokensFile.rel}: ${tokensFile.size} 字节（跳过 CSS variables 检查）`);
+      } else {
+        const text = readFileSync(tokensFile.abs, 'utf8');
+        if (!/--[a-z-]+:/i.test(text)) {
+          flags.push(`${tokensFile.rel}: 不是标准 CSS variables（缺 --xxx 声明）`);
+        }
       }
     } catch { /* skip */ }
   }
   return flags;
+}
+
+// W7.5 R10：zip slip 防御。解压前用 list 工具读取 zip 条目名，
+//   拒绝任何含 .. 段或绝对路径的条目。攻击向量：恶意 zip 含 ../../../etc/passwd 条目，
+//   unzip / tar / bsdtar 默认不阻挡，会把文件写到 staging 外。
+//
+// 后置 walk-staging 校验补漏：解压完再 walk 一遍 staging，验证每个文件路径
+//   resolve 后仍在 stagingResolved 之下（防符号链接逃逸）。
+export function listZipEntries(tool, zipPath) {
+  let stdout;
+  try {
+    if (tool === 'unzip') {
+      stdout = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    } else if (tool === 'bsdtar' || tool === 'tar') {
+      stdout = execFileSync(tool, ['-tf', zipPath], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    } else {
+      return null;
+    }
+  } catch {
+    return null;  // 工具失败时让 unzipBundle 自己报错
+  }
+  return stdout.split('\n').map(l => l.trim()).filter(Boolean);
+}
+
+export function findMaliciousZipEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries.filter(e =>
+    e.startsWith('/') ||                     // 绝对路径
+    /^[A-Za-z]:[\\/]/.test(e) ||             // Windows 绝对路径
+    e.split(/[\\/]/).includes('..') ||       // 任意 .. 段
+    e.includes('\0')                          // null byte
+  );
+}
+
+// 解压后 walk staging 防 symlink 逃逸 / 工具未拦下的边界 case
+//   关键：用 realpathSync 跟随符号链接，否则 resolve(...) 只是路径字符串拼接，
+//   无法发现 staging/pwn-link → /etc/passwd 这类符号链接逃逸。
+export function verifyNoPathTraversal(stagingDir) {
+  const stagingReal = (() => {
+    try { return realpathSync(stagingDir); } catch { return resolve(stagingDir); }
+  })();
+  const offenders = [];
+  function walk(p) {
+    let entries;
+    try { entries = readdirSync(p); } catch { return; }
+    for (const entry of entries) {
+      const full = join(p, entry);
+      let realFull;
+      try { realFull = realpathSync(full); }       // 跟随 symlink 到真实目标
+      catch { realFull = resolve(full); }
+      if (realFull !== stagingReal &&
+          !realFull.startsWith(stagingReal + sep)) {
+        offenders.push(realFull);
+        continue;
+      }
+      // 子目录递归（用 lstatSync 防被 symlink loop 卡住）
+      let lst;
+      try { lst = lstatSync(full); } catch { continue; }
+      if (lst.isDirectory() && !lst.isSymbolicLink()) walk(full);
+    }
+  }
+  walk(stagingDir);
+  return offenders;
 }
 
 async function main() {
@@ -179,11 +252,34 @@ async function main() {
   if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true });
   mkdirSync(stagingDir, { recursive: true });
 
+  // W7.5 R10：解压前先 list zip 条目，拒绝任何含 .. / 绝对路径 / null byte 的恶意条目
+  const entries = listZipEntries(tool, bundlePath);
+  if (entries !== null) {
+    const malicious = findMaliciousZipEntries(entries);
+    if (malicious.length > 0) {
+      console.error(`❌ zip 包含恶意条目（${malicious.length} 项），拒绝解压`);
+      for (const m of malicious.slice(0, 5)) console.error(`   - ${m}`);
+      if (malicious.length > 5) console.error(`   ... 共 ${malicious.length} 项`);
+      rmSync(stagingDir, { recursive: true, force: true });
+      process.exit(4);
+    }
+  }
+
   // 解压
   try {
     unzipBundle(tool, bundlePath, stagingDir);
   } catch (e) {
     console.error(`❌ 解压失败（${tool}）: ${e.message}`);
+    process.exit(4);
+  }
+
+  // W7.5 R10：解压后再 walk 防 symlink 逃逸（list 不会列出符号链接的目标）
+  const offenders = verifyNoPathTraversal(stagingDir);
+  if (offenders.length > 0) {
+    console.error(`❌ zip 解压后发现 ${offenders.length} 项落到 staging 外（疑似 symlink 逃逸）`);
+    for (const o of offenders.slice(0, 5)) console.error(`   - ${o}`);
+    if (offenders.length > 5) console.error(`   ... 共 ${offenders.length} 项`);
+    rmSync(stagingDir, { recursive: true, force: true });
     process.exit(4);
   }
 

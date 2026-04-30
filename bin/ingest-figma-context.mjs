@@ -82,8 +82,22 @@ export function parseFigmaUrl(url) {
   let nodeId = null;
   const nodeMatch = url.match(/[?&]node-id=([^&]+)/);
   if (nodeMatch) {
-    // Figma URL 用 - 替代 :，MCP 期望原始的 :
-    nodeId = decodeURIComponent(nodeMatch[1]).replace(/-/g, ':');
+    // W7.5 R5：先解码再做白名单校验。Figma node ID 只含字母/数字/冒号/连字符，
+    //   恶意载荷如 ?node-id=A%27%29%3B（解码 → A');）会被拒。
+    //   解码后再用 - → : 转换（Figma URL 编码约定）。
+    let decoded;
+    try { decoded = decodeURIComponent(nodeMatch[1]); }
+    catch { return { valid: false, reason: 'node-id 解码失败' }; }
+
+    if (!/^[A-Za-z0-9:_-]+$/.test(decoded)) {
+      return { valid: false, reason: 'node-id 含非法字符（仅允许字母/数字/冒号/连字符/下划线）' };
+    }
+    nodeId = decoded.replace(/-/g, ':');
+
+    // 二次防御：转换后必须仍是 [A-Za-z0-9:_] —— 防奇怪 unicode 漏到下游 markdown
+    if (!/^[A-Za-z0-9:_]+$/.test(nodeId)) {
+      return { valid: false, reason: 'node-id 转换后含非法字符' };
+    }
   }
 
   return { valid: true, fileKey, nodeId, kind, url };

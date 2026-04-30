@@ -43,18 +43,51 @@ function esc(s) {
   }[c]));
 }
 
+// W7.5 R6：CSS 上下文白名单（HTML esc 不够，inline style 仍可被 `; } ...` 注入）
+//   接受形态：
+//     - hex 色（#aaa / #aaaaaa / #aaaaaaff）
+//     - rgb()/rgba()/hsl()/hsla() 函数（不含分号或大括号）
+//     - 数字 + 单位（px / rem / em / % / s / ms）
+//     - CSS keyword（none / inherit / transparent / currentColor）
+//     - shadow 多段：N segment，segments 用空格 + 逗号分隔（仅允许数字/单位/颜色）
+export function isValidCssValue(v) {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  if (s.length === 0 || s.length > 200) return false;
+  // 黑名单：包含 ; / } / { / </ / url() / expression / @import 等危险结构
+  if (/[;{}]|<\/|url\s*\(|expression\s*\(|@import|javascript:/i.test(s)) return false;
+
+  // 允许：hex 色
+  if (/^#[0-9a-f]{3,8}$/i.test(s)) return true;
+  // 允许：rgb/rgba/hsl/hsla 函数（参数仅允许数字/百分号/逗号/空格/小数点/斜杠）
+  if (/^(rgb|rgba|hsl|hsla)\(\s*[\d\s.,%/-]+\s*\)$/i.test(s)) return true;
+  // 允许：数字 + 常见单位
+  if (/^-?\d+(\.\d+)?(px|rem|em|%|s|ms|vh|vw|fr|deg|rad|turn)?$/i.test(s)) return true;
+  // 允许：CSS 关键字
+  if (/^(none|inherit|transparent|currentcolor|auto|initial|unset|normal)$/i.test(s)) return true;
+  // 允许：shadow 多段（如 "0 4px 12px rgba(0,0,0,0.1)"）
+  if (/^[\d\s.,%()#a-zA-Z/-]+$/.test(s) && !/[;{}]/.test(s)) return true;
+  return false;
+}
+
+// CSS 值兜底：非法值返回 fallback（默认空字符串），调用点根据语境选 fallback
+function safeCss(v, fallback = '') {
+  return isValidCssValue(v) ? esc(String(v)) : fallback;
+}
+
 // 渲染色卡区
 function renderColorSwatches(colors, title = 'Colors') {
   if (!colors || typeof colors !== 'object') return '';
   const swatches = Object.entries(colors).map(([name, value]) => {
     const safeName = esc(name);
-    const safeValue = esc(value);
+    const safeBgCss = safeCss(value, '#cccccc');  // 非法色 → 灰色 fallback
+    const safeDisplay = esc(value);                 // 文本展示用 HTML esc 即可
     return `
       <div class="swatch">
-        <div class="swatch-color" style="background-color: ${safeValue}"></div>
+        <div class="swatch-color" style="background-color: ${safeBgCss}"></div>
         <div class="swatch-meta">
           <code>--color-${safeName}</code>
-          <span class="swatch-hex">${safeValue}</span>
+          <span class="swatch-hex">${safeDisplay}</span>
         </div>
       </div>`;
   }).join('');
@@ -67,12 +100,24 @@ function renderColorSwatches(colors, title = 'Colors') {
 
 function renderSpacingRulers(spacing) {
   if (!Array.isArray(spacing)) return '';
-  const rows = spacing.map((px, i) => `
+  const rows = spacing.map((px, i) => {
+    // W7.5 R6：spacing 必须是数字（防 "1; } body { display: none; /*" 注入 CSS 上下文）
+    const num = Number(px);
+    if (!Number.isFinite(num) || num < 0 || num > 1000) {
+      return `
       <tr>
         <td><code>--spacing-${i}</code></td>
-        <td>${px}px</td>
-        <td><div class="ruler" style="width: ${px}px"></div></td>
-      </tr>`).join('');
+        <td>${esc(String(px))}（已忽略：非法值）</td>
+        <td><em style="color:#a83232">非数字或越界</em></td>
+      </tr>`;
+    }
+    return `
+      <tr>
+        <td><code>--spacing-${i}</code></td>
+        <td>${num}px</td>
+        <td><div class="ruler" style="width: ${num}px"></div></td>
+      </tr>`;
+  }).join('');
   return `
     <section>
       <h2>Spacing</h2>
@@ -87,7 +132,7 @@ function renderRadius(radius) {
   if (!radius || typeof radius !== 'object') return '';
   const samples = Object.entries(radius).map(([k, v]) => `
       <div class="radius-sample">
-        <div class="radius-box" style="border-radius: ${esc(v)}"></div>
+        <div class="radius-box" style="border-radius: ${safeCss(v, '0')}"></div>
         <code>--radius-${esc(k)}: ${esc(v)}</code>
       </div>`).join('');
   return `
@@ -97,26 +142,46 @@ function renderRadius(radius) {
     </section>`;
 }
 
+// W7.5 R6：font-family 较宽松（系统字体名含空格/逗号），用专门白名单
+function safeFont(v, fallback = 'system-ui, sans-serif') {
+  if (!v) return fallback;
+  const s = String(v).trim();
+  if (s.length === 0 || s.length > 200) return fallback;
+  // 字体名含字母/数字/连字符/逗号/空格/引号/点；禁分号/大括号/url/expression
+  if (/[;{}]|<\/|url\s*\(|expression\s*\(|@import|javascript:/i.test(s)) return fallback;
+  if (!/^[A-Za-z0-9一-龥\s,'".\-_]+$/.test(s)) return fallback;
+  return esc(s);
+}
+
 function renderTypography(typo) {
   if (!typo || typeof typo !== 'object') return '';
-  const fontSans  = typo['font-sans']  || 'system-ui, sans-serif';
-  const fontMono  = typo['font-mono']  || 'monospace';
-  const fontSerif = typo['font-serif'] || 'serif';
+  const fontSans  = safeFont(typo['font-sans']);
+  const fontMono  = safeFont(typo['font-mono'], 'ui-monospace, monospace');
+  const fontSerif = safeFont(typo['font-serif'], 'ui-serif, serif');
   const scale     = Array.isArray(typo.scale) ? typo.scale : [];
 
-  const scaleSamples = scale.map((px, i) => `
-      <div class="type-sample" style="font-family: ${esc(fontSans)}; font-size: ${px}px;">
-        <span class="type-token"><code>--text-${i}</code> · ${px}px</span>
+  const scaleSamples = scale.map((px, i) => {
+    const num = Number(px);
+    if (!Number.isFinite(num) || num <= 0 || num > 200) {
+      return `
+      <div class="type-sample">
+        <span class="type-token"><code>--text-${i}</code> · ${esc(String(px))}（非法值已忽略）</span>
+      </div>`;
+    }
+    return `
+      <div class="type-sample" style="font-family: ${fontSans}; font-size: ${num}px;">
+        <span class="type-token"><code>--text-${i}</code> · ${num}px</span>
         <span class="type-text">敏捷的棕色狐狸跳过懒狗 The quick brown fox jumps over the lazy dog</span>
-      </div>`).join('');
+      </div>`;
+  }).join('');
 
   return `
     <section>
       <h2>Typography</h2>
       <p>
-        <strong>Sans</strong>: <span style="font-family: ${esc(fontSans)}">${esc(fontSans)} — 敏捷的棕色狐狸 The quick brown fox</span><br/>
-        <strong>Mono</strong>: <span style="font-family: ${esc(fontMono)}">${esc(fontMono)} — 0123456789 const x = 42</span><br/>
-        <strong>Serif</strong>: <span style="font-family: ${esc(fontSerif)}">${esc(fontSerif)} — 敏捷的棕色狐狸 The quick brown fox</span>
+        <strong>Sans</strong>: <span style="font-family: ${fontSans}">${fontSans} — 敏捷的棕色狐狸 The quick brown fox</span><br/>
+        <strong>Mono</strong>: <span style="font-family: ${fontMono}">${fontMono} — 0123456789 const x = 42</span><br/>
+        <strong>Serif</strong>: <span style="font-family: ${fontSerif}">${fontSerif} — 敏捷的棕色狐狸 The quick brown fox</span>
       </p>
       <div class="type-scale">${scaleSamples}</div>
     </section>`;
@@ -126,7 +191,7 @@ function renderShadows(shadows) {
   if (!shadows || typeof shadows !== 'object') return '';
   const samples = Object.entries(shadows).map(([k, v]) => `
       <div class="shadow-sample">
-        <div class="shadow-box" style="box-shadow: ${esc(v)}"></div>
+        <div class="shadow-box" style="box-shadow: ${safeCss(v, 'none')}"></div>
         <code>--shadow-${esc(k)}</code>
       </div>`).join('');
   return `
@@ -139,11 +204,14 @@ function renderShadows(shadows) {
 function renderMotion(motion) {
   if (!motion || typeof motion !== 'object') return '';
   const durations = motion.duration || {};
-  const samples = Object.entries(durations).map(([k, v]) => `
+  const samples = Object.entries(durations).map(([k, v]) => {
+    const safeDur = safeCss(v, '200ms');
+    return `
       <div class="motion-sample">
-        <div class="motion-box" style="--motion-duration: ${esc(v)}; animation-duration: ${esc(v)}"></div>
+        <div class="motion-box" style="--motion-duration: ${safeDur}; animation-duration: ${safeDur}"></div>
         <code>--motion-${esc(k)}: ${esc(v)}</code>
-      </div>`).join('');
+      </div>`;
+  }).join('');
   return `
     <section>
       <h2>Motion</h2>
@@ -213,6 +281,10 @@ export function renderTokensHtml(tokens) {
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
+<!-- W7.5 R6：CSP 防御层。即使 inline style 注入绕过 isValidCssValue/safeFont
+  白名单，浏览器也会拒绝执行 inline script / 加载外部 url() 资源。 -->
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
 <title>Design Tokens Preview</title>
 <style>${css}</style>
 </head>
