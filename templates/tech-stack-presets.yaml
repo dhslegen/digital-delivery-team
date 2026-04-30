@@ -150,7 +150,7 @@ presets:
       ui:
         css: tailwindcss
         components: shadcn-ui
-    ai_design: lovable
+    ai_design: claude-design
 
 ai_design_options:
   claude-design:
@@ -168,8 +168,3 @@ ai_design_options:
     flow: 用 v0.dev 生成的 React 组件直接 import 到 web/components/
     skill: ai-native-design
     requires_external: v0-cli
-  lovable:
-    label: Lovable.dev
-    flow: 从 Lovable 项目导出 zip → 解压到 web/ → 接入 api-contract.yaml
-    skill: ai-native-design
-    requires_external: lovable-export-zip

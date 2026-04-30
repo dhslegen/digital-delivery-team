@@ -115,7 +115,8 @@ function buildAdditionalContext(cwd, projectId, bootstrapped) {
   lines.push('- `/impl` — 前后端并行实现');
   lines.push('- `/verify` — 测试 + 评审并行');
   lines.push('- `/fix --severity blocker|warning [--apply]` — 按 review-report 修复（默认 dry-run）');
-  lines.push('- `/import-design --from figma|v0|lovable|claude-design --url <url>` — 导入 AI 设计稿');
+  lines.push('- `/design-brief` — 从 PRD + 契约编译结构化 brief（10 字段 SSoT）');
+  lines.push('- `/design-execute --channel claude-design|figma|v0 [--bundle <path>|--url <share>]` — 派发 brief 到外部 AI 设计工具，再摄取产物');
   lines.push('- `/ship` — 交付出包 + 效率报告');
   lines.push('- `/digital-delivery-team:resume` — 跨会话恢复进度');
   lines.push('- `/digital-delivery-team:doctor` — 安装自检');

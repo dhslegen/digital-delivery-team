@@ -22,9 +22,12 @@ test('preset 文件存在且 default_preset = java-modern', () => {
   for (const preset of ['java-modern', 'java-traditional', 'node-modern', 'go-modern', 'python-fastapi']) {
     assert.ok(text.includes(`${preset}:`), `预设 ${preset} 缺失`);
   }
-  for (const aiOpt of ['claude-design', 'figma', 'v0', 'lovable']) {
+  for (const aiOpt of ['claude-design', 'figma', 'v0']) {
     assert.ok(text.includes(`${aiOpt}:`), `ai-design ${aiOpt} 选项缺失`);
   }
+  // v0.8 W3：lovable 通道已删除
+  assert.ok(!text.includes('lovable:'),
+    'v0.8 W3 已删除 lovable 通道，tech-stack-presets.yaml 不应再含 lovable');
 });
 
 test('优先级 1：CLI flag --preset 覆盖一切', () => {
@@ -60,7 +63,7 @@ test('优先级 3：已存在的 .ddt/tech-stack.json', () => {
   try {
     mkdirSync(join(tmp, '.ddt'), { recursive: true });
     writeFileSync(join(tmp, '.ddt', 'tech-stack.json'),
-      JSON.stringify({ preset: 'python-fastapi', ai_design: { type: 'lovable' } }));
+      JSON.stringify({ preset: 'python-fastapi', ai_design: { type: 'figma' } }));
     const r = runResolve(tmp);
     assert.equal(r.status, 0);
     const stack = JSON.parse(r.stdout);

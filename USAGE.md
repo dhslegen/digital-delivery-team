@@ -66,7 +66,7 @@ delivery-<project-id>-<timestamp>.tar.gz
 
 ## 场景二：技术栈交互式选型（v0.6.1+，推荐路径）
 
-**适用**：项目要求灵活技术栈；想从 Spring Initializr 等价问卷中选；想要 v0/figma/lovable 设计源接入。
+**适用**：项目要求灵活技术栈；想从 Spring Initializr 等价问卷中选；想要 claude-design / figma / v0 设计源接入。
 
 ### 方案 A：brief 写 interactive（推荐）
 
@@ -188,25 +188,30 @@ brief 中填详细字段：
 
 ---
 
-## 场景五：导入外部 AI 设计稿
+## 场景五：AI 原生 UI 设计与代码一体化（v0.8 W3 重构）
 
-**适用**：UI 设计在 figma / v0 / lovable 完成，要落地为 React 代码。
+**适用**：UI 设计在 claude.ai/design / figma / v0 完成，要落地为符合契约的 React + Tailwind 代码。
+
+工作流分两步（`/import-design` 在 v0.8 直接删除，无 alias 链）：
 
 ```text
-# Figma（要求 figma-mcp-server 已配置）
-/import-design --from figma --url https://figma.com/design/abc/MyApp?node-id=12-34
+# Step 1：从 PRD + 契约编译结构化 brief（10 字段 SSoT）
+/design-brief
 
-# v0（推荐配 node-modern preset）
-/import-design --from v0 --url https://v0.dev/r/xxx
+# Step 2A：claude-design 通道（首选；用户已订阅 Claude，零成本零网络外发）
+/design-execute --channel claude-design
+# → 用户在 claude.ai/design 迭代，导出 zip
+/design-execute --channel claude-design --bundle ~/Downloads/design.zip
 
-# Lovable（推荐配 python-fastapi preset）
-/import-design --from lovable --url https://github.com/user/lovable-export
+# Step 2B：figma 通道（要求 figma-mcp-server 已配置）
+/design-execute --channel figma
+# → main thread 调 figma MCP get_design_context 拉设计稿
 
-# Claude artifact 直接生成（默认）
-/import-design --from claude-design
+# Step 2C：v0 通道
+/design-execute --channel v0 --url https://v0.dev/r/xxx
 ```
 
-输出落入 `web/`，自动通过契约对齐检查（`bin/check-contract-alignment.mjs`）。
+摄取产物落入 `.ddt/design/<channel>/raw/`（staging），main thread 按 `skills/ai-native-design/SKILL.md::§7 main thread 改写 7 步流程` 改写为 `web/components/` + `web/styles/tokens.css`，通过契约对齐检查（`bin/check-contract-alignment.mjs`）。
 
 详细工作流见 `skills/ai-native-design/SKILL.md`。
 

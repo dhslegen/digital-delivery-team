@@ -42,7 +42,7 @@
 ### 快捷预设（路径 1）
 
 - **技术栈预设**：java-modern  <!-- 候选：java-modern | java-traditional | node-modern | go-modern | python-fastapi | custom | interactive -->
-- **AI-native UI**：claude-design  <!-- 候选：claude-design | figma | v0 | lovable | none -->
+- **AI-native UI**：claude-design  <!-- 候选：claude-design | figma | v0 | none -->
 
 ### 后端组件（路径 3，仅在 preset=custom 时需要填）
 

@@ -445,6 +445,3 @@ ai_design:
   v0:
     description: v0 share URL → npx shadcn add
     requires_external: v0 share URL
-  lovable:
-    description: Lovable export → 移除 supabase → 接 OpenAPI client
-    requires_external: lovable export zip

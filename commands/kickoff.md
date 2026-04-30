@@ -1,6 +1,6 @@
 ---
 description: 新项目起手 · 串行跑 /prd → /wbs → /design；默认 interactive（每步决策门），--auto 跳过决策门。
-argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [补充需求描述]"
+argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0] [补充需求描述]"
 ---
 
 # /kickoff
@@ -31,7 +31,7 @@ argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fast
   "preset": "<step1 推断的 preset 名>",
   "backend":  { "language": "...", "framework": "...", "database": { "primary": "..." } },
   "frontend": { "framework": "...", "ui": { "components": "..." } },
-  "ai_design": { "type": "claude-design | figma | v0 | lovable" }
+  "ai_design": { "type": "claude-design | figma | v0" }
 }
 ```
 

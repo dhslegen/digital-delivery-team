@@ -1,5 +1,5 @@
 // H6: bin/check-contract-alignment.mjs 集成测试
-//   契约对齐检查是 /import-design Phase 4 与 /build-* VERIFY phase 的硬门禁，
+//   契约对齐检查是 /design-execute 摄取 + main thread 改写 与 /build-* VERIFY phase 的硬门禁，
 //   缺测试保护时脚本逻辑漂移会让违规绕过。本测试覆盖 5 种典型场景。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

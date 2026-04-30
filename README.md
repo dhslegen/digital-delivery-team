@@ -144,7 +144,8 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 | 命令 | 用途 |
 |------|------|
 | `/fix [--severity blocker\|warning\|all] [--apply]` | 按 review-report 修复，默认 dry-run |
-| `/import-design --from figma\|v0\|lovable\|claude-design --url <url>` | 从外部 AI 设计源生成符合契约的 React + Tailwind 组件 |
+| `/design-brief` | 从 PRD + 契约编译结构化 brief（10 字段 SSoT） |
+| `/design-execute --channel claude-design\|figma\|v0 [--bundle <path>\|--url <share>]` | 派发 brief 到外部 AI 设计工具，再摄取产物到 `.ddt/design/<channel>/raw/` |
 | `/preview <prd\|wbs\|design\|impl\|test\|review\|fix\|package\|report\|all>` | 输出指定 phase 关键摘要 + diff（决策门前快速扫一眼） |
 | `/resume` | 显示当前进度 + 下一步建议（同会话恢复） |
 | `/relay [--out <path>]` | **跨会话接力**：13 段式 prompt 输出，复制到下一会话即可续作 |
@@ -164,7 +165,7 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 | `java-traditional` | Spring Boot 2.7 + MySQL 5.7 + Maven + MyBatis | Vue 3 + Element Plus | claude-design |
 | `node-modern` | Nest.js 10 + Postgres + Prisma | Next.js 14 (App Router) + Tailwind + shadcn-ui | v0 |
 | `go-modern` | Gin + Postgres + GORM | React 18 + Tailwind + shadcn-ui | claude-design |
-| `python-fastapi` | FastAPI + Postgres + SQLAlchemy + Alembic | React 18 + Tailwind + shadcn-ui | lovable |
+| `python-fastapi` | FastAPI + Postgres + SQLAlchemy + Alembic | React 18 + Tailwind + shadcn-ui | claude-design |
 
 ### Spring Initializr 等价问卷（推荐路径，v0.6.1+）
 
@@ -187,16 +188,22 @@ CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.ddt/t
 
 ---
 
-## AI-native UI 通道
+## AI-native UI 通道（v0.8 W3 重构：brief 编译器 + 3 通道分发器）
 
-`/import-design --from <type>` 把 4 种主流 AI 设计源转化为符合 `docs/api-contract.yaml` 的 React + Tailwind 组件：
+工作流分两步（v0.8 删除 `/import-design` 与 `lovable` 通道）：
+
+```text
+/design-brief                                    # 从 PRD + 契约编译 10 字段 brief
+/design-execute --channel <type> [...]           # 派发 brief 到外部工具 + 摄取产物
+```
 
 | 通道 | 适用场景 | 工作流要点 |
 |------|---------|----------|
-| `claude-design` ⭐ | 默认零依赖 | Claude artifact 直接生成 React + Tailwind + shadcn |
-| `figma` | 设计稿驱动 | Figma MCP `get_design_context` → 转 React + Tailwind |
-| `v0` | Next.js 现代化 UI | 解析 v0 share URL → `npx shadcn add` → 接 OpenAPI client |
-| `lovable` | UI 重的 ToC | Lovable 导出 → 移除 supabase 依赖 → 接 OpenAPI client |
+| `claude-design` ⭐ | 首选默认；用户已订阅 Claude，零成本零网络外发 | brief → claude.ai/design 迭代 → `--bundle <zip>` 摄取 → main thread 按 SKILL §7 改写 |
+| `figma` | 设计稿驱动 | brief → figma MCP 引导清单 → main thread 调 `get_design_context` → 转 React + Tailwind |
+| `v0` | Next.js 现代化 UI | brief → `--url <share>` → 解析 v0 share URL → `npx shadcn add` → 接 OpenAPI client |
+
+> v0.7 的 `lovable` 通道在 v0.8 删除——强 Supabase 集成与 DDT 后端契约冲突，不做 alias（密集开发期无历史用户）。
 
 详细工作流见 `skills/ai-native-design/SKILL.md`。
 
@@ -253,7 +260,7 @@ project-brief.md
 | `api-contract-first` | OpenAPI 3.0 契约设计规范 | DDT |
 | `efficiency-metrics` | 度量基线 + 效率报告 | DDT |
 | `delivery-package` | README/deploy/demo 模板 | DDT |
-| `ai-native-design` | 4 套 AI 设计源工作流（claude/figma/v0/lovable） | DDT |
+| `ai-native-design` | 3 套 AI 设计源工作流（claude/figma/v0；v0.8 删 lovable） | DDT |
 | **`backend-development`** | 后端实现知识包（替代 backend-agent，v0.7.0） | DDT |
 | **`frontend-development`** | 前端实现知识包（替代 frontend-agent，v0.7.0） | DDT |
 | **`validation-loop`** | 每文件 build/lint/test，失败立即停 | DDT (v0.7.0) |
@@ -335,7 +342,7 @@ hooks → ~/.claude/delivery-metrics/events.jsonl
 | 0 | 成功 | 所有命令 |
 | 1 | 前置条件未满足（必读文件缺失 / `DDT_PLUGIN_ROOT` 未解析 / 参数错误） | 各命令 Phase 1 |
 | 2 | 存在未解决 blocker（`docs/blockers.md` 中 `resolved_at: null`） | `bin/check-blockers.sh` |
-| 3 | 契约对齐失败（`/import-design` 生成代码引入禁用模式） | `bin/check-contract-alignment.mjs` |
+| 3 | 契约对齐失败（`/design-execute` 摄取的代码或 main thread 改写引入禁用模式） | `bin/check-contract-alignment.mjs` |
 | 4 | OpenAPI lint 失败（schema 错误 / security 未声明等） | `/design`、`/impl`、`/kickoff` |
 | 5 | OpenAPI lint 工具缺失（`npx` 不可用 / `@redocly/cli` 未装） | 同上 |
 

@@ -230,7 +230,9 @@ const AI_DESIGN_STRING_MAP = {
   'claude-design': { type: 'claude-design' },
   'figma':         { type: 'figma' },
   'v0':            { type: 'v0' },
-  'lovable':       { type: 'lovable' },
+  // v0.8 W3 删除 lovable 通道（强 Supabase 集成与 DDT 后端契约冲突）；
+  //   迁移：旧 .ddt/tech-stack.json 中 ai_design.type=lovable 在 v0.8 不再被识别，
+  //   resolveAiDesign 会拒绝并 exit 2，提示用户改 figma/v0/claude-design。
   'none':          { type: 'claude-design' },     // 用户选"不需要"= claude-design 默认通道
 };
 

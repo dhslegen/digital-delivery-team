@@ -73,8 +73,9 @@ main thread **必读**：
 - <文件路径>: <pattern>
 
 ## AI 设计源
-- type: <claude-design / figma / v0 / lovable>
-- 是否需要先跑 /import-design: <yes/no>
+- type: <claude-design / figma / v0>
+- design brief 是否就绪: <yes/no>（无则先 `/design-brief` 编译）
+- 是否需要先跑 /design-execute --channel <X>: <yes/no>
 ```
 
 ## Phase 3 — PLAN
@@ -85,7 +86,7 @@ main thread **必读**：
 - Files to Create / Modify
 - Build Sequence（types → api client → atoms → molecules → pages → tests）
 - Validation Strategy
-- AI 设计源接入说明（若 ai_design.type 非 claude-design，先跑 /import-design）
+- AI 设计源接入说明（若 ai_design.type 非 claude-design 且 brief 未派发，先跑 `/design-brief` 再 `/design-execute --channel <type>`）
 
 `--module <name>` 时只规划该模块（如 `--module task-board` 只规划看板页相关组件）。
 
@@ -132,10 +133,9 @@ fi
 
 | type | 行为 |
 |------|------|
-| claude-design | main thread 基于 PRD + contract + Tailwind/shadcn 直接生成 |
-| figma | 跑 `/import-design --from figma --url <url>` 拉设计稿后转 React+Tailwind |
-| v0 | 跑 `npx shadcn@latest add <component>` 拉 v0 组件 |
-| lovable | clone/解压 → 移除 supabase → 接 OpenAPI client |
+| claude-design | `/design-execute --channel claude-design` → 用户在 claude.ai/design 迭代 → `--bundle <zip>` 摄取 → main thread 按 ai-native-design SKILL §7 改写 |
+| figma | `/design-execute --channel figma` → 写 MCP 引导清单 → main thread 调 figma MCP get_design_context → 按 SKILL §7 转 React+Tailwind |
+| v0 | `/design-execute --channel v0 --url <share>` → 解析 share URL → `npx shadcn@latest add <component>` |
 
 ## Phase 6 — VERIFY
 

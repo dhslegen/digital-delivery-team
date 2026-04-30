@@ -131,14 +131,17 @@ test('project-brief 模板含技术栈预设字段', () => {
     '模板必须有 AI-native UI 字段');
 });
 
-test('tech-stack-presets.yaml 与 ai_design_options 一致', () => {
+test('tech-stack-presets.yaml 与 ai_design_options 一致（v0.8: 3 通道）', () => {
   const text = read('templates/tech-stack-presets.yaml');
   // 提取 ai_design_options 下的所有选项
   const aiOptionsSection = text.split('ai_design_options:')[1] || '';
-  for (const opt of ['claude-design', 'figma', 'v0', 'lovable']) {
+  for (const opt of ['claude-design', 'figma', 'v0']) {
     assert.ok(aiOptionsSection.includes(`${opt}:`),
       `ai_design_options 缺 ${opt}`);
     assert.ok(aiOptionsSection.includes('skill: ai-native-design'),
       `${opt} 必须引用 ai-native-design skill`);
   }
+  // v0.8 W3：lovable 通道删除（强 Supabase 集成与 DDT 后端契约冲突）
+  assert.ok(!aiOptionsSection.includes('lovable:'),
+    'v0.8 W3 已删除 lovable 通道，ai_design_options 不应再含此条目');
 });

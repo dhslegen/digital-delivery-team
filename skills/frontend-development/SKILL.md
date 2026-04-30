@@ -14,7 +14,7 @@ origin: DDT
 - `/build-web` 命令的 IMPLEMENT phase（**仅 `frontend.type === "spa"`**；`server-side` / `none` 由 build-web Phase 1 提前 noop 退出）
 - `/impl` 命令串行执行前端阶段
 - 任何 main thread 写 `web/**/*.{tsx,ts,vue,html,css}` 文件时
-- `/import-design --from <type>` 导入外部设计源时
+- `/design-brief` 编译 brief 与 `/design-execute --channel <type>` 派发/摄取外部设计稿时
 
 > **PR-E（v0.7.2）**：当 `.ddt/tech-stack.json::frontend.type` 是 `server-side`（Thymeleaf/JSP/FreeMarker/...）或 `none` 时，没有独立的 `web/` 工程，本 skill **不应被触发**。模板由 backend 项目（如 `src/main/resources/templates/`）承载，归 `/build-api` + `skills/backend-development` 处理。
 
@@ -24,7 +24,7 @@ origin: DDT
 - `docs/prd.md`（UX 语义参考）
 - `.ddt/tech-stack.json`（前端栈 + ai_design 选项 SSoT，禁止偏离）
 - `skills/api-contract-first/SKILL.md`（契约优先原则）
-- `skills/ai-native-design/SKILL.md`（AI 设计稿工作流：claude-design / figma / v0 / lovable）
+- `skills/ai-native-design/SKILL.md`（AI 设计稿工作流：claude-design / figma / v0）
 - `contexts/delivery.md`（DDT 全局上下文）
 - `rules/delivery/agent-invariants.md`（6 条全局不变量）
 
@@ -35,7 +35,7 @@ origin: DDT
 3. **代码组织**：`web/` 目录；组件测试放 `web/__tests__/`
 4. **统一 client**：所有网络调用走统一 client（自动从 OpenAPI 生成 types，如 `openapi-typescript`）
 5. **栈刚性约束**：必须使用 `.ddt/tech-stack.json::frontend` 段定义的 framework / bundler / ui / state / data_fetching；禁止偏离
-6. **AI-native UI 工作流**：按 `tech-stack.json::ai_design.type` 决定 UI 来源（claude-design / figma / v0 / lovable）
+6. **AI-native UI 工作流**：按 `tech-stack.json::ai_design.type` 决定 UI 来源（claude-design / figma / v0）；接入流程统一为 `/design-brief` → `/design-execute --channel <type>` → main thread 按 `ai-native-design SKILL §7` 改写
 7. **SSoT 锁死**：`.ddt/tech-stack.json` 仅可 Read，**严禁 Write/Edit/MultiEdit**（PreToolUse hook 硬拦截）
 8. **validation loop**：每完成一个组件立即跑 build / lint / type-check / 组件测试，失败立即停下
 
@@ -65,7 +65,7 @@ origin: DDT
 
 按 plan 逐步：写代码 → validation-loop → checkpoint commit。
 
-若 `tech-stack.json::ai_design.type` 是 figma / v0 / lovable，先跑 `/import-design` 拉外部源。
+若 `tech-stack.json::ai_design.type` 是 figma / v0，先跑 `/design-brief` 编译 brief，再 `/design-execute --channel <type>` 派发 + 摄取，最后 main thread 按 `ai-native-design SKILL §7` 改写为符合契约的 React 组件。
 
 ### Phase 5: VERIFY
 
@@ -89,10 +89,9 @@ origin: DDT
 
 | type | 流程 |
 |------|------|
-| claude-design（默认） | main thread 基于 PRD + contract + shadcn 生成组件 |
-| figma | `/import-design --from figma --url ...` → 调 figma MCP get_design_context → 转 React+Tailwind |
-| v0 | `/import-design --from v0 --url <share>` → 解析 share URL → `npx shadcn@latest add ...` |
-| lovable | `/import-design --from lovable --url <github>` → 移除 supabase → 接 OpenAPI client |
+| claude-design（默认） | `/design-brief` 编 brief → `/design-execute --channel claude-design` 生成 prompt 包 → 用户在 claude.ai/design 迭代 → `--bundle <zip>` 摄取到 `.ddt/design/claude-design/raw/` → main thread 按 `ai-native-design SKILL §7` 改写 |
+| figma | `/design-brief` → `/design-execute --channel figma` 写 MCP 引导清单 → main thread 调 figma MCP `get_design_context` → 按 §7 转 React+Tailwind |
+| v0 | `/design-brief` → `/design-execute --channel v0 --url <share>` → 解析 share URL → `npx shadcn@latest add ...` → 按 §7 接 OpenAPI client |
 
 详见 `skills/ai-native-design/SKILL.md`。
 

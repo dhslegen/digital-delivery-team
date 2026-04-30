@@ -1,6 +1,6 @@
 ---
 description: 架构师命令 · 生成架构草案 + OpenAPI 契约 + 数据模型。
-argument-hint: "[--refresh] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0|lovable] [架构倾向性说明]"
+argument-hint: "[--refresh] [--preset java-modern|node-modern|go-modern|python-fastapi|java-traditional] [--ai-design claude-design|figma|v0] [架构倾向性说明]"
 ---
 
 # /design
