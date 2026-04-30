@@ -408,7 +408,8 @@ async function main() {
   };
 
   const totalScore = Object.values(dims).reduce((s, d) => s + d.score, 0);
-  const threshold  = Number(args.threshold) || 70;
+  // 注意：args.threshold === '0' 时 Number('0') === 0 是 falsy，需显式 undefined 检查
+  const threshold  = args.threshold !== undefined ? Number(args.threshold) : 70;
   const passed     = totalScore >= threshold;
 
   const scorecard = {

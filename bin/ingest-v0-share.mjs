@@ -53,8 +53,9 @@ export function isValidV0Url(url) {
   const host = m[1].toLowerCase();
   const allowedHosts = ['v0.dev', 'vercel.com', 'v0.app'];
   if (!allowedHosts.some(h => host === h || host.endsWith(`.${h}`))) return false;
-  // 标准 URL 字符（与 design-execute.md 的 B4 校验一致）
-  if (!/^https?:\/\/[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+$/.test(url)) return false;
+  // 严格白名单：去掉 shell 元字符（; ( ) $ * + , 等），即便 RFC 3986 允许
+  // 实际 v0 share URL 只用 / ? = & # % - 等核心字符
+  if (!/^https:\/\/[A-Za-z0-9._~:/?#@!&'=%-]+$/.test(url)) return false;
   return true;
 }
 
