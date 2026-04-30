@@ -35,6 +35,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 import { ANTI_PATTERNS } from './compile-design-brief.mjs';
 
@@ -86,6 +87,23 @@ function parseArgs(argv) {
 
 function ensureDir(p) { mkdirSync(p, { recursive: true }); }
 
+// W7.5 R8：占位符过滤
+//   brief 模板里大量 `<persona>` / `<填写 ...>` / `<待填>` 形式的占位符
+//   原 parseBriefMeta 抽到这些就当真值塞进 prompt，下游通道收到的就是 `<persona>` 字面字符串。
+//   本函数把仍是占位的字段视为空，让 prompt 渲染层能正确显示 fallback。
+export function isPlaceholder(value) {
+  if (value === null || value === undefined) return true;
+  const s = String(value).trim();
+  if (s.length === 0) return true;
+  // 形如 <foo> / <填写 ...> / <待填> / <未填写>
+  if (/^<[^<>]*>$/.test(s)) return true;
+  // 中文常用占位语
+  if (/^(待填|未填|未填写|TODO|TBD|无)$/i.test(s)) return true;
+  return false;
+}
+
+function cleanField(s) { return isPlaceholder(s) ? '' : String(s).trim(); }
+
 // 从 design-brief.md 抽取关键字段（用于填 prompt 模板占位）
 export function parseBriefMeta(briefText) {
   const meta = {
@@ -106,16 +124,16 @@ export function parseBriefMeta(briefText) {
   // visual_direction（来自 §8.1 yaml 块）
   const vdMatch = briefText.match(/visual_direction:\s*\n\s*selected:\s*([^\s\n]+)\s*\n\s*rationale:\s*([^\n]+)/);
   if (vdMatch) {
-    meta.visualDirection = vdMatch[1].trim().replace(/^[<>]/, '').replace(/[<>]$/, '');
-    meta.visualRationale = vdMatch[2].trim();
+    meta.visualDirection = cleanField(vdMatch[1].replace(/^[<>]/, '').replace(/[<>]$/, ''));
+    meta.visualRationale = cleanField(vdMatch[2]);
   }
 
   // §1 Problem Alignment
   const problemMatch = briefText.match(/##\s*1\.\s*Problem Alignment[\s\S]*?(?=##\s*2\.)/);
   if (problemMatch) {
     const seg = problemMatch[0];
-    meta.persona = (seg.match(/\*\*用户\*\*[：:]\s*([^\n]+)/) || [])[1] || '';
-    meta.painPoint = (seg.match(/\*\*痛点\*\*[：:]\s*([^\n]+)/) || [])[1] || '';
+    meta.persona = cleanField((seg.match(/\*\*用户\*\*[：:]\s*([^\n]+)/) || [])[1]);
+    meta.painPoint = cleanField((seg.match(/\*\*痛点\*\*[：:]\s*([^\n]+)/) || [])[1]);
   }
 
   // §2 User Stories（连同表格保留）
@@ -142,7 +160,7 @@ export function parseBriefMeta(briefText) {
 
   // §9 References 风格关键词
   const styleMatch = briefText.match(/\*\*风格关键词\*\*[：:]\s*([^\n]+)/);
-  if (styleMatch) meta.styleKeywords = styleMatch[1].trim();
+  if (styleMatch) meta.styleKeywords = cleanField(styleMatch[1]);
 
   // §9 参考截图列表
   const refMatches = briefText.matchAll(/^-\s*`(\.ddt\/design\/assets\/[^`]+)`/gm);
@@ -347,6 +365,30 @@ function deriveV0(cwd, meta, opts) {
     const dstPath = join(sourcesDir, dst);
     writes.push({ from: srcPath, to: dstPath });
     if (!opts.dryRun && existsSync(srcPath)) copyFileSync(srcPath, dstPath);
+  }
+
+  // W7.5 R4：同时生成 openapi-types.ts（v0 模板里 import 它，但派生器原本没生成）
+  //   失败不阻塞——v0 通道仍可用，只是用户需手动跑 `npx openapi-typescript` 补
+  const typesPath = join(sourcesDir, 'openapi-types.ts');
+  if (!opts.dryRun) {
+    const apiYamlPath = join(cwd, 'docs/api-contract.yaml');
+    if (existsSync(apiYamlPath)) {
+      try {
+        execFileSync('npx', ['--yes', 'openapi-typescript', apiYamlPath, '-o', typesPath], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          encoding: 'utf8',
+          timeout: 60_000,
+        });
+        writes.push({ from: '<openapi-typescript>', to: typesPath });
+      } catch (e) {
+        const msg = e?.message?.split('\n')[0] || String(e);
+        console.error(`⚠️  openapi-types.ts 生成失败：${msg}`);
+        console.error(`   v0 通道仍可用；如需补，请在项目根跑：`);
+        console.error(`   npx openapi-typescript docs/api-contract.yaml -o ${typesPath}`);
+      }
+    }
+  } else {
+    writes.push({ from: '<openapi-typescript>', to: typesPath });
   }
 
   // tokens.css（从 tokens.json 派生 CSS variables）

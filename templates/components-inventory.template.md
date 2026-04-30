@@ -6,24 +6,30 @@
 ## 1. shadcn/ui 已安装组件
 
 > 来自 `web/components/ui/` 与 `components.json` 注册表。
+> **本表格内容由 design-brief-compiler 扫描后自动替换，请勿手编（手编会被覆盖）。**
 
 | 组件 | 路径 | 8 状态完备度 | 注释 |
 |------|------|-------------|------|
-| Button | `web/components/ui/button.tsx` | ✅ default/hover/active/disabled/focus/loading/error/success | 已含 variant: primary/secondary/ghost/destructive |
-| Input | `web/components/ui/input.tsx` | ⚠️ 缺 loading | 待补 |
+<!-- AUTO_SHADCN_TABLE_START -->
+| Button | `web/components/ui/button.tsx` | ✅ default/hover/active/disabled/focus/loading/error/success | 示例条目（编译时会替换） |
+| Input | `web/components/ui/input.tsx` | ⚠️ 缺 loading | 示例条目（编译时会替换） |
 | Form | `web/components/ui/form.tsx` | ✅ | react-hook-form + zod |
-| Card | `web/components/ui/card.tsx` | ⚠️ 缺 empty/error | 待补 |
+| Card | `web/components/ui/card.tsx` | ⚠️ 缺 empty/error | 示例条目（编译时会替换） |
 | Dialog | `web/components/ui/dialog.tsx` | ✅ | Radix 底座 |
+<!-- AUTO_SHADCN_TABLE_END -->
 
 ## 2. 项目自有组件
 
 > 来自 `web/components/` 中非 ui/ 的目录。
+> **本表格内容由 design-brief-compiler 扫描后自动替换，请勿手编。**
 
 | 组件 | 路径 | 用途 | 复用建议 |
 |------|------|------|---------|
-| `<DataTable>` | `web/components/data-table.tsx` | 通用数据表格 | 优先复用，新表格不要从零写 |
-| `<EmptyState>` | `web/components/empty-state.tsx` | 空态占位 | 所有"无数据"场景必须用 |
-| `<ErrorBoundary>` | `web/components/error-boundary.tsx` | 错误边界 | 路由级必须包裹 |
+<!-- AUTO_CUSTOM_TABLE_START -->
+| `<DataTable>` | `web/components/data-table.tsx` | 通用数据表格 | 示例条目（编译时会替换） |
+| `<EmptyState>` | `web/components/empty-state.tsx` | 空态占位 | 示例条目（编译时会替换） |
+| `<ErrorBoundary>` | `web/components/error-boundary.tsx` | 错误边界 | 示例条目（编译时会替换） |
+<!-- AUTO_CUSTOM_TABLE_END -->
 
 ## 3. 内部 monorepo 组件库（如有）
 

@@ -264,6 +264,61 @@ function ensureDir(p) {
   mkdirSync(p, { recursive: true });
 }
 
+// 把 scanComponents 结果替换 inventory 模板中两个 marker 之间的硬编码示例
+// W7.5 R3：之前 scanComponents 的结果只追加为 HTML 注释一行，下游 3 通道收到的"已有组件清单"
+//   永远是模板硬编码 5 行假数据，复用率红线无法生效。本函数让扫描结果真正落到表格里。
+//
+// marker 约定（templates/components-inventory.template.md）：
+//   <!-- AUTO_SHADCN_TABLE_START -->...<!-- AUTO_SHADCN_TABLE_END -->
+//   <!-- AUTO_CUSTOM_TABLE_START -->...<!-- AUTO_CUSTOM_TABLE_END -->
+export function renderInventory(template, components, ctx) {
+  let out = template
+    .replace('Components Inventory · <项目名称>', `Components Inventory · ${ctx.projectName}`)
+    .replace('generated_at: <ISO 8601 timestamp>', `generated_at: ${ctx.generatedAt}`);
+
+  // 渲染 shadcn 表格内容（marker 之间）
+  const shadcnRows = components.shadcn.length > 0
+    ? components.shadcn.map(c =>
+        `| ${capitalize(c.name)} | \`${c.path}\` | <待评估> | <待评估> |`
+      ).join('\n')
+    : '| _(未扫描到 shadcn/ui 组件，请先 `npx shadcn@latest init` 或确认 `web/components/ui/` 目录)_ | | | |';
+
+  out = replaceBetweenMarkers(out, 'AUTO_SHADCN_TABLE', shadcnRows);
+
+  // 渲染 custom 表格内容
+  const customRows = components.custom.length > 0
+    ? components.custom.map(c =>
+        `| \`<${capitalize(c.name)}>\` | \`${c.path}\` | <待评估> | 优先复用，新组件不要从零写 |`
+      ).join('\n')
+    : '| _(未扫描到 custom 组件)_ | | | |';
+
+  out = replaceBetweenMarkers(out, 'AUTO_CUSTOM_TABLE', customRows);
+
+  // 末尾追加扫描元信息（保留原行为）
+  const meta = components.shadcn.length > 0 || components.custom.length > 0
+    ? `\n\n<!-- 自动扫描：${components.shadcn.length} 个 shadcn 组件 / ${components.custom.length} 个 custom 组件 -->\n`
+    : '\n\n<!-- 自动扫描：未发现 web/components/，请项目初始化后重跑 -->\n';
+
+  return out + meta;
+}
+
+function capitalize(s) {
+  // 处理 kebab-case (data-table → DataTable) 与单词
+  return String(s)
+    .split(/[-_]/)
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1))
+    .join('');
+}
+
+function replaceBetweenMarkers(text, markerName, replacement) {
+  const re = new RegExp(
+    `(<!--\\s*${markerName}_START\\s*-->)[\\s\\S]*?(<!--\\s*${markerName}_END\\s*-->)`,
+    'm'
+  );
+  if (!re.test(text)) return text;  // 模板没 marker 就 noop（向后兼容）
+  return text.replace(re, `$1\n${replacement}\n$2`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
@@ -330,12 +385,7 @@ async function main() {
   // components-inventory
   const inventoryTemplate = readFileSync(TEMPLATE_INVENTORY, 'utf8');
   const components = scanComponents(cwd);
-  const inventoryOut = inventoryTemplate
-    .replace('Components Inventory · <项目名称>', `Components Inventory · ${ctx.projectName}`)
-    .replace('generated_at: <ISO 8601 timestamp>', `generated_at: ${ctx.generatedAt}`)
-    + (components.shadcn.length > 0
-      ? `\n\n<!-- 自动扫描：${components.shadcn.length} 个 shadcn 组件 / ${components.custom.length} 个 custom 组件 -->\n`
-      : '\n\n<!-- 自动扫描：未发现 web/components/，请项目初始化后重跑 -->\n');
+  const inventoryOut = renderInventory(inventoryTemplate, components, ctx);
 
   const inventoryPath = join(designDir, 'components-inventory.md');
 
