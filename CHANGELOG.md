@@ -4,6 +4,53 @@
 
 ---
 
+## [0.7.3] - 2026-04-30 — AI 执行 vs 用户审查时间拆分（PR-F）
+
+v0.7.2 真实测试 v2 数据揭示一个反直觉真相：当前 metric 系统给出的"-95% / -97% 提效率"
+**仅是端到端时间口径**，但 AI 单边执行（subagent_runs）的占比往往远低于此。
+
+实测 v2 ddt-real-audit-v2 数据：
+
+| Phase | 总工时(h) | AI 执行(h) | 用户审查 + 间隙(h) | AI 占比 |
+|-------|----------|-----------|------------------|--------|
+| design | 0.239 | 0.088 | 0.151 | 36.9% |
+| kickoff | 0.627 | 0.138 | 0.489 | 22.0% |
+| **prd** | **0.248** | **0.023** | **0.225** | **9.1%** |
+| report | 0.074 | 0.026 | 0.048 | 34.8% |
+| wbs | 0.072 | 0.027 | 0.044 | 38.2% |
+| **合计** | **1.260** | **0.302** | **0.958** | **24.0%** |
+
+整体仅 **24% 时间在跑 AI**，prd 阶段甚至只占 **9.1%**——这意味着真正的优化机会
+在用户审查与决策门，不在 AI 模型/prompt。
+
+### Added — 新增
+
+🟠 **PR-F AI 执行 vs 用户审查时间拆分**
+- `bin/lib/store.mjs::splitAiVsReviewByPhase(projectId)` 新增：
+  - 按时间窗 overlap（`Math.min(se,pe) - Math.max(ss,ps)`）把每个 phase 的 subagent_runs 累加成 AI 执行时长
+  - 鲁棒处理 subagent 跨 phase 边界、同 phase 多次执行
+  - 输出：`{ phase: { totalH, aiH, userH, ratio }, ... }`
+- `bin/report.mjs` 输出新增第 5 段"AI 执行 vs 用户审查时间拆分"：
+  - 5 列表格：Phase / 总工时 / AI 执行 / 用户审查 + 间隙 / AI 占比
+  - 含合计行 + 解读条款（< 30% / > 70% 两档建议）
+- `agents/metrics-agent.md` Hard Requirement 第 9 条：
+  - 必须在 final 报告 Q1/Q2 区分"AI 单边提效" vs "端到端提效"
+  - AI 占比 < 30% 时必须在 Q3 优化建议中指出"瓶颈在用户/决策门"
+- raw 报告章节顺序调整：原"## 5. 数据快照"重编号为"## 6. 数据快照"（PR-F 第 5 段插入）
+
+### 测试
+
+- `tests/integration/metric-chain.test.mjs` +2 用例：
+  - PR-F: splitAiVsReviewByPhase 按时间窗 overlap 拆分（构造 600s phase + 60s subagent → 验证 10% 占比）
+  - PR-F: report.mjs 输出 PR-F 段（端到端验证 5 列表格 + 50% 比率）
+- 总用例：156 → **158**（+2）；audit-smoke 8/8
+
+### 设计
+
+参考：`design/真实测试Audit_v2.md`「🟠 P1-3 AI 执行 vs 用户审查」章节实测数据。
+
+---
+
 ## [0.7.2] - 2026-04-30 — frontend.type 三态语义（PR-E）
 
 v0.7.1 真实测试 v2 发现的新 P0：用户选 Spring Boot + Thymeleaf 后，

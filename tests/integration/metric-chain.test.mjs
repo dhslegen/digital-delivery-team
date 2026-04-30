@@ -91,6 +91,77 @@ test('metric-chain: aggregate → baseline → report all pass', async () => {
   }
 });
 
+// PR-F: AI 执行 vs 用户审查时间拆分
+test('PR-F: splitAiVsReviewByPhase 按时间窗 overlap 拆分 AI / 用户工时', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-aireview-'));
+  try {
+    // 构造场景：prd phase 跑 600s（10min），其中 product-agent 子代理跑 60s（1min），
+    //   AI 占比 = 60/600 = 10%（典型用户审查为主场景）
+    const events = [
+      { event: 'phase_start',     project_id: 'p1', ts: '2026-04-25T00:00:00Z',
+        data: { session_id: 's1', phase: 'prd' } },
+      { event: 'subagent_start',  project_id: 'p1', ts: '2026-04-25T00:01:00Z',
+        data: { session_id: 's1', subagent_name: 'product-agent' } },
+      { event: 'subagent_stop',   project_id: 'p1', ts: '2026-04-25T00:02:00Z',
+        data: { session_id: 's1', subagent_name: 'product-agent', duration_ms: 60000, success: true } },
+      { event: 'phase_end',       project_id: 'p1', ts: '2026-04-25T00:10:00Z',
+        data: { session_id: 's1', phase: 'prd', duration_ms: 600000 } },
+    ];
+    writeFileSync(join(tmp, 'events.jsonl'),
+      events.map(e => JSON.stringify(e)).join('\n') + '\n');
+
+    const env = { ...process.env, DDT_METRICS_DIR: tmp };
+    spawnSync(process.execPath, [join(ROOT, 'bin', 'aggregate.mjs'), '--project', 'p1'],
+      { cwd: ROOT, env, encoding: 'utf8' });
+
+    const store = new DeliveryStore(join(tmp, 'metrics.db'));
+    await store.openOrCreate();
+    const split = store.splitAiVsReviewByPhase('p1');
+    store.close();
+
+    assert.ok(split.prd, 'split.prd 必存在');
+    assert.equal(split.prd.totalH.toFixed(4),  '0.1667', 'prd 总工时 600000ms = 0.1667h');
+    assert.equal(split.prd.aiH.toFixed(4),     '0.0167', 'AI 执行 60000ms = 0.0167h');
+    assert.equal(split.prd.userH.toFixed(4),   '0.1500', '用户/间隙 = 540000ms = 0.15h');
+    assert.equal((split.prd.ratio * 100).toFixed(1), '10.0', 'AI 占比 = 10%');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-F: report.mjs 输出"AI 执行 vs 用户审查时间拆分"段', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-airaw-'));
+  try {
+    const events = [
+      { event: 'phase_start',     project_id: 'p1', ts: '2026-04-25T00:00:00Z',
+        data: { session_id: 's1', phase: 'design' } },
+      { event: 'subagent_start',  project_id: 'p1', ts: '2026-04-25T00:01:00Z',
+        data: { session_id: 's1', subagent_name: 'architect-agent' } },
+      { event: 'subagent_stop',   project_id: 'p1', ts: '2026-04-25T00:06:00Z',
+        data: { session_id: 's1', subagent_name: 'architect-agent', duration_ms: 300000, success: true } },
+      { event: 'phase_end',       project_id: 'p1', ts: '2026-04-25T00:10:00Z',
+        data: { session_id: 's1', phase: 'design', duration_ms: 600000 } },
+    ];
+    writeFileSync(join(tmp, 'events.jsonl'),
+      events.map(e => JSON.stringify(e)).join('\n') + '\n');
+    const env = { ...process.env, DDT_METRICS_DIR: tmp };
+    spawnSync(process.execPath, [join(ROOT, 'bin', 'aggregate.mjs'), '--project', 'p1'],
+      { cwd: ROOT, env, encoding: 'utf8' });
+    const baselineOut = join(tmp, 'baseline.locked.json');
+    spawnSync(process.execPath, [join(ROOT, 'bin', 'baseline.mjs'), '--out', baselineOut],
+      { cwd: ROOT, env, encoding: 'utf8' });
+    const reportOut = join(tmp, 'efficiency-report.raw.md');
+    spawnSync(process.execPath,
+      [join(ROOT, 'bin', 'report.mjs'), '--project', 'p1', '--baseline', baselineOut, '--out', reportOut],
+      { cwd: ROOT, env, encoding: 'utf8' });
+
+    const content = readFileSync(reportOut, 'utf8');
+    assert.match(content, /AI 执行 vs 用户审查时间拆分/, 'PR-F 段标题');
+    // design phase: 总 600s, AI 300s → 50%
+    assert.match(content, /design.*0\.167.*0\.083.*0\.083.*50\.0%/,
+      'design 行应显示 总=0.167h / AI=0.083h / 用户=0.083h / 比率=50%');
+    assert.match(content, /AI 占比 < 30%/, '解读段必须含"AI 占比 < 30%"提示');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
 // P2-2 编排开销专项测试 — 用真实 phase_runs 验证 kickoff_total - SUM(子 phase) 公式
 test('P2-2: 编排开销 = kickoff 总工时 - 子 phase 合计', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-overhead-'));

@@ -254,6 +254,60 @@ export class DeliveryStore {
     return result;
   }
 
+  // PR-F: 把每个 phase 的总工时拆成 "AI 执行" + "用户审查/间隙"
+  //   AI 执行  = 落在 phase 时间窗内的所有 subagent_runs 时长（按 overlap 计算，鲁棒处理跨 phase 边界）
+  //   用户/间隙 = phase 总工时 - AI 执行
+  // 数据形状：
+  //   { prd: { totalH, aiH, userH, ratio }, wbs: {...}, ... }
+  // 用途：raw 报告"AI 执行 vs 用户审查"段；metrics-agent 区分"AI 单边提效"与"端到端提效"。
+  splitAiVsReviewByPhase(projectId) {
+    if (!projectId) return {};
+    const phases = this._db.prepare(
+      `SELECT phase, started_at, ended_at, duration_ms FROM phase_runs
+       WHERE project_id=? AND ended_at IS NOT NULL AND duration_ms IS NOT NULL
+       ORDER BY started_at`
+    ).all(projectId);
+    const subs = this._db.prepare(
+      `SELECT started_at, ended_at FROM subagent_runs
+       WHERE project_id=? AND duration_ms IS NOT NULL AND ended_at IS NOT NULL`
+    ).all(projectId);
+
+    // 把 subagent_runs 预解析成数值 ts，避免内层循环重复 Date.parse
+    const subMs = subs.map(r => ({
+      start: Date.parse(r.started_at),
+      end:   Date.parse(r.ended_at),
+    })).filter(r => Number.isFinite(r.start) && Number.isFinite(r.end));
+
+    // 同 phase 多次执行时累加（如重复跑 /report 应合并）
+    const accum = {};
+    for (const p of phases) {
+      const ps = Date.parse(p.started_at);
+      const pe = Date.parse(p.ended_at);
+      if (!Number.isFinite(ps) || !Number.isFinite(pe)) continue;
+      let aiMs = 0;
+      for (const s of subMs) {
+        // overlap = max(0, min(s.end, pe) - max(s.start, ps))
+        const overlap = Math.min(s.end, pe) - Math.max(s.start, ps);
+        if (overlap > 0) aiMs += overlap;
+      }
+      const totalMs = p.duration_ms;
+      accum[p.phase] = accum[p.phase] || { totalMs: 0, aiMs: 0 };
+      accum[p.phase].totalMs += totalMs;
+      accum[p.phase].aiMs    += aiMs;
+    }
+
+    // 转换为最终结果（小时 + 比率）
+    const result = {};
+    for (const [phase, v] of Object.entries(accum)) {
+      const totalH = v.totalMs / 3_600_000;
+      const aiH    = Math.min(v.aiMs, v.totalMs) / 3_600_000;     // 上限 totalMs（防 subagent 溢出 phase）
+      const userH  = Math.max(0, totalH - aiH);
+      const ratio  = totalH > 0 ? aiH / totalH : null;
+      result[phase] = { totalH, aiH, userH, ratio };
+    }
+    return result;
+  }
+
   latestQuality(projectId) {
     return this._db.prepare(
       'SELECT * FROM quality_metrics WHERE project_id=? ORDER BY created_at DESC LIMIT 1'

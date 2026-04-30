@@ -77,6 +77,8 @@ process.on('exit', () => { try { store.close(); } catch (_) { /* already closed 
 
 const actualByAgent  = projectId ? store.aggregateStageHours(projectId) : {};
 const actualByPhase  = projectId ? store.aggregatePhaseHours(projectId) : {};
+// PR-F: AI 执行 vs 用户审查时间拆分
+const aiVsReview     = projectId ? store.splitAiVsReviewByPhase(projectId) : {};
 // T-R04: 改用 qualitySnapshot 分别获取测试和审查的最新行
 const { testRow, reviewRow } = projectId
   ? store.qualitySnapshot(projectId)
@@ -233,8 +235,41 @@ if (orchestrationBreakdown.length) {
   lines.push('');
 }
 
+// PR-F: AI 执行 vs 用户审查时间拆分（按 phase）
+const aiEntries = Object.entries(aiVsReview).sort(([a], [b]) => a.localeCompare(b));
+if (aiEntries.length) {
+  lines.push('## 5. AI 执行 vs 用户审查时间拆分');
+  lines.push('');
+  lines.push('> 把每个 phase 的总工时拆成两段：**AI 执行**（subagent_runs 在 phase 时间窗内的 SUM）');
+  lines.push('> 与 **用户审查 + 流程间隙**（总时间 - AI 执行）。AI 占比低意味着流程上有大量"非生成"等待时间，');
+  lines.push('> 这是优化决策门 / 异步审查的潜在切入点。');
+  lines.push('');
+  lines.push('| Phase | 总工时(h) | AI 执行(h) | 用户审查 + 间隙(h) | AI 占比 |');
+  lines.push('|-------|----------|-----------|------------------|--------|');
+  let sumTotal = 0, sumAi = 0;
+  for (const [phase, v] of aiEntries) {
+    sumTotal += v.totalH;
+    sumAi    += v.aiH;
+    const ratioPct = v.ratio !== null ? (v.ratio * 100).toFixed(1) + '%' : '—';
+    lines.push(`| ${phase} | ${v.totalH.toFixed(3)} | ${v.aiH.toFixed(3)} | ${v.userH.toFixed(3)} | ${ratioPct} |`);
+  }
+  const overallRatio = sumTotal > 0 ? (sumAi / sumTotal * 100).toFixed(1) + '%' : '—';
+  lines.push(`| **合计** | **${sumTotal.toFixed(3)}** | **${sumAi.toFixed(3)}** | **${(sumTotal - sumAi).toFixed(3)}** | **${overallRatio}** |`);
+  lines.push('');
+  lines.push('> **解读**：');
+  lines.push('> - AI 占比 < 30%：phase 大部分时间是"等用户"，决策门 / 审查可优化（异步通知、合并审查窗口）');
+  lines.push('> - AI 占比 > 70%：phase 受限于 AI 生成速度，可考虑模型/prompt 优化');
+  lines.push('> - 同一 phase 在不同项目对比 AI 占比，能识别"流程瓶颈是 AI 还是人"');
+  lines.push('');
+} else {
+  lines.push('## 5. AI 执行 vs 用户审查时间拆分');
+  lines.push('');
+  lines.push('_（暂无数据：subagent_runs 表为空或未关联到任何 phase。请先跑过包含子代理派发的命令，如 /prd / /design）_');
+  lines.push('');
+}
+
 // P2-1: 数据快照声明 — 让 metrics-agent / 用户清楚 raw 数据的时点边界
-lines.push('## 5. 数据快照说明');
+lines.push('## 6. 数据快照说明');
 lines.push('');
 lines.push(`- **raw 报告生成时点**：${ts}`);
 lines.push('- **统计口径**：仅含已配对完成的 phase（phase_start + phase_end 都已落盘）');
