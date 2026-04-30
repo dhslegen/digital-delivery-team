@@ -4,6 +4,125 @@
 
 ---
 
+## [0.8.0] - 2026-04-30 — 前端实现流程重构：Brief 编译器 + 3 通道分发器
+
+把"前端 UI 实现"重新定位为：**"PRD / OpenAPI 契约 → 结构化设计 Brief"的编译器 + 3 通道分发器**。
+
+新工作流：
+
+```text
+docs/prd.md + docs/api-contract.yaml + .ddt/tech-stack.json
+   ↓ /design-brief
+docs/design-brief.md（10 字段 SSoT）
+   ↓ /design-execute --channel
+.ddt/design/<channel>/upload-package/   （用户拖到外部工具 claude.ai/design / Figma / v0）
+   ↓ /design-execute --channel <X> --bundle <path>  或  --url <share>
+.ddt/design/<channel>/raw/   （staging）
+   ↓ main thread 按 ai-native-design SKILL §7 改写
+web/components/ + web/styles/tokens.css
+   ↓ 10 维客观评分决策门
+```
+
+### 🔴 Breaking Changes — 不兼容变更
+
+- **`/import-design` 命令直接删除**——不做 alias 链（密集开发期，无历史用户）
+- **`lovable` AI 设计通道删除**——强 Supabase 集成与 DDT 后端契约冲突；`bin/resolve-tech-stack.mjs::AI_DESIGN_STRING_MAP` 不再识别 `lovable`，CLI flag / 字符串输入 exit 2；旧 `.ddt/tech-stack.json` 含 `ai_design.type=lovable` 需手动改 `claude-design` / `figma` / `v0`
+- `templates/tech-stack-presets.yaml`：`python-fastapi` preset 默认 `ai_design` 从 `lovable` 改 `claude-design`
+- `argument-hint` 调整：`/kickoff` 与 `/design` 的 `--ai-design` 选项 `claude-design|figma|v0|lovable` → `claude-design|figma|v0`
+- v0.8 W3 起，`commands/*.md` 内调 `emit-phase --phase design-brief` / `--phase design-execute` 必须用 v0.8.0+ 的 `bin/emit-phase.mjs`（旧版会 exit 1）
+
+### Added — 新增
+
+🟣 **W1 — Brief 编译器**（`bin/compile-design-brief.mjs`）
+- 从 PRD / OpenAPI / tech-stack / 用户参考图编译 10 字段 SSoT
+- 复用 + 扫描已有 `web/components/` 写入 inventory
+- 9 种 visual_direction（industrial / luxury / playful / ...）+ 11 条 anti-patterns
+
+🟣 **W2 — 3 通道分发器**（`bin/derive-channel-package.mjs`）
+- `--channel claude-design`：upload-package 7 文件 + prompt.md（中文）
+- `--channel figma`：upload-package 7 文件 + prompt.md（TC-EBC 5 段）
+- `--channel v0`：v0-sources/ + project-instructions.md（含 OpenAPI types）
+- 11 anti-patterns 逐字注入 prompt（不省略）
+
+🟣 **W3 — slash 命令**
+- `/design-brief` — 编译 brief（W1）
+- `/design-execute --channel <X>` — 派发通道附件包（W2）+ 摄取（W4）+ 决策门
+
+🟣 **W4 — 3 通道摄取脚本**
+- `bin/ingest-claude-design.mjs` — zip 解压 + 红线检测（fetch/axios/lovable supabase 残留）
+- `bin/ingest-figma-context.mjs` — 写 MCP 引导清单（Figma MCP 只能在 Claude Code 会话内调）
+- `bin/ingest-v0-share.mjs` — 包装 `npx shadcn add` 解析 v0 share URL
+
+🟣 **W5 — `skills/ai-native-design/SKILL.md` 完整重写**
+- 131 → 490 行，3 通道完整章节
+- main thread 改写 7 步流程（红线 → tokens → 改写 → 状态 → 测试 → 评分 → commit）
+- 11 anti-patterns 详细矩阵 + 9 visual_direction 决策树
+
+🟣 **W6 — 增强工具**
+- `agents/design-brief-agent.md` — 智能化补全 brief 字段（与 compile.mjs 分工：机器扫描 + 智能填充）
+- `bin/render-tokens-preview.mjs` — design-tokens.json → 视觉化 HTML（246 行，含色卡 / 间距 / 字体 / shadow / motion）
+- `bin/score-design-output.mjs` — 10 维客观评分（色彩 / 排版 / 间距 / 复用 / 响应式 / 暗色 / 动画 / a11y / 密度 / 打磨度，过门阈值 70）
+
+🟣 **W7 — 端到端 + 边界测试**
+- `tests/integration/v08-e2e-flow.test.mjs` — brief → derive → ingest → score 全链路
+- `tests/integration/v08-edge-cases.test.mjs` — 13 用例边界
+- 修 2 个 bug：threshold 0 fallback / v0 URL regex 含 shell 元字符
+
+### Fixed — W7.5 12 个 P0 修复（4 个 audit agent 在 W7 review 一致发现）
+
+🔴 **R1 度量链**（commit ddad4c6）
+- `bin/emit-phase.mjs` / `bin/emit-decision.mjs` 的 `VALID_PHASES` 加 `design-brief` / `design-execute`；之前 W3-W7 5 周内度量事件**全部静默 exit 1**
+
+🟠 **R2 v0.7 残留**（commit 9428891，11 文件）
+- 清理 commands/build-web.md / kickoff.md / design.md / design-execute.md / hooks/handlers/session-start.js / skills/frontend-development/SKILL.md / templates/* / bin/resolve-tech-stack.mjs / USAGE.md / README.md 的 `/import-design` 与 `lovable` 死引用
+- 加行级 `isAllowedLine` 白名单回归测试，未来引入再次回归会立刻被发现
+
+🟠 **R3+R4+R8 模板真实性**（commit 506291c）
+- R3: `compile-design-brief.mjs::renderInventory` 把 `scanComponents` 结果真写入 inventory 表格（之前永远是模板硬编码 5 行假数据）
+- R4: `derive-channel-package.mjs::deriveV0` 加 `npx openapi-typescript` 生成 `openapi-types.ts`（之前 v0 模板里 import 它但从不生成）
+- R8: `parseBriefMeta` 加 `isPlaceholder` / `cleanField` 过滤 `<persona>` / `<待填>` 占位符（之前会作为字面字符串塞进 prompt）
+
+🔴 **R5+R6+R10 安全防御**（commit fa2a59d）
+- R5: `parseFigmaUrl` 解码 node-id 后白名单 `[A-Za-z0-9:_-]`，拒绝 `?node-id=A%27%29%3B` 等注入向量
+- R6: `render-tokens-preview` 加 `isValidCssValue` / `safeFont` 白名单 + spacing `Number()` 校验 + HTML head CSP meta（防 inline style CSS 注入逃逸）
+- R10: `ingest-claude-design` 加 `listZipEntries` 解压前拒 `..` / 绝对路径 / null byte + `realpathSync` 解压后查 symlink 逃逸 + 5MB 文件大小阈值（防恶意 minified bundle OOM）
+
+🟢 **R7+R9+R11 用户体验**（commit 7d3f42f）
+- R7: `derive-channel-package.mjs` 加 `fillTemplate` 函数式替换，30 处 `.replace` 不再把用户输入的 `$10 起步` 当 backreference 吞为 `0 起步`
+- R9: 新增 `bin/parse-cli-flag.mjs` 支持含空格路径 + 单/双引号；`design-execute.md::Phase 2` 改用，替代脆的 `grep [^ ]+ | awk`
+- R11: `design-execute.md::Phase 4` 按 lockfile 检测包管理器（yarn → pnpm → npm）
+
+🟢 **R12 评分准确度**（commit 7f8cfbc）
+- R12.1: `score-design-output.mjs` 拆出 `parseInventoryComponents`——split by line + 状态机，跳过 markdown 表头分隔行 / placeholder 行
+- R12.2: `scorePolish` 补齐 11 条 anti-patterns（之前只 5 条，与 `derive-channel-package.mjs::ANTI_PATTERNS_DETAILS` 对齐）
+
+### 测试
+
+- 总用例：158 → **304**（+146；其中 W1-W7 +83 / W7.5 +63）
+- audit-smoke：8/8 持平
+- 测试增量：W1 +13 → W2 +11 → W3 +8 → W4 +13 → W5 持平 → W6 +18 → W7 +20 → W7.5 6 Block +63
+
+### 设计
+
+- v0.8 完整方案：`design/前端实现流程重构方案_v0.8_final.md`（1244 行）
+- W7 pre-release audit：`docs/static-review-20260429-050116.md`（4 个 audit agent 独立产物）
+- 关键决策：claude-design 设为 first-class default（用户已订阅 Claude，零成本零网络外发）；摄取脚本只 staging 不直接改 web/（main thread 在 Claude Code 会话内按 SKILL 改写）
+
+### 迁移指南（从 v0.7.x → v0.8.0）
+
+```bash
+# 1. 旧 .ddt/tech-stack.json 含 lovable 的项目
+sed -i '' 's/"type": "lovable"/"type": "claude-design"/' .ddt/tech-stack.json
+
+# 2. 旧 project-brief.md 含 "**AI-native UI**: lovable"
+# 手动改为 claude-design / figma / v0 之一
+
+# 3. 旧脚本 / 文档 / CI 中如有 /import-design 引用
+# 改为：/design-brief && /design-execute --channel <X>
+```
+
+---
+
 ## [0.7.3] - 2026-04-30 — AI 执行 vs 用户审查时间拆分（PR-F）
 
 v0.7.2 真实测试 v2 数据揭示一个反直觉真相：当前 metric 系统给出的"-95% / -97% 提效率"
