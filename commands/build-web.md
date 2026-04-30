@@ -26,6 +26,16 @@ node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action start
 if command -v npx >/dev/null 2>&1; then
   npx --yes @redocly/cli lint docs/api-contract.yaml || exit 4
 fi
+
+# PR-E：frontend.type !== 'spa' 时直接 noop 退出，不创建 web/ 工程
+#   server-side（Thymeleaf/JSP/...）→ 模板由 /build-api 在 backend 项目里处理
+#   none / api-only / cli                → 无前端工程
+FRONT_TYPE=$(node "$DDT_PLUGIN_ROOT/bin/get-frontend-type.mjs" 2>/dev/null)
+if [ "$FRONT_TYPE" = "server-side" ] || [ "$FRONT_TYPE" = "none" ]; then
+  echo "ℹ️  frontend.type=$FRONT_TYPE，/build-web 跳过：服务端渲染由 /build-api 在 backend 项目内处理（src/main/resources/templates 等）；纯 API/CLI 无前端工程。"
+  node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action end
+  exit 0
+fi
 ```
 
 ## Phase 2 — EXPLORE
@@ -37,10 +47,12 @@ main thread **必读**：
 - `docs/api-contract.yaml` + `docs/prd.md`
 - `.ddt/tech-stack.json::frontend` + `.ddt/tech-stack.json::ai_design`
 
-**EXPLORE 行动**：
+**EXPLORE 行动**（仅当 `frontend.type === "spa"` 进入此 phase）：
 
 如果 `web/` 已存在：扫描组件树 + 已有 hooks / store / api client；找类似页面参照。
 如果 `web/` 为空：跑 `tech-stack.json::frontend.scaffold_cmd`（如 `npm create vite@latest web -- --template react-ts`）+ 落基础配置（tailwind / shadcn）。
+
+> Phase 1 已根据 `.ddt/tech-stack.json::frontend.type` 判断：`server-side` / `none` 类型已提前退出，不会进入 EXPLORE。
 
 落盘 `docs/build-web-exploration.md`：
 

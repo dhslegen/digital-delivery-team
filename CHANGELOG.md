@@ -4,6 +4,71 @@
 
 ---
 
+## [0.7.2] - 2026-04-30 — frontend.type 三态语义（PR-E）
+
+v0.7.1 真实测试 v2 发现的新 P0：用户选 Spring Boot + Thymeleaf 后，
+`.ddt/tech-stack.json::frontend` 仍残留 React 全家桶字段
+（`bundler: vite`, `state: zustand`, `router: react-router`, `scaffold_cmd: npm create vite...`），
+与服务端渲染语义直接矛盾。下游 `/build-web` 若死板执行会建出错的项目结构。
+
+**根因**：preset 用 spread merge `{ ...preset.frontend, ...userComponents.frontend }`，
+仅覆盖同名字段，preset 默认的 React 配套字段全部保留。
+
+### Fixed — 修复
+
+🔴 **P0-4 frontend.type 三态语义**
+- 引入 `frontend.type` 三态：
+  - `spa`：前后端分离 SPA（React/Vue/Angular/Svelte/Solid + bundler）→ 创建 web/ 工程
+  - `server-side`：服务端渲染（Thymeleaf/JSP/FreeMarker/Jinja2/ERB/Razor/...）→ 模板内嵌 backend 项目
+  - `none`：纯 API / CLI / 静态 HTML 直出 → 无前端工程
+- `bin/resolve-tech-stack.mjs::FRONTEND_STRING_MAP` 重构：
+  - 9 SPA 字符串（react-vite / vue-vite / svelte-kit / ...）映射为 `{type: "spa", framework, bundler}`
+  - 9 server-side 字符串（thymeleaf/jsp/freemarker/velocity/razor/erb/jinja2/django-template/go-html）映射为 `{type: "server-side", template_engine}`
+  - 4 none 字符串（none/html-css/cli/api-only）映射为 `{type: "none"}`
+- 当用户选 server-side / none 时，**整段替换** `stack.frontend`，不与 preset spread merge，避免污染。
+- `frontend.type === "none"` 时自动删除 `ai_design` 字段（无 UI = 无设计稿可言）。
+- `commands/build-web.md` Phase 1 增加前置检查：`frontend.type !== "spa"` 时提前 noop 退出，
+  emit-phase end 后 exit 0，明示"模板由 /build-api 在 backend 项目内处理"。
+- 抽出 `bin/get-frontend-type.mjs` 独立辅助脚本（输出 frontend.type 到 stdout），
+  保持 commands/build-web.md 不引入 inline `node -e` 违反 M2-9 瘦身契约。
+
+### Tooling — 工具链
+
+- `bin/get-frontend-type.mjs`（新增）：读 `.ddt/tech-stack.json::frontend.type`，
+  fallback `spa`（向后兼容旧 tech-stack.json）。
+- `skills/frontend-development/SKILL.md` Triggers 段：标注仅 `type === "spa"` 触发。
+- `skills/backend-development/SKILL.md` Triggers 段：标注 `type === "server-side"` 时
+  模板由 backend 承载，需额外覆盖。
+
+### 测试
+
+- `tests/integration/m63-tech-stack.test.mjs` +5 用例：
+  - PR-E: thymeleaf → server-side（验证无 React 残留）
+  - PR-E: none → type=none + ai_design 删除
+  - PR-E: react-vite → type=spa + preset 完整保留
+  - PR-E: 显式嵌套对象 `{type, template_engine}` 也被尊重
+  - PR-E: build-web.md 含 frontend.type 提前退出逻辑
+- 旧 PR-A "html-css → react=none" 用例更新为新语义（type=none 而非 framework=none）
+- 总用例：151 → **156**（+5）；audit-smoke 8/8 不受影响
+
+### Migration — 升级指引
+
+从 v0.7.1 升级到 v0.7.2：
+
+1. `/plugin marketplace update digital-delivery-team` + `/reload-plugins`
+2. **已有项目重建 tech-stack.json（推荐）**：
+   - 删除现有 `.ddt/tech-stack.json`
+   - 跑 `/design --refresh`，重新走 AskUserQuestion 问卷
+   - 选 server-side / none 类型时，新版 tech-stack.json 不再含 React 残留
+3. 若坚持保留旧 tech-stack.json：缺失 `frontend.type` 字段会被 `get-frontend-type.mjs`
+   fallback 为 `spa`，旧行为不变（向后兼容）。
+
+### 设计
+
+参考：`design/真实测试Audit_v2.md` "🔴 P0-4 frontend preset 残留污染"章节。
+
+---
+
 ## [0.7.1] - 2026-04-29 — 真实测试驱动的 P0/P1/P2 修复批
 
 基于 v0.7.0 真实跑通 `/kickoff + /report` 后发现的 5 个度量准确性问题，5 个 PR 合并发布：

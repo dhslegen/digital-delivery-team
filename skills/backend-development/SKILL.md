@@ -15,6 +15,7 @@ origin: DDT
 - `/build-api` 命令的 IMPLEMENT phase
 - `/impl` 命令串行执行后端阶段
 - 任何 main thread 写 `server/**/*.{ts,js,java,py,go}` 文件时
+- **PR-E（v0.7.2）**：当 `.ddt/tech-stack.json::frontend.type === "server-side"` 时，模板渲染（如 Thymeleaf/JSP/FreeMarker/Jinja2/...）一并由 backend 项目承载，模板路径见 `frontend.template_engine` 对应惯例（Spring Boot Thymeleaf → `src/main/resources/templates/`；Django → `<app>/templates/`；FastAPI Jinja → `templates/`）。`/build-web` 此场景跳过；本 skill 必须额外覆盖模板实现。
 
 ## Inputs（main thread 必读清单）
 

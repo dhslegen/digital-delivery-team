@@ -11,10 +11,12 @@ origin: DDT
 
 ## Triggers
 
-- `/build-web` 命令的 IMPLEMENT phase
+- `/build-web` 命令的 IMPLEMENT phase（**仅 `frontend.type === "spa"`**；`server-side` / `none` 由 build-web Phase 1 提前 noop 退出）
 - `/impl` 命令串行执行前端阶段
 - 任何 main thread 写 `web/**/*.{tsx,ts,vue,html,css}` 文件时
 - `/import-design --from <type>` 导入外部设计源时
+
+> **PR-E（v0.7.2）**：当 `.ddt/tech-stack.json::frontend.type` 是 `server-side`（Thymeleaf/JSP/FreeMarker/...）或 `none` 时，没有独立的 `web/` 工程，本 skill **不应被触发**。模板由 backend 项目（如 `src/main/resources/templates/`）承载，归 `/build-api` + `skills/backend-development` 处理。
 
 ## Inputs（main thread 必读清单）
 

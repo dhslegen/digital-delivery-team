@@ -192,16 +192,39 @@ const BACKEND_STRING_MAP = {
   'rust-actix':        { language: 'rust',       framework: 'actix-web' },
 };
 
+// PR-E: frontend.type 三态语义
+//   spa         前后端分离 SPA → 创建 web/ 工程，跑 /build-web
+//   server-side 服务端渲染（Thymeleaf/JSP/FreeMarker/Jinja2/ERB/Razor...）→ 模板内嵌 backend 项目，/build-web 跳过
+//   none        纯 API / CLI / 静态 HTML 直出 → 无 frontend，/build-web 跳过
+// type !== 'spa' 时整段替换 preset.frontend，不与 React 全家桶 spread merge，避免残留污染。
 const FRONTEND_STRING_MAP = {
-  'html-css':       { framework: 'none',    bundler: 'none' },
-  'react-vite':     { framework: 'react',   bundler: 'vite' },
-  'react-nextjs':   { framework: 'react',   bundler: 'nextjs' },
-  'vue-vite':       { framework: 'vue',     bundler: 'vite' },
-  'vue-nuxt':       { framework: 'vue',     bundler: 'nuxt' },
-  'svelte-kit':     { framework: 'svelte',  bundler: 'sveltekit' },
-  'solid-start':    { framework: 'solid',   bundler: 'solidstart' },
-  'angular':        { framework: 'angular' },
+  // SPA 类（前后端分离，需创建 web/ 工程）
+  'react-vite':     { type: 'spa', framework: 'react',   bundler: 'vite' },
+  'react-nextjs':   { type: 'spa', framework: 'react',   bundler: 'nextjs' },
+  'vue-vite':       { type: 'spa', framework: 'vue',     bundler: 'vite' },
+  'vue-nuxt':       { type: 'spa', framework: 'vue',     bundler: 'nuxt' },
+  'svelte-kit':     { type: 'spa', framework: 'svelte',  bundler: 'sveltekit' },
+  'solid-start':    { type: 'spa', framework: 'solid',   bundler: 'solidstart' },
+  'angular':        { type: 'spa', framework: 'angular' },
+  // 服务端渲染类（模板由后端承载，无独立前端工程）
+  'thymeleaf':      { type: 'server-side', template_engine: 'thymeleaf' },
+  'jsp':            { type: 'server-side', template_engine: 'jsp' },
+  'freemarker':     { type: 'server-side', template_engine: 'freemarker' },
+  'velocity':       { type: 'server-side', template_engine: 'velocity' },
+  'razor':          { type: 'server-side', template_engine: 'razor' },
+  'erb':            { type: 'server-side', template_engine: 'erb' },
+  'jinja2':         { type: 'server-side', template_engine: 'jinja2' },
+  'django-template':{ type: 'server-side', template_engine: 'django-template' },
+  'go-html':        { type: 'server-side', template_engine: 'html/template' },
+  // 无前端 / 静态直出类
+  'none':           { type: 'none' },
+  'html-css':       { type: 'none', static: true },     // 纯静态 HTML/CSS，由后端直出或 CDN
+  'cli':            { type: 'none' },                   // 纯 CLI 工具
+  'api-only':       { type: 'none' },                   // 纯 API 后端
 };
+
+// 三态枚举对外暴露，让下游 commands 引用而非硬编码字符串
+export const FRONTEND_TYPES = Object.freeze({ SPA: 'spa', SERVER_SIDE: 'server-side', NONE: 'none' });
 
 const AI_DESIGN_STRING_MAP = {
   'claude-design': { type: 'claude-design' },
@@ -351,7 +374,20 @@ function main() {
       stack.backend = { ...stack.backend, ...userComponents.backend };
     }
     if (userComponents.frontend) {
-      stack.frontend = { ...stack.frontend, ...userComponents.frontend };
+      // PR-E：当用户明确选择 server-side / none 时，整段替换 preset.frontend，
+      //   不做 spread merge——避免 React 全家桶（bundler/state/router/data_fetching/scaffold_cmd）残留，
+      //   产生"既要 Spring Boot Thymeleaf 又要 vite + react-router"这种逻辑矛盾的污染。
+      const userFrontType = userComponents.frontend.type;
+      if (userFrontType === FRONTEND_TYPES.SERVER_SIDE || userFrontType === FRONTEND_TYPES.NONE) {
+        stack.frontend = { ...userComponents.frontend };
+      } else {
+        // SPA 类型或未声明 type（向后兼容）→ 走原 spread merge
+        stack.frontend = { ...stack.frontend, ...userComponents.frontend };
+        // 若用户提供了具体 framework（react/vue/...），明确标记为 spa
+        if (!stack.frontend.type && stack.frontend.framework) {
+          stack.frontend.type = FRONTEND_TYPES.SPA;
+        }
+      }
     }
     if (userComponents.ai_design) {
       stack.ai_design = { ...stack.ai_design, ...userComponents.ai_design };
@@ -360,6 +396,11 @@ function main() {
       stack.components = userComponents.components;  // 用户细粒度选择的组件 ID 列表
     }
     stack.user_customized = true;
+  }
+
+  // PR-E：若 frontend.type === 'none'，删除 ai_design（无前端 = 无 UI 设计稿可言）
+  if (stack.frontend && stack.frontend.type === FRONTEND_TYPES.NONE) {
+    delete stack.ai_design;
   }
 
   // PR-A 第二层防御：写入前校验最终对象不含数字索引 key（防字符串展开污染漏网）

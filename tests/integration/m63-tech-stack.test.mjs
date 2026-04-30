@@ -93,8 +93,11 @@ test('PR-A: 扁平字符串 backend/frontend 自动映射为嵌套对象', () =>
     assert.equal(stack.backend.framework, 'spring-boot');
     assert.equal(stack.backend.language,  'java');
     assert.equal(stack.backend.database.primary, 'none', '"无数据库"应清空 preset 默认 mysql');
-    assert.equal(stack.frontend.framework, 'none', '"纯 HTML/CSS"应覆盖 preset react');
-    assert.equal(stack.ai_design.type, 'claude-design', 'ai_design=false 应 fallback claude-design');
+    // PR-E：'html-css' → { type: 'none', static: true }，整段替换不残留 react
+    assert.equal(stack.frontend.type, 'none', '"纯 HTML/CSS" 应映射为 type=none');
+    assert.equal(stack.frontend.framework, undefined, 'type=none 时不应有 framework 字段（preset.react 残留必须清除）');
+    // PR-E：type=none 时 ai_design 字段应被删除（无 UI 设计稿可言）
+    assert.equal(stack.ai_design, undefined, 'frontend.type=none 时 ai_design 应被删除');
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
@@ -153,6 +156,103 @@ test('PR-C: kickoff.md / design.md 不再使用 /tmp 全局路径（多项目并
     'kickoff.md 应引导写到 .ddt/components.json.tmp');
   assert.match(designText, /\.ddt\/components\.json\.tmp/,
     'design.md 应使用 .ddt/components.json.tmp');
+});
+
+// PR-E: frontend.type 三态语义（spa / server-side / none）
+test('PR-E: frontend "thymeleaf" 映射为 server-side，整段替换不残留 React 配套', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-frontend-ssr-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend: { language: 'java', framework: 'spring-boot' },
+      frontend: 'thymeleaf',
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0, `failed: ${r.stderr}`);
+
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    assert.equal(stack.frontend.type, 'server-side');
+    assert.equal(stack.frontend.template_engine, 'thymeleaf');
+    // 关键反向断言：preset 的 React 全家桶字段必须全部消失
+    for (const ghost of ['bundler', 'state', 'router', 'data_fetching', 'type_generation', 'scaffold_cmd']) {
+      assert.equal(stack.frontend[ghost], undefined,
+        `server-side 场景禁止残留 preset.${ghost}（实际 = ${stack.frontend[ghost]}）`);
+    }
+    // framework 字段不应是 react（应只含 server-side 必要字段）
+    assert.notEqual(stack.frontend.framework, 'react', 'framework 不应残留 react');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-E: frontend "none" 映射为 type=none，并删除 ai_design', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-frontend-none-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      backend: { language: 'java', framework: 'spring-boot' },
+      frontend: 'none',
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0, `failed: ${r.stderr}`);
+
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    assert.equal(stack.frontend.type, 'none');
+    assert.equal(stack.ai_design, undefined, 'frontend.type=none 时 ai_design 应被删除');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-E: frontend "react-vite" 标记为 type=spa，preset 完整保留', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-frontend-spa-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      frontend: 'react-vite',
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    assert.equal(stack.frontend.type, 'spa', 'SPA 类型应明确标记');
+    assert.equal(stack.frontend.framework, 'react');
+    assert.equal(stack.frontend.bundler, 'vite');
+    // SPA 场景下 preset 配套（state/router/data_fetching）应保留
+    assert.ok(stack.frontend.state, 'SPA preset 的 state 字段应保留');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-E: 用户传嵌套对象 { type: "server-side", template_engine: "freemarker" } 也被尊重', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-frontend-explicit-'));
+  try {
+    const componentsPath = join(tmp, 'user-components.json');
+    writeFileSync(componentsPath, JSON.stringify({
+      preset: 'java-modern',
+      frontend: { type: 'server-side', template_engine: 'freemarker' },
+    }));
+    const r = spawnSync(process.execPath,
+      [RESOLVE, '--components-json', componentsPath, '--write'],
+      { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+
+    const stack = JSON.parse(readFileSync(join(tmp, '.ddt/tech-stack.json'), 'utf8'));
+    assert.equal(stack.frontend.type, 'server-side');
+    assert.equal(stack.frontend.template_engine, 'freemarker');
+    assert.equal(stack.frontend.bundler, undefined, 'preset 残留必须被清除');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('PR-E: build-web.md 含 frontend.type 提前退出逻辑', () => {
+  const text = readFileSync(join(ROOT, 'commands', 'build-web.md'), 'utf8');
+  assert.match(text, /FRONT_TYPE/,                          'build-web.md 应有 FRONT_TYPE 提取');
+  assert.match(text, /server-side.*\|\|.*none/,             'build-web.md 应判 server-side / none 两态');
+  assert.match(text, /\/build-web 跳过/,                    'build-web.md 应明确 noop 退出文案');
 });
 
 test('PR-A: 写入前 assertCleanStack 拦截数字索引污染', () => {
