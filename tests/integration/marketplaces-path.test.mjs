@@ -107,8 +107,8 @@ test('commands marker fallback 都加了硬编码 marketplaces 兜底', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const commandsDir = join(ROOT, 'commands');
-  const filesNeedingFallback = ['wbs.md', 'prd.md', 'design.md', 'package.md',
-    'report.md', 'fix.md', 'doctor.md', 'import-design.md', 'resume.md'];
+  const filesNeedingFallback = ['wbs.md', 'prd.md', 'design.md', 'design-brief.md', 'design-execute.md',
+    'package.md', 'report.md', 'fix.md', 'doctor.md', 'resume.md'];
   for (const file of filesNeedingFallback) {
     const text = fs.readFileSync(path.join(commandsDir, file), 'utf8');
     assert.ok(text.includes('plugins/marketplaces/digital-delivery-team'),

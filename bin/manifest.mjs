@@ -7,9 +7,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const PLUGIN_JSON = path.join(ROOT, '.claude-plugin', 'plugin.json');
 
-const KNOWN_POSITIONAL    = new Set(['prd','wbs','design','build-web','build-api','test','review','package','report','fix']);
+const KNOWN_POSITIONAL    = new Set(['prd','wbs','design','design-brief','design-execute','build-web','build-api','test','review','package','report','fix']);
 const KNOWN_ORCHESTRATION = new Set(['kickoff','impl','verify','ship']);
-const KNOWN_AUXILIARY     = new Set(['doctor', 'import-design', 'resume', 'relay', 'preview']);
+const KNOWN_AUXILIARY     = new Set(['doctor', 'resume', 'relay', 'preview']);
 
 function scanAgents() {
   return fs.readdirSync(path.join(ROOT, 'agents'))
@@ -55,7 +55,7 @@ function scanCommands() {
     console.error(`ERROR: Unknown commands (not in v3 spec): ${unknown.join(', ')}`);
     process.exit(1);
   }
-  const posOrder = ['prd','wbs','design','build-web','build-api','test','review','fix','package','report'];
+  const posOrder = ['prd','wbs','design','design-brief','design-execute','build-web','build-api','test','review','fix','package','report'];
   const orchOrder = ['kickoff','impl','verify','ship'];
   positional.sort((a, b) => posOrder.indexOf(a) - posOrder.indexOf(b));
   orchestration.sort((a, b) => orchOrder.indexOf(a) - orchOrder.indexOf(b));

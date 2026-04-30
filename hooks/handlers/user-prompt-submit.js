@@ -19,6 +19,8 @@ const DDT_PHASE_COMMANDS = [
   'prd',
   'wbs',
   'design',
+  'design-brief',     // W3 (v0.8): brief 编译器
+  'design-execute',   // W3 (v0.8): 通道执行器
   'impl',
   'build-web',
   'build-api',

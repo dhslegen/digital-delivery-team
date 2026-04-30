@@ -138,8 +138,8 @@ test('impl.md 委托式决策门：引用 skill + emit-decision + --auto', () =>
     'impl.md 必须支持 --auto 跳过');
 });
 
-// H9: 19 命令分类完整性 — 防止未来增删命令时偷偷绕过决策门契约
-test('全 19 commands 按"决策门 / 编排聚合 / 辅助"分类无遗漏', () => {
+// H9: 命令分类完整性 — 防止未来增删命令时偷偷绕过决策门契约
+test('全 commands 按"决策门 / 编排聚合 / 辅助"分类无遗漏', () => {
   const allCmds = readdirSync(join(ROOT, 'commands'))
     .filter(f => f.endsWith('.md'))
     .map(f => f.replace(/\.md$/, ''))
@@ -147,17 +147,17 @@ test('全 19 commands 按"决策门 / 编排聚合 / 辅助"分类无遗漏', ()
 
   // 分类：含完整决策门段落 / 编排聚合（派发别的命令）/ 辅助（只读或工具型）
   const HAS_DECISION_GATE = new Set([
-    'prd', 'wbs', 'design', 'build-api', 'build-web',
+    'prd', 'wbs', 'design', 'design-brief', 'design-execute', 'build-api', 'build-web',
     'test', 'review', 'fix', 'package', 'report', 'impl',
   ]);
   const ORCHESTRATION_AGGREGATE = new Set([
     'kickoff', 'verify', 'ship',  // kickoff 走"interactive 模式"非 phase 决策门；verify/ship 是聚合派发
   ]);
   const AUXILIARY = new Set([
-    'doctor', 'import-design', 'preview', 'relay', 'resume',
+    'doctor', 'preview', 'relay', 'resume',
   ]);
 
-  // 全 19 命令必须落入恰好一类
+  // 全部命令必须落入恰好一类
   for (const cmd of allCmds) {
     const inOne = [HAS_DECISION_GATE, ORCHESTRATION_AGGREGATE, AUXILIARY]
       .filter(s => s.has(cmd)).length;

@@ -53,13 +53,15 @@ test('kickoff.md 透传 --preset 给 /design', () => {
     'kickoff.md 必须把 --preset 透传给 /design');
 });
 
-test('import-design.md 包含 4 个通道', () => {
-  const text = read('commands/import-design.md');
-  for (const channel of ['figma', 'v0', 'lovable', 'claude-design']) {
-    assert.ok(text.includes(channel), `import-design 必须支持 ${channel} 通道`);
+test('design-execute.md 包含 3 个通道（v0.8 删除 lovable）', () => {
+  const text = read('commands/design-execute.md');
+  for (const channel of ['figma', 'v0', 'claude-design']) {
+    assert.ok(text.includes(channel), `design-execute 必须支持 ${channel} 通道`);
   }
-  assert.ok(text.includes('check-contract-alignment.mjs'),
-    'import-design 应在 Phase 4 调用契约对齐检查');
+  assert.ok(!text.toLowerCase().includes('lovable'),
+    'design-execute 不应再含 lovable（v0.8 已删除）');
+  assert.ok(text.includes('derive-channel-package.mjs'),
+    'design-execute 必须调用 derive-channel-package.mjs 派生附件包');
 });
 
 test('ai-native-design skill 已建立且符合 frontmatter', () => {

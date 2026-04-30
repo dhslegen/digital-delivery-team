@@ -1,7 +1,7 @@
 {
   "name": "digital-delivery-team",
   "version": "0.7.3",
-  "description": "一人一队：全栈工程师 + AI 数字员工交付插件。8 个子代理 + 19 个命令 + 11 个 skill（含 backend/frontend-development）+ 8 类 hook + 5 套技术栈预设 + 4 套 AI-native UI 通道 + 6-phase 开发范式（EXPLORE/PLAN/APPROVE/IMPLEMENT/VERIFY/SUMMARY）+ validation-loop + checkpoint-commit + 进度状态机 + 跨会话接力。",
+  "description": "一人一队：全栈工程师 + AI 数字员工交付插件。8 个子代理 + 20 个命令 + 11 个 skill（含 backend/frontend-development）+ 8 类 hook + 5 套技术栈预设 + 3 套 AI-native UI 通道 + 6-phase 开发范式（EXPLORE/PLAN/APPROVE/IMPLEMENT/VERIFY/SUMMARY）+ validation-loop + checkpoint-commit + 进度状态机 + 跨会话接力。",
   "engines": {
     "node": ">=22.0.0"
   },
