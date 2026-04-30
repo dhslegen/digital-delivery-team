@@ -87,6 +87,19 @@ function parseArgs(argv) {
 
 function ensureDir(p) { mkdirSync(p, { recursive: true }); }
 
+// W7.5 R7：模板填充辅助。用 function form 防 String.prototype.replace 把 $1 / $& 当 backreference 解释。
+//   攻击向量：用户在 brief visualRationale 写 "$10 起步" 会被 replace 当成 capture group $1 + "0 起步" → "0 起步"。
+//   反斜杠路径 "C:\\Windows" 同样会被 \\ 转义吃掉。
+//   replacements 形如 [[key, value], ...]，key 不含 {{ }}（自动包裹）。
+function fillTemplate(text, replacements) {
+  let out = text;
+  for (const [key, value] of replacements) {
+    const re = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
+    out = out.replace(re, () => String(value));
+  }
+  return out;
+}
+
 // W7.5 R8：占位符过滤
 //   brief 模板里大量 `<persona>` / `<填写 ...>` / `<待填>` 形式的占位符
 //   原 parseBriefMeta 抽到这些就当真值塞进 prompt，下游通道收到的就是 `<persona>` 字面字符串。
@@ -240,19 +253,22 @@ function deriveClaudeDesign(cwd, meta, opts) {
   // 渲染 prompt.md
   const tpl = readFileSync(TEMPLATE_PROMPTS['claude-design'], 'utf8');
   const tokens = JSON.parse(readFileSync(join(cwd, '.ddt', 'design', 'tokens.json'), 'utf8'));
-  const prompt = tpl
-    .replace(/\{\{PROJECT_NAME\}\}/g,                       opts.projectName)
-    .replace(/\{\{VISUAL_DIRECTION\}\}/g,                   meta.visualDirection || '<未填写，请先编辑 brief §8.1>')
-    .replace(/\{\{VISUAL_DIRECTION_RATIONALE\}\}/g,         meta.visualRationale || '<请填写>')
-    .replace(/\{\{ANTI_PATTERNS_BLOCK\}\}/g,                renderAntiPatternsBlockZH())
-    .replace(/\{\{USER_STORIES_BLOCK\}\}/g,                 meta.userStoriesBlock || '_(brief §2 暂无)_')
-    .replace(/\{\{SCREEN_INVENTORY_PLACEHOLDER\}\}/g,       meta.screenInventoryHeadings.length > 0
-      ? meta.screenInventoryHeadings.map((h, i) => `${i + 1}. ${h}`).join('\n')
-      : '_(brief §4 暂无屏幕清单，请先编辑)_')
-    .replace(/\{\{TOKENS_SUMMARY\}\}/g,                     renderTokensSummary(tokens))
-    .replace(/\{\{ENDPOINTS_SUMMARY\}\}/g,                  meta.endpointsSummary.length > 0
-      ? meta.endpointsSummary.map(e => `- \`${e}\``).join('\n')
-      : '_(brief §6 暂无)_');
+  const screenInventory = meta.screenInventoryHeadings.length > 0
+    ? meta.screenInventoryHeadings.map((h, i) => `${i + 1}. ${h}`).join('\n')
+    : '_(brief §4 暂无屏幕清单，请先编辑)_';
+  const endpointsSummary = meta.endpointsSummary.length > 0
+    ? meta.endpointsSummary.map(e => `- \`${e}\``).join('\n')
+    : '_(brief §6 暂无)_';
+  const prompt = fillTemplate(tpl, [
+    ['PROJECT_NAME',                  opts.projectName],
+    ['VISUAL_DIRECTION',              meta.visualDirection || '<未填写，请先编辑 brief §8.1>'],
+    ['VISUAL_DIRECTION_RATIONALE',    meta.visualRationale || '<请填写>'],
+    ['ANTI_PATTERNS_BLOCK',           renderAntiPatternsBlockZH()],
+    ['USER_STORIES_BLOCK',            meta.userStoriesBlock || '_(brief §2 暂无)_'],
+    ['SCREEN_INVENTORY_PLACEHOLDER',  screenInventory],
+    ['TOKENS_SUMMARY',                renderTokensSummary(tokens)],
+    ['ENDPOINTS_SUMMARY',             endpointsSummary],
+  ]);
 
   const promptPath = join(dir, 'prompt.md');
   writes.push({ from: '<rendered>', to: promptPath, size: prompt.length });
@@ -311,23 +327,25 @@ function deriveFigma(cwd, meta, opts) {
   const refsBlock = meta.references.length > 0
     ? meta.references.map(r => `- \`${r}\``).join('\n')
     : '_(暂无；建议上传截图至 .ddt/design/assets/)_';
-  const prompt = tpl
-    .replace(/\{\{PROJECT_NAME\}\}/g,                opts.projectName)
-    .replace(/\{\{TASK_ONE_LINER\}\}/g,              taskOneLiner)
-    .replace(/\{\{PERSONA\}\}/g,                     meta.persona || '<请填 brief §1>')
-    .replace(/\{\{SCENARIO\}\}/g,                    '<场景，从 brief §1 摘要>')
-    .replace(/\{\{PAIN_POINT\}\}/g,                  meta.painPoint || '<请填 brief §1>')
-    .replace(/\{\{USER_STORIES_BLOCK\}\}/g,          meta.userStoriesBlock || '_(brief §2 暂无)_')
-    .replace(/\{\{IA_TREE\}\}/g,                     meta.iaTree || '<待填 brief §3>')
-    .replace(/\{\{SCREEN_INVENTORY_PLACEHOLDER\}\}/g,meta.screenInventoryHeadings.length > 0
-      ? meta.screenInventoryHeadings.map((h, i) => `${i + 1}. ${h}`).join('\n')
-      : '_(brief §4 暂无)_')
-    .replace(/\{\{VISUAL_DIRECTION\}\}/g,            meta.visualDirection || '<未填写>')
-    .replace(/\{\{VISUAL_DIRECTION_RATIONALE\}\}/g,  meta.visualRationale || '<请填>')
-    .replace(/\{\{TOKENS_SUMMARY\}\}/g,              renderTokensSummary(tokens))
-    .replace(/\{\{ANTI_PATTERNS_BLOCK\}\}/g,         renderAntiPatternsBlockZH())
-    .replace(/\{\{REFERENCES_BLOCK\}\}/g,            refsBlock)
-    .replace(/\{\{STYLE_KEYWORDS\}\}/g,              meta.styleKeywords || '<待填 brief §9>');
+  const figmaScreenInventory = meta.screenInventoryHeadings.length > 0
+    ? meta.screenInventoryHeadings.map((h, i) => `${i + 1}. ${h}`).join('\n')
+    : '_(brief §4 暂无)_';
+  const prompt = fillTemplate(tpl, [
+    ['PROJECT_NAME',                 opts.projectName],
+    ['TASK_ONE_LINER',               taskOneLiner],
+    ['PERSONA',                      meta.persona || '<请填 brief §1>'],
+    ['SCENARIO',                     '<场景，从 brief §1 摘要>'],
+    ['PAIN_POINT',                   meta.painPoint || '<请填 brief §1>'],
+    ['USER_STORIES_BLOCK',           meta.userStoriesBlock || '_(brief §2 暂无)_'],
+    ['IA_TREE',                      meta.iaTree || '<待填 brief §3>'],
+    ['SCREEN_INVENTORY_PLACEHOLDER', figmaScreenInventory],
+    ['VISUAL_DIRECTION',             meta.visualDirection || '<未填写>'],
+    ['VISUAL_DIRECTION_RATIONALE',   meta.visualRationale || '<请填>'],
+    ['TOKENS_SUMMARY',               renderTokensSummary(tokens)],
+    ['ANTI_PATTERNS_BLOCK',          renderAntiPatternsBlockZH()],
+    ['REFERENCES_BLOCK',             refsBlock],
+    ['STYLE_KEYWORDS',               meta.styleKeywords || '<待填 brief §9>'],
+  ]);
 
   const promptPath = join(dir, 'prompt.md');
   writes.push({ from: '<rendered>', to: promptPath, size: prompt.length });
@@ -402,23 +420,24 @@ function deriveV0(cwd, meta, opts) {
   const tpl = readFileSync(TEMPLATE_PROMPTS['v0'], 'utf8');
   // v0 模板含 Project Instructions（统一）+ 每屏 prompt 的 schema 占位
   // 这里把 Project Instructions 段注入 visual + anti-patterns
-  let instructions = tpl
-    .replace(/\{\{PROJECT_NAME\}\}/g,               opts.projectName)
-    .replace(/\{\{VISUAL_DIRECTION\}\}/g,           meta.visualDirection || '<未填写>')
-    .replace(/\{\{VISUAL_DIRECTION_RATIONALE\}\}/g, meta.visualRationale || '<请填>')
-    .replace(/\{\{ANTI_PATTERNS_BLOCK_EN\}\}/g,     renderAntiPatternsBlockEN())
-    .replace(/\{\{STYLE_KEYWORDS\}\}/g,             meta.styleKeywords || '<待填>')
+  let instructions = fillTemplate(tpl, [
+    ['PROJECT_NAME',                opts.projectName],
+    ['VISUAL_DIRECTION',            meta.visualDirection || '<未填写>'],
+    ['VISUAL_DIRECTION_RATIONALE',  meta.visualRationale || '<请填>'],
+    ['ANTI_PATTERNS_BLOCK_EN',      renderAntiPatternsBlockEN()],
+    ['STYLE_KEYWORDS',              meta.styleKeywords || '<待填>'],
     // Screen 1 占位（W3 命令展开时会逐屏生成；本派生器先填首屏占位）
-    .replace(/\{\{SCREEN_1_NAME\}\}/g,    meta.screenInventoryHeadings[0] || '<screen-1>')
-    .replace(/\{\{SCREEN_1_TYPE\}\}/g,    'page')
-    .replace(/\{\{SCREEN_1_ELEMENTS\}\}/g,'<elements from brief §4>')
-    .replace(/\{\{SCREEN_1_STATES\}\}/g,  'default / loading / empty / error')
-    .replace(/\{\{SCREEN_1_PERSONA\}\}/g, meta.persona || '<persona>')
-    .replace(/\{\{SCREEN_1_MOMENT\}\}/g,  '<moment>')
-    .replace(/\{\{SCREEN_1_OUTCOME\}\}/g, '<outcome>')
-    .replace(/\{\{SCREEN_1_LOADING\}\}/g, 'spinner + disabled fields')
-    .replace(/\{\{SCREEN_1_EMPTY\}\}/g,   'empty illustration + CTA')
-    .replace(/\{\{SCREEN_1_ENDPOINT\}\}/g, meta.endpointsSummary[0] ? `'${meta.endpointsSummary[0].split(' ')[1]}'` : "'<endpoint>'");
+    ['SCREEN_1_NAME',     meta.screenInventoryHeadings[0] || '<screen-1>'],
+    ['SCREEN_1_TYPE',     'page'],
+    ['SCREEN_1_ELEMENTS', '<elements from brief §4>'],
+    ['SCREEN_1_STATES',   'default / loading / empty / error'],
+    ['SCREEN_1_PERSONA',  meta.persona || '<persona>'],
+    ['SCREEN_1_MOMENT',   '<moment>'],
+    ['SCREEN_1_OUTCOME',  '<outcome>'],
+    ['SCREEN_1_LOADING',  'spinner + disabled fields'],
+    ['SCREEN_1_EMPTY',    'empty illustration + CTA'],
+    ['SCREEN_1_ENDPOINT', meta.endpointsSummary[0] ? `'${meta.endpointsSummary[0].split(' ')[1]}'` : "'<endpoint>'"],
+  ]);
 
   const instructionsPath = join(dir, 'project-instructions.md');
   writes.push({ from: '<rendered>', to: instructionsPath, size: instructions.length });

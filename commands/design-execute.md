@@ -44,8 +44,9 @@ CHANNEL=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--channel [a-z0-9-]+' | awk '{
 CHANNEL=${CHANNEL:-claude-design}
 
 # 外部回贴源（可选，等用户在通道完成后再传）
-BUNDLE_PATH=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--bundle [^ ]+' | awk '{print $2}')
-URL=$(printf '%s' "$ARGUMENTS" | grep -oE -- '--url [^ ]+' | awk '{print $2}')
+# W7.5 R9：用 bin/parse-cli-flag.mjs 解析含空格路径 + 单/双引号（grep [^ ]+ 会截断）
+BUNDLE_PATH=$(node "$DDT_PLUGIN_ROOT/bin/parse-cli-flag.mjs" --flag bundle -- "$ARGUMENTS")
+URL=$(node "$DDT_PLUGIN_ROOT/bin/parse-cli-flag.mjs" --flag url -- "$ARGUMENTS")
 
 # B4: URL 白名单校验（防 shell 注入；只允许 http/https + 标准 URL 字符）
 if [ -n "$URL" ] && ! printf '%s' "$URL" | grep -qE '^https?://[A-Za-z0-9._~:/?#@!$&'\''()*+,;=%-]+$'; then
@@ -161,8 +162,13 @@ fi
 
 ```bash
 # 跑 web/ 构建 + lint + 测试
+# W7.5 R11：按 lockfile 选包管理器（全局 CLAUDE.md 偏好 yarn；同时尊重项目实情）
 if [ -d web ]; then
-  (cd web && npm run build && npm run lint && npm test --run) || exit 6
+  PM=npm
+  if   [ -f web/yarn.lock ];      then PM=yarn
+  elif [ -f web/pnpm-lock.yaml ]; then PM=pnpm
+  fi
+  (cd web && $PM run build && $PM run lint && $PM run test) || exit 6
 fi
 
 # 10 维评分（W6 实现，先占位）
