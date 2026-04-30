@@ -1,0 +1,82 @@
+{
+  "$schema": "https://ddt.dev/schemas/design-tokens.v1.json",
+  "version": "1.0.0",
+  "color": {
+    "primary": "#1F6FEB",
+    "primary-hover": "#1858B3",
+    "primary-active": "#13417F",
+    "danger": "#D73A49",
+    "warning": "#F59E0B",
+    "success": "#0F9D58",
+    "info": "#5BC0DE",
+    "neutral-0": "#FFFFFF",
+    "neutral-50": "#F6F8FA",
+    "neutral-100": "#EAEEF2",
+    "neutral-200": "#D0D7DE",
+    "neutral-300": "#AFB8C1",
+    "neutral-500": "#6E7781",
+    "neutral-700": "#424A53",
+    "neutral-900": "#1F2328",
+    "neutral-1000": "#000000"
+  },
+  "color-dark": {
+    "primary": "#58A6FF",
+    "primary-hover": "#79B8FF",
+    "primary-active": "#388BFD",
+    "neutral-0": "#0D1117",
+    "neutral-50": "#161B22",
+    "neutral-100": "#21262D",
+    "neutral-900": "#F0F6FC"
+  },
+  "spacing": [4, 8, 12, 16, 24, 32, 48, 64, 96, 128],
+  "radius": {
+    "none": "0",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "16px",
+    "full": "9999px"
+  },
+  "typography": {
+    "font-sans": "Geist Sans, ui-sans-serif, system-ui, sans-serif",
+    "font-mono": "Geist Mono, ui-monospace, SFMono-Regular, monospace",
+    "font-serif": "Source Serif Pro, ui-serif, Georgia, serif",
+    "scale": [12, 14, 16, 20, 24, 32, 48, 64],
+    "line-height": {
+      "tight": 1.2,
+      "normal": 1.5,
+      "relaxed": 1.75
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "shadow": {
+    "sm": "0 1px 2px rgba(0,0,0,0.05)",
+    "md": "0 4px 6px rgba(0,0,0,0.07)",
+    "lg": "0 10px 15px rgba(0,0,0,0.1)",
+    "xl": "0 20px 25px rgba(0,0,0,0.15)"
+  },
+  "motion": {
+    "duration": {
+      "fast": "150ms",
+      "base": "200ms",
+      "slow": "300ms"
+    },
+    "easing": {
+      "linear": "linear",
+      "in": "cubic-bezier(0.4, 0, 1, 1)",
+      "out": "cubic-bezier(0, 0, 0.2, 1)",
+      "in-out": "cubic-bezier(0.4, 0, 0.2, 1)"
+    }
+  },
+  "breakpoint": {
+    "sm": "640px",
+    "md": "768px",
+    "lg": "1024px",
+    "xl": "1280px",
+    "2xl": "1536px"
+  }
+}
