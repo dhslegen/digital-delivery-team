@@ -64,15 +64,61 @@ test('design-execute.md 包含 3 个通道（v0.8 删除 lovable）', () => {
     'design-execute 必须调用 derive-channel-package.mjs 派生附件包');
 });
 
-test('ai-native-design skill 已建立且符合 frontmatter', () => {
+test('ai-native-design skill v0.8 重写：3 通道 + Brief 编译器 + 11 anti-patterns', () => {
   const skillPath = 'skills/ai-native-design/SKILL.md';
   assert.ok(existsSync(join(ROOT, skillPath)), 'ai-native-design SKILL.md 必须存在');
   const text = read(skillPath);
+
+  // frontmatter
   assert.ok(text.match(/^name:\s*ai-native-design$/m), 'name 字段错误');
   assert.ok(text.match(/^origin:\s*DDT$/m), 'origin 字段错误');
-  for (const channel of ['claude-design', 'figma', 'v0', 'lovable']) {
+
+  // 3 通道章节齐全
+  for (const channel of ['claude-design', 'figma', 'v0']) {
     assert.ok(text.includes(channel), `skill 必须详述 ${channel} 通道`);
   }
+
+  // Lovable 不应作为可用通道（v0.8 删除）
+  // 但允许"不支持 Lovable"声明文字保留
+  assert.ok(!text.match(/^##\s*通道\s*D?\s*[·:]?\s*lovable/im),
+    'skill 不应有 lovable 通道章节（v0.8 已删除）');
+  assert.ok(text.match(/不支持.*Lovable|删除.*Lovable|不要.*Lovable/i),
+    'skill 应明确声明 Lovable 不支持（避免读者误解）');
+
+  // 引用 W4 摄取脚本
+  for (const script of ['ingest-claude-design.mjs', 'ingest-figma-context.mjs', 'ingest-v0-share.mjs']) {
+    assert.ok(text.includes(script), `skill 必须引用 ${script}（W4 摄取脚本）`);
+  }
+
+  // 引用 ingest-report.json / ingest-instructions.md（main thread 改写指引）
+  assert.ok(text.includes('ingest-report.json'),       'skill 必须告诉 main thread 读 ingest-report.json');
+  assert.ok(text.includes('ingest-instructions.md'),   'skill 必须告诉 main thread 读 ingest-instructions.md');
+
+  // visual_direction 9 选 1 引用
+  for (const vd of ['brutally-minimal', 'editorial', 'industrial', 'luxury', 'playful', 'geometric', 'retro-futurist', 'soft-organic', 'maximalist']) {
+    assert.ok(text.includes(vd), `skill 必须列出 visual direction ${vd}`);
+  }
+
+  // 11 条 anti-patterns 矩阵（用 ❌ 计数 + 关键词）
+  const negCount = (text.match(/^\|\s*\d+\s*\|/gm) || []).length;
+  // 模板里多个表格都有 |1| / |2|... — 至少要保证 anti-patterns 11 条都在
+  for (const phrase of ['紫蓝默认渐变', 'glass morphism', '通用 sans-serif', 'interchangeable SaaS hero']) {
+    assert.ok(text.includes(phrase), `skill 必含 anti-pattern 关键描述 "${phrase}"`);
+  }
+
+  // 引用 W1/W2 模板
+  for (const tpl of ['design-brief.template.md', 'design-tokens.template.json', 'components-inventory.template.md']) {
+    assert.ok(text.includes(tpl), `skill 必须引用 ${tpl}`);
+  }
+
+  // 引用 W3 命令
+  for (const cmd of ['/design-brief', '/design-execute']) {
+    assert.ok(text.includes(cmd), `skill 必须引用命令 ${cmd}`);
+  }
+
+  // 8 状态显式列出（empty / error / loading 是关键）
+  assert.ok(text.includes('empty / error / loading') || text.match(/empty.*error.*loading/i),
+    'skill 必须强调 empty / error / loading 三个易缺失状态');
 });
 
 test('project-brief 模板含技术栈预设字段', () => {
