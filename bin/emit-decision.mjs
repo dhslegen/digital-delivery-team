@@ -20,6 +20,8 @@ import { homedir } from 'node:os';
 
 const VALID_PHASES = new Set([
   'prd', 'wbs', 'design',
+  // v0.8 W3：前端实现流程重构后的两阶段
+  'design-brief', 'design-execute',
   'build-web', 'build-api',
   'test', 'review', 'fix',
   'package', 'report',
