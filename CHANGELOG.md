@@ -4,6 +4,99 @@
 
 ---
 
+## [0.9.0] - 2026-05-06 — 流程可见性主线 + 解析器加固 + 实战回归回炉
+
+源自 v0.8.0 实战暴露的"功能正确但流程不可见"问题。v0.9 主题：从"能跑"
+升级到"可见"——把命令之间的隐式契约图形化，让试错成本归零。
+
+### Added — 新功能
+
+🟣 **A1：bin/render-flowchart.mjs 命令依赖图渲染器**（commit 1ba5954）
+- 从 commands/*.md 自动派生 mermaid 流程图
+- 三种"建议下一步"抽取策略（简单引用 / 分支表 / dry-run --next 参数）
+- 节点形状区分：phase（蓝矩形）/ 编排（橙圆角虚线）/ utility 不进图
+- 三态分支可视化（spa / server-side / none 边带条件标签）
+- 产物：docs/architecture/flowchart.md（含主链路 + 三态分支）
+
+🟣 **A2：bin/print-dry-run.mjs + 13 命令 --dry-run 支持**（commits 0be6cac + 99010f1）
+- 共用 helper：4 段固定结构（📥 读取 / 📤 写入 / 📊 emit / 👉 下一步）
+- 13 个命令在 emit-phase --action start 之前加 4 行 dry-run 段：
+  prd / wbs / design / design-brief / design-execute / build-web / build-api
+  / test / review / fix / package / report / impl
+- 不读不写实际文件 / 不发 emit-phase 事件
+- 配套 dry-run-contract 测试（验证每命令 grep 检查 + exit 0 + 4 段输出）
+- verify / ship / kickoff 编排级 dry-run 留 v0.9.x（语义需扩展）
+
+🟣 **A3：bin/render-progress.mjs ASCII 进度条 + /resume 集成**（commit cc80448）
+- 进度条字符：█ completed / ░ skipped|pending / ▓ in_progress
+- 短名行 + 状态图标行 + 当前 phase 高亮（↑ 当前: /xxx）
+- 全部完成 🎉 / skipped 显示"按规则跳过" / duration_estimated 显示 ⚠️估算
+- /resume 命令改用此工具替代旧纯文本列表（保留"已完成: N"向后兼容）
+
+🟣 **B1：tests/fixtures/real-agent-outputs/ 真实 agent 产出 fixture 库**（commit e0a47f9）
+- 把 v0.8.1 实战 ddt-team-admin-v0.8.1 的 5 个 agent 产出作 golden 数据：
+  prd / wbs / arch / design-brief / tech-stack
+- 解析器测试参数化：每个真实 PRD 必须抽出 ≥ 1 条 user story
+- 防止 D5 / D15 类合成测试 vs 真实 agent 输出脱节
+- 体积上限 100KB / 来源标注 / 添加新 fixture 流程
+
+### Fixed — 实战回归回炉（v0.8.1 暴露但未列 hotfix 的架构问题）
+
+🟠 **D16+D17：emit-phase 同步更新 progress.json**（commit eac4e07）
+- v0.8.1 实战 design-brief / design-execute 都被标 duration_estimated: true，
+  根因是 emit-phase 写 events.jsonl 但不更新 progress.json，progress.json
+  靠 infer 时 D8 fallback 兜底
+- 修复：emit-phase 在 appendFileSync 后立即 spawnSync 调 progress.mjs --update
+- PROGRESS_TRACKED_PHASES 集合：仅 12 phase 命令同步，编排命令保持原行为
+- 项目无 .ddt/progress.json 时静默 skip（v0.7 兼容）
+- 失败不阻塞 emit-phase（写 events 已成功）
+
+🟠 **D18：blocker 软/硬区分**（commit 2b8de2b）
+- v0.8.1 实战 design-brief-agent 写"软 blocker"（`- [BLOCK-XXX-NNN] <描述>`），
+  但 check-blockers.sh 只识别硬 blocker（含 resolved_at: null）
+- 修复：check-blockers.sh 加 --soft / --strict 模式
+  - 默认仅查硬（向后兼容）
+  - --soft 同时报告软（不阻塞）
+  - --strict 软也阻塞
+- templates/blockers.template.md 重写：两类 blocker 对比表 + 模板 + "何时用哪种"决策准则
+
+### Tests — 测试
+
+- 351 → 409（+58 用例覆盖 6 个新功能 + 7 项契约 + B1 fixture 参数化）
+- 关键测试套件：
+  - tests/integration/dry-run-contract.test.mjs（A2 17 用例）
+  - tests/integration/flowchart-render.test.mjs（A1 8 用例）
+  - tests/unit/render-progress.test.mjs（A3 10 用例）
+  - tests/integration/real-agent-fixtures.test.mjs（B1 6 用例）
+  - tests/integration/d16-d17-progress-sync.test.mjs（D16+D17 5 用例）
+  - tests/integration/d18-blocker-soft-hard.test.mjs（D18 7 用例）
+  - tests/unit/print-dry-run.test.mjs（A2-T1 6 单元）
+
+### 设计
+
+- v0.8 系列实战暴露 D1-D18 全部回炉处理（hotfix → 主线 → fixture），
+  形成"实战 → 评审 → hotfix → 主线 → 回炉"完整循环
+- v0.9-roadmap §A 流程可见性 + §B 解析器加固两条主线全部落地
+- D16/D17 让 progress.json 与 events.jsonl 实时一致，未来 efficiency-report
+  数据不再受 D8 fallback 污染
+
+### Migration — 升级指引
+
+完全向后兼容，无 breaking change：
+- 旧的 docs/blockers.md（仅硬 blocker）继续按默认模式工作
+- 旧的项目无 .ddt/progress.json 时 emit-phase 仍正常
+- v0.8.x 老命令格式仍能跑（dry-run 是新增分支，不影响主流程）
+
+升级方法：`/plugin marketplace update digital-delivery-team` →
+`/plugin install digital-delivery-team@0.9.0`
+
+新功能用法：
+- 看流程图：`docs/architecture/flowchart.md`（mermaid 渲染）
+- 预览命令：`/prd --dry-run` 等 13 个 phase 命令
+- 进度可视化：`/resume` 自动用新版
+
+---
+
 ## [0.8.2] - 2026-05-06 — 二轮实战回归 hotfix：D13-D15 体系级断裂
 
 源自 v0.8.1 在 `ddt-team-admin-v0.8.1` 项目（reset 到 /design 之前）重跑后
