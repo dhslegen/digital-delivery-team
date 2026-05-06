@@ -4,6 +4,86 @@
 
 ---
 
+## [0.9.1] - 2026-05-06 — DDT 工作流第零步：ddt-brief-builder skill
+
+### Added — 新增
+
+🟣 **skills/ddt-brief-builder：把任意输入转成专业 brief**
+
+源自实战痛点：用户每次新项目都卡在"DDT 第一个文件 project-brief.md 该填什么"
+的入门摩擦上。template 字段太多，用户的真实输入往往是杂乱的（一段中文描述 /
+比赛官网链接 / 已有 PRD），不知道怎么映射。
+
+新增 skill 自动覆盖所有入口：
+- **输入识别**：自然语言 / 文件路径 / URL / 已有 PRD / 比赛官网 / 截图 / 多源混合，7 类自动识别
+- **字段提取**：10 个 brief 字段按"必填 / 决策 / 可选"三档处理，每个有提取策略 + 缺失处理 + 反模式
+- **3 个关键决策门**（必须用 AskUserQuestion，**不替用户决定**）：
+  - D1 技术栈预设：5 preset + interactive 单选
+  - D2 前端类型（PR-E 三态）：spa / server-side / none
+  - D3 AI 设计通道（仅 spa）：claude-design / figma / v0
+- **质量自检**：填充率 < 70% 加产物警告，强制 D1+D2+D3 通过才允许产出
+- **产物落盘**：cwd/project-brief.md（DDT 项目根约定）+ 已有 brief 默认旁路 draft
+- **下一步引导**：明确告知用户跑 /prd → /wbs → /design → /design-brief 完整链路
+
+skill 结构：
+```
+skills/ddt-brief-builder/
+├── SKILL.md                                ← 主指令（识别 + 提取 + 决策 + 自检）
+├── reference/
+│   ├── field-rules.md                      ← 10 字段决策准则
+│   ├── tech-stack-quick-pick.md            ← D1 速查（输入暗示 → 推荐预设）
+│   └── ai-design-quick-pick.md             ← D3 速查（3 通道差异 + 隐私 + 适合场景）
+└── examples/
+    ├── from-paragraph.md                   ← 用户粘贴一段文字 → brief
+    ├── from-existing-prd.md                ← 已有 PRD 反向提炼 brief
+    └── from-competition-url.md             ← 比赛官网 → brief（评分项作硬指标）
+```
+
+### 触发关键词
+
+- "帮我写 project-brief"
+- "DDT 第零步"
+- "新项目设置" / "测试项目设置"
+- "把需求转成 brief"
+- "我想用 DDT 跑这个项目"
+- "比赛项目想用 DDT"
+- 任何粘贴需求/比赛说明/已有 PRD 让 LLM 转成 DDT 输入的场景
+
+### 与 DDT 体系的对齐契约
+
+skill 产出的 brief 满足下游约束：
+- /prd Phase 1 文件存在性检查 → 路径 cwd/project-brief.md
+- /design Phase 2b 技术栈预设字段 → 值在 7 个枚举内（5 preset + interactive + custom）
+- /design-brief 引用 brief 的"目标用户"、"核心功能" → 必填非空
+- /design-execute 读 ai_design.type → D3 决策门给清晰值
+
+### Tests — 测试
+
+- skill 添加不破任何既有测试（409/409 全过）
+- manifest description 自动更新：11 skill → 12 skill
+
+### 设计
+
+- 解决 v0.5→v0.9 演进中"用户卡在 brief 入口"的痼疾
+- 与 v0.9.0 流程可见性主线（A1 flowchart / A2 dry-run）协同：用户从"看不见全流程"到"看得见 + 能预览 + 能从任意输入入门"
+
+### Migration — 升级指引
+
+完全向后兼容：
+- 不影响既有 project-brief.md（用户可继续手填）
+- skill 是被动触发（用户说话含关键词时加载），不强制使用
+- templates/project-brief.template.md 不变，skill 内部使用同样字段结构
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.1
+```
+
+新 skill 用法：在新项目里直接对 Claude 说"帮我写 project-brief，[你的需求]"，
+skill 会自动加载并引导你完成 D1/D2/D3 决策，1 分钟内产出专业 brief。
+
+---
+
 ## [0.9.0] - 2026-05-06 — 流程可见性主线 + 解析器加固 + 实战回归回炉
 
 源自 v0.8.0 实战暴露的"功能正确但流程不可见"问题。v0.9 主题：从"能跑"
