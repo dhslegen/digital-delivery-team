@@ -12,8 +12,35 @@
 // 退出码：0 成功；1 参数错误；写入失败也返回 0（不阻塞 command 流程）。
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+
+// v0.9 D16+D17：进程内同步更新 progress.json，消除 D8 fallback 兜底回填 started_at
+const __filename = fileURLToPath(import.meta.url);
+const PROGRESS_SCRIPT = resolve(dirname(__filename), 'progress.mjs');
+
+// progress.mjs PHASE_ORDER 不含编排命令（kickoff/impl/verify/ship），尝试 update 这些会 exit 1
+// 这里维护 emit-phase 中"应该同步到 progress.json"的子集
+const PROGRESS_TRACKED_PHASES = new Set([
+  'prd', 'wbs', 'design',
+  'design-brief', 'design-execute',
+  'build-web', 'build-api',
+  'test', 'review', 'fix', 'package', 'report',
+]);
+
+function syncProgressJson(cwd, phase, action) {
+  // 仅 phase 命令同步（编排命令不在 progress.json 状态机里）
+  if (!PROGRESS_TRACKED_PHASES.has(phase)) return;
+  // 项目根无 .ddt/progress.json 时跳过（v0.7 老项目兼容）
+  if (!existsSync(join(cwd, '.ddt', 'progress.json'))) return;
+  const status = action === 'start' ? 'in_progress' : 'completed';
+  // 静默 spawn，失败不阻塞 emit-phase
+  spawnSync(process.execPath, [PROGRESS_SCRIPT, '--update', phase, status], {
+    cwd, stdio: ['ignore', 'ignore', 'pipe'], encoding: 'utf8',
+  });
+}
 
 const VALID_PHASES = new Set([
   'prd', 'wbs', 'design',
@@ -157,6 +184,8 @@ try {
   }
 
   appendFileSync(eventsFile, JSON.stringify(record) + '\n', 'utf8');
+  // v0.9 D16+D17：同步更新 progress.json（仅 phase 命令；失败不阻塞）
+  syncProgressJson(cwd, phase, action);
   // stdout 输出简要信息供 commands 调试
   if (action === 'end' && record.data.duration_ms > 0) {
     console.log(`[emit-phase] ${phase} ${action} (${(record.data.duration_ms / 1000).toFixed(1)}s)`);
