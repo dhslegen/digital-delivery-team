@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // M4-3: /resume 工具 — 读 .ddt/progress.json 输出当前进度与下一步建议
+// v0.9 A3：进度概览改用 bin/render-progress.mjs（ASCII 进度条 + 高亮）
 import { existsSync, readFileSync } from 'node:fs';
+import { renderProgress } from './render-progress.mjs';
 
 const PROGRESS_PATH = '.ddt/progress.json';
 const STALE_MINUTES = 30;
@@ -32,21 +34,8 @@ const completed = order.filter(p => phases[p].status === 'completed');
 const inProgress = order.filter(p => phases[p].status === 'in_progress');
 const pending = order.filter(p => phases[p].status === 'pending');
 
-console.log('阶段进度：');
-for (const phase of order) {
-  const ph = phases[phase];
-  const icon = ph.status === 'completed' ? '✅' :
-               ph.status === 'in_progress' ? '🔄' : '⏸';
-  let suffix = '';
-  if (ph.status === 'in_progress' && ph.started_at) {
-    const elapsed = Math.round((now - new Date(ph.started_at)) / 60000);
-    suffix = `（已 ${elapsed} 分钟）`;
-  }
-  if (ph.status === 'completed' && ph.completed_at) {
-    suffix = `（${new Date(ph.completed_at).toISOString().slice(0, 16)}）`;
-  }
-  console.log(`  ${icon} ${phase}${suffix}`);
-}
+// v0.9 A3：ASCII 进度条 + 高亮
+console.log(renderProgress(progress));
 
 console.log('');
 console.log(`已完成: ${completed.length} / ${order.length}`);
