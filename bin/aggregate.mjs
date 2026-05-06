@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 // T-M02: 从 events.jsonl 聚合到 SQLite。支持 --bootstrap 创建新项目 ID。
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, appendFileSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { DeliveryStore } from './lib/store.mjs';
+
+const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const require = createRequire(import.meta.url);
 const { parseTestReport, parseReviewReport } = require('../hooks/lib/quality-parser.js');
@@ -30,8 +33,33 @@ if (args.get('bootstrap')) {
   store.createProject(id, name);
   mkdirSync('.ddt', { recursive: true });
   writeFileSync('.ddt/project-id', id);
+  // v0.8.1 D11: 项目根 .gitignore 兜底——避免 Untitled / .DS_Store / staging/ 等
+  // 派生物意外入版本（实测 ddt-team-admin-v0.8 留下 Untitled 空文件）
+  ensureGitignore();
   console.log(id);
   process.exit(0);
+}
+
+// v0.8.1 D11: 把 templates/.gitignore.template 合并到项目根 .gitignore
+//   - 项目根无 .gitignore：直接复制
+//   - 项目根已有 .gitignore：仅追加缺失的行（不重复，不破坏用户自定义）
+function ensureGitignore() {
+  const tplPath = join(PLUGIN_ROOT, 'templates', '.gitignore.template');
+  if (!existsSync(tplPath)) return;  // 兜底：模板缺失时静默
+  const target = '.gitignore';
+  const tplContent = readFileSync(tplPath, 'utf8');
+  if (!existsSync(target)) {
+    copyFileSync(tplPath, target);
+    return;
+  }
+  // 已有 .gitignore：追加未出现的关键条目
+  const existing = readFileSync(target, 'utf8');
+  const tplLines = tplContent.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  const missing = tplLines.filter(l => !existing.includes(l));
+  if (missing.length === 0) return;
+  appendFileSync(target,
+    '\n# ─── DDT v0.8.1 D11 自动追加（避免 Untitled / .DS_Store 等派生物入版本）─\n' +
+    missing.join('\n') + '\n');
 }
 
 const projectId = args.get('project');

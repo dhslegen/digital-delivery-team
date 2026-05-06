@@ -1,0 +1,30 @@
+# DDT 项目 .gitignore 模板（v0.8.1 D11：由 aggregate --bootstrap 自动复制）
+# 实战 ddt-team-admin-v0.8 项目根遗留 Untitled 空文件 + .DS_Store，需统一兜底。
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+Untitled
+Untitled\ *
+.idea/
+.vscode/
+
+# DDT 衍生（progress.json / project-id 必须入版本，不可 ignore）
+.ddt/locks/
+.ddt/design/*/upload-package/
+.ddt/design/v0/v0-sources/
+.ddt/checkpoints.log
+
+# 大型派生产物（每次 design-execute 重生成）
+staging/
+
+# Node / 包管理（项目类型实际可在 commit 后裁剪）
+node_modules/
+dist/
+build/
+.next/
+.cache/
+*.log
+.env
+.env.local
