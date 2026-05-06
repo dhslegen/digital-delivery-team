@@ -17,7 +17,7 @@ function run(cwd, args) {
     { cwd, encoding: 'utf8' });
 }
 
-test('progress --init 初始化所有 10 个 phase', () => {
+test('progress --init 初始化所有 12 个 phase（v0.8.1 D9: 含 design-brief / design-execute）', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-'));
   try {
     const r = run(tmp, ['--init']);
@@ -26,7 +26,9 @@ test('progress --init 初始化所有 10 个 phase', () => {
     assert.ok(existsSync(path));
     const progress = JSON.parse(readFileSync(path, 'utf8'));
     assert.equal(progress.schema_version, 1);
-    const expectedPhases = ['prd', 'wbs', 'design', 'build-web', 'build-api',
+    const expectedPhases = ['prd', 'wbs', 'design',
+      'design-brief', 'design-execute',
+      'build-web', 'build-api',
       'test', 'review', 'fix', 'package', 'report'];
     for (const phase of expectedPhases) {
       assert.ok(progress.phases[phase], `phase ${phase} 必须存在`);
@@ -56,7 +58,7 @@ test('progress --update 推进状态', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
-test('progress --infer 根据 docs/* 推断完成状态', () => {
+test('progress --infer 根据 docs/* 推断完成状态（无 tech-stack 时 design-brief 仍是 pending）', () => {
   const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-infer-'));
   try {
     mkdirSync(join(tmp, 'docs'), { recursive: true });
@@ -70,8 +72,100 @@ test('progress --infer 根据 docs/* 推断完成状态', () => {
     assert.equal(progress.phases.prd.status, 'completed');
     assert.equal(progress.phases.wbs.status, 'completed');
     assert.equal(progress.phases.design.status, 'completed');
+    // v0.8.1 D9: design 完成后下一步应为 design-brief（不再跳到 build-web）
+    assert.equal(progress.phases['design-brief'].status, 'pending');
+    assert.equal(progress.phases['design-execute'].status, 'pending');
     assert.equal(progress.phases['build-web'].status, 'pending');
-    assert.equal(progress.current_phase, 'build-web');
+    assert.equal(progress.current_phase, 'design-brief');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D9: frontend.type=server-side 时 design-brief / design-execute 应自动 skipped
+test('v0.8.1 D9: frontend.type=server-side 时 design-brief / design-execute 自动 skipped', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-server-side-'));
+  try {
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    mkdirSync(join(tmp, 'docs'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'tech-stack.json'),
+      JSON.stringify({ frontend: { type: 'server-side' } }));
+    writeFileSync(join(tmp, 'docs/prd.md'), '# PRD');
+    writeFileSync(join(tmp, 'docs/wbs.md'), '# WBS');
+    writeFileSync(join(tmp, 'docs/api-contract.yaml'), 'openapi: 3.0.0');
+
+    const r = run(tmp, ['--infer']);
+    assert.equal(r.status, 0);
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt/progress.json'), 'utf8'));
+    assert.equal(progress.phases['design-brief'].status, 'skipped',
+      'server-side 项目无 SPA UI，design-brief 应自动跳过');
+    assert.equal(progress.phases['design-execute'].status, 'skipped');
+    // current_phase 应跳过 skipped 推到 build-web 或 build-api
+    assert.ok(progress.current_phase === 'build-web' || progress.current_phase === 'build-api',
+      `current_phase 应跳过 skipped 阶段，实际 ${progress.current_phase}`);
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D9: frontend.type=none 时同 server-side
+test('v0.8.1 D9: frontend.type=none 时 design-brief / design-execute 自动 skipped', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-none-'));
+  try {
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'tech-stack.json'),
+      JSON.stringify({ frontend: { type: 'none' } }));
+
+    run(tmp, ['--init']);
+    const r = run(tmp, ['--infer']);
+    assert.equal(r.status, 0);
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(progress.phases['design-brief'].status, 'skipped');
+    assert.equal(progress.phases['design-execute'].status, 'skipped');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D9: frontend.type=spa 时保持 pending（不主动跳过）
+test('v0.8.1 D9: frontend.type=spa 时 design-brief 保持 pending', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-spa-'));
+  try {
+    mkdirSync(join(tmp, '.ddt'), { recursive: true });
+    writeFileSync(join(tmp, '.ddt', 'tech-stack.json'),
+      JSON.stringify({ frontend: { type: 'spa' } }));
+
+    run(tmp, ['--init']);
+    const r = run(tmp, ['--infer']);
+    assert.equal(r.status, 0);
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(progress.phases['design-brief'].status, 'pending',
+      'SPA 项目必须走 design-brief，不应跳过');
+    assert.equal(progress.phases['design-execute'].status, 'pending');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D8: update 直接跳 completed 时 started_at 应回填同一时刻 + duration_estimated 标记
+test('v0.8.1 D8: update completed 时若 started_at 为 null 应回填同一时刻 + duration_estimated', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-d8-'));
+  try {
+    run(tmp, ['--init']);
+    // 直接 update completed（跳过 in_progress）
+    const r = run(tmp, ['--update', 'prd', 'completed']);
+    assert.equal(r.status, 0);
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.ok(progress.phases.prd.started_at,
+      'started_at 应被回填，不应为 null（避免污染度量基线）');
+    assert.equal(progress.phases.prd.completed_at, progress.phases.prd.started_at,
+      '回填的 started_at 应等于 completed_at（同一时刻）');
+    assert.equal(progress.phases.prd.duration_estimated, true,
+      '回填记录应标记 duration_estimated 以便 aggregate 单独处理');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1: skipped 状态被 update 接受
+test('v0.8.1: progress --update 接受 skipped 状态', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ddt-progress-skipped-'));
+  try {
+    run(tmp, ['--init']);
+    const r = run(tmp, ['--update', 'design-brief', 'skipped']);
+    assert.equal(r.status, 0);
+    const progress = JSON.parse(readFileSync(join(tmp, '.ddt', 'progress.json'), 'utf8'));
+    assert.equal(progress.phases['design-brief'].status, 'skipped');
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 

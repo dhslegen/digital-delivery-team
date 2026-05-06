@@ -37,22 +37,45 @@ import { join } from 'node:path';
 const PROGRESS_DIR = '.ddt';
 const PROGRESS_PATH = join(PROGRESS_DIR, 'progress.json');
 
-// 10 个 phase 与对应 artifact（用于 infer 推断）
+// 12 个 phase 与对应 artifact（用于 infer 推断）
+// v0.8.1 D9: 加 design-brief / design-execute（与 emit-phase VALID_PHASES 对齐）
 const PHASE_ARTIFACTS = {
-  prd:         ['docs/prd.md'],
-  wbs:         ['docs/wbs.md', 'docs/risks.md'],
-  design:      ['docs/arch.md', 'docs/api-contract.yaml', 'docs/data-model.md'],
-  'build-web': ['web/package.json'],
-  'build-api': ['server/package.json', 'server/pom.xml', 'server/go.mod', 'server/pyproject.toml'],
-  test:        ['tests/test-report.md'],
-  review:      ['docs/review-report.md'],
-  fix:         [], // fix 由 review-report.md::Fix Log 段落判定
-  package:     ['README.md', 'docs/deploy.md', 'docs/demo-script.md'],
-  report:      ['docs/efficiency-report.md'],
+  prd:              ['docs/prd.md'],
+  wbs:              ['docs/wbs.md', 'docs/risks.md'],
+  design:           ['docs/arch.md', 'docs/api-contract.yaml', 'docs/data-model.md'],
+  'design-brief':   ['docs/design-brief.md'],
+  'design-execute': ['.ddt/design/claude-design/upload-package',
+                     '.ddt/design/figma/upload-package',
+                     '.ddt/design/v0/v0-sources'],
+  'build-web':      ['web/package.json'],
+  'build-api':      ['server/package.json', 'server/pom.xml', 'server/go.mod', 'server/pyproject.toml'],
+  test:             ['tests/test-report.md'],
+  review:           ['docs/review-report.md'],
+  fix:              [], // fix 由 review-report.md::Fix Log 段落判定
+  package:          ['README.md', 'docs/deploy.md', 'docs/demo-script.md'],
+  report:           ['docs/efficiency-report.md'],
 };
 
 const PHASE_ORDER = Object.keys(PHASE_ARTIFACTS);
-const VALID_STATUSES = new Set(['pending', 'in_progress', 'completed']);
+// v0.8.1: 加 'skipped'，语义为"按规则跳过"（如 frontend.type !== 'spa' 时的 design-brief / design-execute）
+// completed 与 skipped 在 current_phase 推进时等价处理
+const VALID_STATUSES = new Set(['pending', 'in_progress', 'completed', 'skipped']);
+const TERMINAL_STATUSES = new Set(['completed', 'skipped']);
+
+// v0.8.1: 读取 frontend.type 决定 design-brief / design-execute 是否应跳过
+function readFrontendType(cwd = process.cwd()) {
+  try {
+    const text = readFileSync(join(cwd, '.ddt', 'tech-stack.json'), 'utf8');
+    const obj = JSON.parse(text);
+    return obj?.frontend?.type || null;
+  } catch { return null; }
+}
+
+function shouldSkipPhase(phase, frontendType) {
+  if (phase !== 'design-brief' && phase !== 'design-execute') return false;
+  // 仅 spa 类型需要走 brief / execute；server-side 与 none 跳过
+  return frontendType !== null && frontendType !== 'spa';
+}
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -120,7 +143,9 @@ function readProjectIdFromFile() {
 }
 
 // 根据 artifacts 文件存在性推断 phase 是否完成
-function inferPhaseStatus(phase, currentStatus) {
+function inferPhaseStatus(phase, currentStatus, frontendType) {
+  // v0.8.1 D9: design-brief / design-execute 在 frontend.type !== 'spa' 时主动跳过
+  if (shouldSkipPhase(phase, frontendType)) return 'skipped';
   const artifacts = PHASE_ARTIFACTS[phase];
   if (!artifacts || artifacts.length === 0) return currentStatus; // fix 阶段无固定 artifact
   // 任一 artifact 存在 → completed（保守：完整产出由 agent self-check 兜底）
@@ -138,23 +163,31 @@ function infer() {
   if (fileId && progress.project_id !== fileId) {
     progress.project_id = fileId;
   }
+  // v0.8.1 D9: 读取 frontend.type 决定 design-brief / design-execute 是 pending 还是 skipped
+  const frontendType = readFrontendType();
   for (const phase of PHASE_ORDER) {
     const cur = progress.phases[phase];
-    const newStatus = inferPhaseStatus(phase, cur ? cur.status : 'pending');
+    const newStatus = inferPhaseStatus(phase, cur ? cur.status : 'pending', frontendType);
+    const now = new Date().toISOString();
     if (!progress.phases[phase]) {
       progress.phases[phase] = {
         status: newStatus,
         started_at: null,
-        completed_at: newStatus === 'completed' ? new Date().toISOString() : null,
+        completed_at: TERMINAL_STATUSES.has(newStatus) ? now : null,
         artifacts: PHASE_ARTIFACTS[phase],
       };
-    } else if (cur.status !== 'completed' && newStatus === 'completed') {
-      progress.phases[phase].status = 'completed';
-      progress.phases[phase].completed_at = progress.phases[phase].completed_at || new Date().toISOString();
+    } else if (!TERMINAL_STATUSES.has(cur.status) && TERMINAL_STATUSES.has(newStatus)) {
+      progress.phases[phase].status = newStatus;
+      progress.phases[phase].completed_at = progress.phases[phase].completed_at || now;
+      // v0.8.1 D8: 跳到 completed/skipped 时若 started_at 仍为 null，回填同一时刻 + 标记估算
+      if (!progress.phases[phase].started_at) {
+        progress.phases[phase].started_at = now;
+        progress.phases[phase].duration_estimated = true;
+      }
     }
   }
-  // current_phase = 第一个非 completed 的 phase
-  progress.current_phase = PHASE_ORDER.find(p => progress.phases[p].status !== 'completed') || null;
+  // current_phase = 第一个非 terminal 的 phase（completed 或 skipped 都跳过）
+  progress.current_phase = PHASE_ORDER.find(p => !TERMINAL_STATUSES.has(progress.phases[p].status)) || null;
   writeProgress(progress);
   return progress;
 }
@@ -165,7 +198,7 @@ function update(phase, status) {
     process.exit(1);
   }
   if (!VALID_STATUSES.has(status)) {
-    console.error(`❌ 未知 status：${status}（合法：pending|in_progress|completed）`);
+    console.error(`❌ 未知 status：${status}（合法：pending|in_progress|completed|skipped）`);
     process.exit(1);
   }
   const progress = readProgress() || emptyProgress();
@@ -183,12 +216,17 @@ function update(phase, status) {
     ph.started_at = ph.started_at || now;
     progress.current_phase = phase;
   }
-  if (status === 'completed') {
+  if (TERMINAL_STATUSES.has(status)) {
     ph.completed_at = now;
+    // v0.8.1 D8: 跳到 terminal 时若 started_at 仍为 null，回填同一时刻 + 标记估算
+    if (!ph.started_at) {
+      ph.started_at = now;
+      ph.duration_estimated = true;
+    }
     if (progress.current_phase === phase) {
-      // 推进到下一个 pending phase
+      // 推进到下一个非 terminal phase
       progress.current_phase = PHASE_ORDER.find(p =>
-        progress.phases[p] && progress.phases[p].status !== 'completed' && p !== phase) || null;
+        progress.phases[p] && !TERMINAL_STATUSES.has(progress.phases[p].status) && p !== phase) || null;
     }
   }
   ph.status = status;
