@@ -110,7 +110,10 @@ export function extractUserStories(prdText) {
 
 function extractStoriesEarsEn(prdText) {
   const stories = [];
-  const re = /\*\*用户故事\*\*\s*[：:]?\s*As a\s+(.+?)\s*[，,]\s*I want\s+(.+?)\s*[，,]\s*so that\s+(.+?)\s*[。.\n]/gi;
+  // v0.8.2 D15：兼容 `As an` —— product-agent 按英语 vowel-aware 习惯生成
+  // "As an 运营经理"（中文虽不需要冠词，但 EARS 模板按英语规范），原 v0.8.1
+  // 正则只识别 `As a\s+` 让实战 PRD 0 抽取（ddt-team-admin-v0.8.1 复现）。
+  const re = /\*\*用户故事\*\*\s*[：:]?\s*As\s+an?\s+(.+?)\s*[，,]\s*I want\s+(.+?)\s*[，,]\s*so that\s+(.+?)\s*[。.\n]/gi;
   let m, idx = 1;
   while ((m = re.exec(prdText)) !== null) {
     stories.push({

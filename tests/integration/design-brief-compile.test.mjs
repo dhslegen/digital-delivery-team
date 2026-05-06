@@ -152,6 +152,35 @@ test('compile-design-brief: --dry-run 不落盘', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+// v0.8.2 D15：实战回归 fixture——product-agent 按英语 vowel-aware 写 `As an`
+// （ddt-team-admin-v0.8.1 实战 PRD 让 v0.8.1 D5 修复仍然 0 抽取）
+test('v0.8.2 D15: extractUserStories 兼容 As an（vowel 前的英语正确语法）', () => {
+  const prd = `# PRD
+
+## 用户故事
+
+**用户故事**：As an \`运营经理\`，I want \`在分页列表中筛选成员\`，so that \`不需要在多工具间跳转\`。
+
+**用户故事**：As an \`运营经理\`，I want \`通过 4 步表单创建新成员\`，so that \`入职从 30 分钟降至 5 分钟\`。
+
+**用户故事**：As a \`HR\`，I want \`批量导入员工\`，so that \`月度入职处理\`。
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 3, 'As an + As a 混用应全部抽出');
+  assert.match(stories[0].role, /运营经理/);
+  assert.match(stories[0].want, /分页列表中筛选成员/);
+  assert.match(stories[1].want, /4 步表单创建/);
+  assert.match(stories[2].role, /HR/, '保留 As a 兼容性');
+});
+
+test('v0.8.2 D15: extractUserStories 反引号包裹 + 中文逗号 + As an 完整组合', () => {
+  // 直接用 ddt-team-admin-v0.8.1::docs/prd.md 实战格式
+  const prd = String.raw`**用户故事**：As an \`运营经理\`，I want \`在一个分页列表中快速定位成员并执行批量操作\`，so that \`我不需要在多个工具间跳转就能完成日常团队管理\`。`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 1, '实战 PRD 格式应抽出 1 条（v0.8.1 D5 BUG 复现案）');
+  assert.match(stories[0].role, /运营经理/);
+});
+
 // v0.8.1 D5：多策略匹配链——中文 EARS / markdown 表格
 test('v0.8.1 D5: extractUserStories 支持中文 EARS（"作为 X，我想 Y，以便 Z"）', () => {
   const prd = `# PRD
