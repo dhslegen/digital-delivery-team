@@ -4,6 +4,76 @@
 
 ---
 
+## [0.8.2] - 2026-05-06 — 二轮实战回归 hotfix：D13-D15 体系级断裂
+
+源自 v0.8.1 在 `ddt-team-admin-v0.8.1` 项目（reset 到 /design 之前）重跑后
+暴露的 3 项缺陷，集中在 v0.5→v0.8 演进残留的双轨制冲突 + 解析器 fixture 偏差。
+完整评审报告见会话讨论 + 代码评审。
+
+### 🔴 P0 修复
+
+🔴 **D15 EARS `As an` vowel-aware 兼容**（commit 1e9694d）
+- v0.8.1 D5 修复了多策略匹配链但仍漏掉 `As an`（英语 vowel 前的正确语法）
+- product-agent 实战按英语规范生成 `As an 运营经理`，让 D5 修复仍然 0 抽取
+- 修复：单字符正则改动 `As a\s+` → `As an?\s+`
+- 兼容 As a / As an 混用，不影响中文 EARS 与 markdown 表格策略
+
+🔴 **D13 claude-design 通道语义统一**（commit 6f0c785）
+- v0.5 留下的 tech-stack yaml 把 claude-design 描述为
+  "Claude artifact / web-artifacts-builder 直接生成"（`requires_external: false`）
+- 但 v0.8 引入的工作流（commands/design-execute.md + skills/ai-native-design）
+  已将 claude-design 重新定位为 "外部 claude.ai/design 工具 → bundle/Handoff"
+- 实战 ddt-team-admin-v0.8.1 暴露双轨制冲突：main thread 行为不一致
+- 修复：tech-stack-presets.yaml + tech-stack-options.yaml 中
+  `requires_external: false` → `claude.ai/design`，与 figma / v0 同语义
+
+🔴 **D14 ingest-claude-design.mjs 加 --url 支持**（commit ef97506）
+- v0.8 commands/design-execute.md 推荐 "Share → Handoff to Claude Code"
+  作 claude-design (优选) 回贴方式，但 case 分支里 claude-design 不在 --url 列表
+- 实战中 main thread 被迫手动 WebFetch + tar.gz 解压
+- 修复：bin/ingest-claude-design.mjs 加 fetchBundleFromUrl
+  - 仅 https:// 协议（拒 http / file / data）
+  - SSRF 防御：localhost / 127.* / 10.* / 172.16-31.* / 192.168.* / 169.254.*
+    （含 AWS metadata IP）/ IPv6 loopback / 私有 / 链接本地全部拒绝
+  - 流式下载 100MB 体积上限 + Content-Length 预检（防压缩炸弹 / DoS）
+  - magic bytes 校验：仅 1F8B (gzip) / 504B (zip)，其他扩展拒绝
+  - 临时目录 mkdtempSync + 成功后清理（失败保留供调试）
+- commands/design-execute.md::分支 C 加 claude-design 进 --url case
+
+### 测试
+
+- 339 → 351（+12 D14 测试 + 4 D15/D13 fixture）
+- D14: 协议拒 http/file/非法 URL；SSRF 拒所有内部地址类型；spawn 集成测试
+- D13: yaml claude-design::requires_external 必须 claude.ai；SKILL 一致性
+- D15: As an + As a 混用 / 实战 PRD 完整格式（反引号 + 中文逗号）
+
+### 设计
+
+- v0.5→v0.8 演进留下的语义冲突这次集中清理（D13）
+- W7.5 R10 的 zip slip 防御与本次 D14 的 SSRF 防御构成"摄取层完整安全栈"
+- v0.8.1 测试 fixture 用 `As a` 让 D5 修复看似完整但实际有偏差（D15）——
+  正是 v0.9-roadmap §B "fixtures 标准化基于真实 agent 产出" 要解决的根本问题
+
+### 实战未触发但仍待处理（v0.9 候选）
+
+ddt-team-admin-v0.8.1 实战还暴露了几个非紧急的架构层问题：
+- **D16/D17**：progress.json::started_at 可靠性（事件溯源 vs 状态聚合的 sync 差）
+- **D18**：blocker 格式分裂（硬 blocker 含 frontmatter / 软 blocker 仅列表）
+
+这些不是 hotfix 范畴，作 v0.9-roadmap §A 流程可见性主线一并处理。
+
+### 迁移指南（从 v0.8.1 → v0.8.2）
+
+完全向后兼容，无 breaking change：
+- 旧的 `As a` 格式 PRD 仍能解析
+- 旧的 `--bundle <zip>` 摄取入口保留
+- tech-stack.json 旧 ai_design 字段读取不变（仅 yaml 定义改语义）
+
+升级方法：`/plugin marketplace update digital-delivery-team` →
+`/plugin install digital-delivery-team@0.8.2`
+
+---
+
 ## [0.8.1] - 2026-05-06 — 实战回归 hotfix：D1-D12 体系级断裂修复
 
 源自 v0.8.0 在 `ddt-team-admin-v0.8` 项目（团队成员管理后台）跑端到端流程时
