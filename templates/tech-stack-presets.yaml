@@ -154,10 +154,10 @@ presets:
 
 ai_design_options:
   claude-design:
-    label: Claude Artifact / web-artifacts-builder
-    flow: 用 Claude 生成 React + Tailwind + shadcn-ui 组件代码，直接落地 web/
+    label: Claude.ai/design Hi-fi 设计工具
+    flow: 用 claude.ai/design 完成 Design System + Hi-fi 设计 → bundle zip / Handoff URL → DDT 摄取
     skill: ai-native-design
-    requires_external: false
+    requires_external: claude.ai/design
   figma:
     label: Figma 设计稿一键转代码
     flow: 通过 Figma MCP 读取设计稿 → get_design_context → 生成符合 design system 的代码

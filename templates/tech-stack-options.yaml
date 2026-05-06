@@ -437,8 +437,8 @@ frontend:
 
 ai_design:
   claude-design:
-    description: Claude artifact / web-artifacts-builder 直接生成
-    requires_external: false
+    description: claude.ai/design Hi-fi 设计工具 → bundle zip / Handoff URL → DDT 摄取
+    requires_external: claude.ai/design
   figma:
     description: Figma MCP get_design_context → React+Tailwind
     requires_external: figma-mcp-server
