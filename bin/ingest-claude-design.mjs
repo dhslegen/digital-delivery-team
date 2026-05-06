@@ -17,6 +17,7 @@
 //   node bin/ingest-claude-design.mjs --bundle <zip-path>
 //   node bin/ingest-claude-design.mjs --bundle <zip-path> --refresh
 //   node bin/ingest-claude-design.mjs --bundle <zip-path> --dry-run
+//   node bin/ingest-claude-design.mjs --url <https-url>     # v0.8.2 D14 新增
 //
 // 退出码：
 //   0 = 成功
@@ -25,11 +26,113 @@
 //   3 = 无可用解压工具（unzip / bsdtar）
 //   4 = 解压失败 / zip 损坏
 //   5 = staging 目录已存在未传 --refresh
+//   6 = URL 拒绝（非 https / SSRF / 体积超限 / magic bytes 非法）
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync, lstatSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, readdirSync, statSync, lstatSync, realpathSync, createWriteStream } from 'node:fs';
 import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+// v0.8.2 D14：URL 下载体积上限。Claude Design Handoff bundle 实测 ~256KB（解压前），
+// 设 100MB 远超合理上限，防压缩炸弹与意外 DoS。
+const MAX_URL_DOWNLOAD_BYTES = 100 * 1024 * 1024;
+
+// v0.8.2 D14：SSRF 防御——禁止下载到内部 / loopback / 链接本地地址。
+// 主要拦截攻击者诱导下载 URL 指向内部服务的情况（如 127.0.0.1:8080 admin）。
+const SSRF_BLOCKED_HOST_PATTERNS = [
+  /^localhost$/i,
+  /^127\./,                    // 127.0.0.0/8
+  /^10\./,                     // 10.0.0.0/8
+  /^192\.168\./,               // 192.168.0.0/16
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,  // 172.16.0.0/12
+  /^169\.254\./,               // 链接本地（含 AWS metadata 169.254.169.254）
+  /^::1$/, /^fc/, /^fd/, /^fe80:/i,  // IPv6 loopback / 私有 / 链接本地
+  /^0\.0\.0\.0$/, /^\[::\]$/,
+];
+
+function isSsrfBlocked(hostname) {
+  return SSRF_BLOCKED_HOST_PATTERNS.some(p => p.test(hostname));
+}
+
+// v0.8.2 D14：从 https URL 拉取 bundle 到临时文件
+//   - 仅 https:// 协议（防 file:// / http:// / data:// 等）
+//   - SSRF 防御（禁内部 / loopback / 链接本地）
+//   - Content-Length 预检（若服务端返回头部超限即拒）
+//   - 流式下载边写边累计 byte，超 MAX_URL_DOWNLOAD_BYTES 立即中止
+//   - magic bytes 检测（1F 8B = gzip / 50 4B = zip），其他扩展名拒绝
+// 返回：{ path, ext, size }
+export async function fetchBundleFromUrl(url) {
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    throw Object.assign(new Error(`URL 无法解析: ${url}`), { code: 6 });
+  }
+  if (parsed.protocol !== 'https:') {
+    throw Object.assign(new Error(`仅支持 https:// 协议，实际: ${parsed.protocol}`), { code: 6 });
+  }
+  if (isSsrfBlocked(parsed.hostname)) {
+    throw Object.assign(new Error(`SSRF 防御拒绝主机: ${parsed.hostname}`), { code: 6 });
+  }
+
+  const res = await fetch(url, { redirect: 'follow' });
+  if (!res.ok) {
+    throw Object.assign(new Error(`HTTP ${res.status} ${res.statusText}`), { code: 6 });
+  }
+  const cl = Number(res.headers.get('content-length') || '0');
+  if (cl > MAX_URL_DOWNLOAD_BYTES) {
+    throw Object.assign(
+      new Error(`Content-Length ${cl} 超限（max ${MAX_URL_DOWNLOAD_BYTES}）`),
+      { code: 6 }
+    );
+  }
+
+  // 流式下载到临时文件
+  const tmpDir = mkdtempSync(join(tmpdir(), 'ddt-design-url-'));
+  const tmpFile = join(tmpDir, 'bundle.bin');
+  let downloaded = 0;
+  const monitor = new Readable({
+    async read() {
+      const reader = res.body.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          downloaded += value.byteLength;
+          if (downloaded > MAX_URL_DOWNLOAD_BYTES) {
+            this.destroy(new Error(`下载体积超限（已下载 ${downloaded} bytes）`));
+            return;
+          }
+          this.push(Buffer.from(value));
+        }
+        this.push(null);
+      } catch (e) { this.destroy(e); }
+    }
+  });
+  try {
+    await pipeline(monitor, createWriteStream(tmpFile));
+  } catch (e) {
+    rmSync(tmpDir, { recursive: true, force: true });
+    throw Object.assign(new Error(`下载失败: ${e.message}`), { code: 6 });
+  }
+
+  // magic bytes 检测决定扩展名
+  const buf = readFileSync(tmpFile, { encoding: null }).slice(0, 4);
+  let ext;
+  if (buf[0] === 0x1F && buf[1] === 0x8B) ext = '.tar.gz';
+  else if (buf[0] === 0x50 && buf[1] === 0x4B) ext = '.zip';
+  else {
+    rmSync(tmpDir, { recursive: true, force: true });
+    const hex = [...buf].map(b => b.toString(16).padStart(2, '0')).join(' ');
+    throw Object.assign(
+      new Error(`bundle magic bytes 非法（${hex}），仅支持 gzip (1F 8B) / zip (50 4B)`),
+      { code: 6 }
+    );
+  }
+  const finalPath = join(tmpDir, `bundle${ext}`);
+  execFileSync('mv', [tmpFile, finalPath]);
+  return { path: finalPath, ext, size: downloaded, tmpDir };
+}
 
 // W7.5 R10：单 jsx/css 读全文上限。超过 5MB 的文件不可能是合法的 React/CSS 源码——
 //   要么是 minified bundle，要么是带嵌入数据的产物，要么是恶意压缩炸弹。
@@ -216,9 +319,22 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
 
-  const bundlePath = args.bundle;
+  // v0.8.2 D14：--url 路径——下载到临时文件后沿用 --bundle 流程
+  let bundlePath = args.bundle;
+  let tmpDir = null;  // 用于结束后清理 fetch 产生的临时目录
+  if (!bundlePath && args.url) {
+    try {
+      const fetched = await fetchBundleFromUrl(args.url);
+      bundlePath = fetched.path;
+      tmpDir = fetched.tmpDir;
+      console.log(`✅ 已从 URL 下载 bundle: ${fetched.path} (${fetched.size} bytes, ${fetched.ext})`);
+    } catch (e) {
+      console.error(`❌ ${e.message}`);
+      process.exit(e.code || 6);
+    }
+  }
   if (!bundlePath) {
-    console.error(`❌ --bundle <zip-path> 必填`);
+    console.error(`❌ --bundle <zip-path> 或 --url <https-url> 必填其一`);
     process.exit(1);
   }
 
@@ -343,6 +459,11 @@ async function main() {
   console.log(`   2. tokens.css 合并到 web/styles/tokens.css + tailwind.config.js`);
   console.log(`   3. JSX 组件改写：移除 fetch / axios → 使用 web/lib/api-client.ts`);
   console.log(`   4. 跑 web/ 构建 + lint + 测试 + 10 维评分决策门`);
+
+  // v0.8.2 D14：清理 --url 下载的临时目录（成功后才删，失败时保留供调试）
+  if (tmpDir && existsSync(tmpDir)) {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

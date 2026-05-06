@@ -144,19 +144,21 @@ fi
 
 > 注：`ingest-claude-design.mjs` 由 W4 实现。当前阶段（W3）若用户尝试 --bundle 会因脚本缺失而提示。
 
-### 分支 C：`--url <share-url>` → 摄取 figma / v0 share
+### 分支 C：`--url <share-url>` → 摄取 share / Handoff URL（v0.8.2 D14：claude-design 支持）
 
 ```bash
 if [ -n "$URL" ]; then
   case "$CHANNEL" in
+    claude-design)
+      # v0.8.2 D14：Claude.ai/design 的 "Share → Handoff to Claude Code" 推荐回贴方式。
+      # 脚本会安全下载（https only / SSRF 防御 / 100MB 体积限 / magic bytes 校验）后走标准摄取。
+      node "$DDT_PLUGIN_ROOT/bin/ingest-claude-design.mjs" --url "$URL" || exit 5 ;;
     figma) node "$DDT_PLUGIN_ROOT/bin/ingest-figma-context.mjs" --url "$URL" || exit 5 ;;
     v0)    node "$DDT_PLUGIN_ROOT/bin/ingest-v0-share.mjs"     --url "$URL" || exit 5 ;;
-    *)     echo "❌ claude-design 通道用 --bundle <zip>，不用 --url"; exit 1 ;;
+    *)     echo "❌ 未知通道: $CHANNEL"; exit 1 ;;
   esac
 fi
 ```
-
-> 注：摄取脚本由 W4 实现。
 
 ## Phase 4 — 摄取后构建 + 验证（仅 --bundle / --url 分支）
 
