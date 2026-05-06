@@ -24,6 +24,10 @@ test -f docs/api-contract.yaml || { echo "❌ 请先运行 /design"; exit 1; }
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析"; exit 1; }
 export DDT_PLUGIN_ROOT
+if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
+  node "$DDT_PLUGIN_ROOT/bin/print-dry-run.mjs" --phase impl --inputs "docs/api-contract.yaml,.ddt/tech-stack.json,docs/design-brief.md (spa)" --outputs "server/,web/" --next "/verify" --notes "编排命令: 串行调用 /build-api → 决策门 → /build-web"
+  exit 0
+fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase impl --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 

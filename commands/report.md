@@ -17,6 +17,10 @@ argument-hint: "[--stage <all|design|impl|verify|ship>]"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
 
+if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
+  node "$DDT_PLUGIN_ROOT/bin/print-dry-run.mjs" --phase report --inputs "~/.claude/delivery-metrics/events.jsonl,baseline/historical-projects.csv,.ddt/progress.json" --outputs "docs/efficiency-report.md" --next "/ship"
+  exit 0
+fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase report --action start
 mkdir -p baseline
 test -f baseline/historical-projects.csv || cp "$DDT_PLUGIN_ROOT/baseline/historical-projects.csv" baseline/historical-projects.csv

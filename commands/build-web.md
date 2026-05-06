@@ -20,6 +20,10 @@ test -f docs/prd.md || { echo "❌ 请先运行 /prd"; exit 1; }
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析"; exit 1; }
 export DDT_PLUGIN_ROOT
+if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
+  node "$DDT_PLUGIN_ROOT/bin/print-dry-run.mjs" --phase build-web --inputs "docs/api-contract.yaml,docs/design-brief.md,.ddt/design/<channel>/raw/" --outputs "web/" --next "/verify"
+  exit 0
+fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 

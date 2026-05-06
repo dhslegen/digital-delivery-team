@@ -20,6 +20,10 @@ test -f docs/data-model.md || { echo "❌ 请先运行 /design 生成数据模�
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/marketplaces/digital-delivery-team"
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析，请重启会话或运行 /digital-delivery-team:doctor"; exit 1; }
 export DDT_PLUGIN_ROOT
+if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
+  node "$DDT_PLUGIN_ROOT/bin/print-dry-run.mjs" --phase build-api --inputs "docs/api-contract.yaml,docs/data-model.md,.ddt/tech-stack.json" --outputs "server/" --next "/verify"
+  exit 0
+fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-api --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 

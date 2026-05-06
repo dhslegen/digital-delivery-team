@@ -19,6 +19,10 @@ test -f docs/wbs.md || { echo "❌ docs/wbs.md 不存在，请先运行 /wbs"; e
 [ -f "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" ] || { echo "❌ DDT plugin root 未解析。可能原因：(1) 插件未安装；(2) shell 中 DDT_PLUGIN_ROOT 指向无效路径，请 unset DDT_PLUGIN_ROOT 后重启会话；(3) 运行 /digital-delivery-team:doctor 自检"; exit 1; }
 export DDT_PLUGIN_ROOT
 
+if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
+  node "$DDT_PLUGIN_ROOT/bin/print-dry-run.mjs" --phase design --inputs "docs/prd.md,docs/wbs.md,project-brief.md" --outputs "docs/arch.md,docs/api-contract.yaml,docs/data-model.md,.ddt/tech-stack.json" --next "/design-brief (spa) | /impl (server-side|none)"
+  exit 0
+fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase design --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
 ```

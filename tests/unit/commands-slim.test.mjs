@@ -34,17 +34,18 @@ test('commands 全部使用 .ddt-plugin-root marker fallback', () => {
   }
 });
 
-test('commands 平均行数 ≤ 145（v0.8.1 hotfix 后基线）', () => {
+test('commands 平均行数 ≤ 150（v0.9 流程可见性后基线）', () => {
   // M2-3 瘦身后基线 ~80（无决策门）
   // M6.2 给 10 个 phase 加决策门段落 ~50 行/个，平均 ≈ 117
   // v0.8.1 hotfix：D1 / D7 / D12 给 design.md / build-web.md / prd.md 加分支
-  //   与重试段落，整体 +3 平均行；基线提到 145 留余量给 v0.9。
+  // v0.9 A2：13 个命令加 --dry-run 段（4 行/命令），D16/D17 加 progress 实时
+  //   同步段，整体涨到 ~146；基线提到 150 留余量给 v0.10。
   const files = readdirSync(COMMANDS).filter(f => f.endsWith('.md'));
   const totalLines = files.reduce((sum, f) =>
     sum + readFileSync(join(COMMANDS, f), 'utf8').split('\n').length, 0);
   const avg = totalLines / files.length;
-  assert.ok(avg <= 145,
-    `commands 平均行数 ${avg.toFixed(1)} 超过基线 145 行（v0.8.1 后允许 ≤ 145，再涨说明可能膨胀）`);
+  assert.ok(avg <= 150,
+    `commands 平均行数 ${avg.toFixed(1)} 超过基线 150 行（v0.9 后允许 ≤ 150，再涨说明可能膨胀）`);
 });
 
 test('M2 新增的 fix.md 与 doctor.md 已就位', () => {
