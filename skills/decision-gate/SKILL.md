@@ -123,3 +123,50 @@ node "$DDT_PLUGIN_ROOT/bin/emit-decision.mjs" \
 
 未传 `--auto` 时此 phase 必须执行决策门，跳过即违规。
 ```
+
+---
+
+## 新增 phase 命令时的强制对齐 checklist（v0.8.1 D9 教训）
+
+**背景**：v0.8.0 引入 `/design-brief` / `/design-execute` 两个新 phase 命令，但只补了
+emit-phase / emit-decision 的 VALID_PHASES（W7.5 R1），漏了 `bin/progress.mjs::PHASE_ARTIFACTS`
+状态机层与命令尾部"建议下一步"链。后果：度量层"看见"事件能落盘，但**状态机层不承认这两个 phase 存在**，
+SessionStart 推断"继续"永远跳到 build-web，用户视角 design-brief / design-execute 沦为游离辅助命令。
+
+**修复（v0.8.1 D9 + D2 + D3）**：单点改 PHASE_ARTIFACTS 一个常量连锁解三个体系级 BUG。
+
+**教训**：phase 名称在 6 处都有依赖，新增时必须**全部对齐**——任何一处漏了都会留下"半完成"的隐形断裂。
+
+### 新增/重命名 phase 命令时的强制对齐 6 处
+
+| # | 文件 | 修改内容 | 验证方式 |
+|---|---|---|---|
+| 1 | `bin/emit-phase.mjs::VALID_PHASES` | 加入新 phase 名（小写 / kebab-case） | `bin/emit-phase.mjs --phase <new> --action start; echo $?` 应为 0 |
+| 2 | `bin/emit-decision.mjs::VALID_PHASES` | 同上 | `bin/emit-decision.mjs --phase <new> --action point ...` 应为 0 |
+| 3 | `bin/progress.mjs::PHASE_ARTIFACTS` | 加 `<new>: ['<sentinel-artifact>']` 键值对 | 跑 `tests/integration/progress-state-machine.test.mjs` 全过 |
+| 4 | 上一个 phase 命令的"建议下一步" | 指向新 phase（必要时按 `frontend.type` 分支） | 跑 `tests/unit/commands-slim.test.mjs` |
+| 5 | 新 phase 命令的"建议下一步" | 指向后续 phase | 同上 |
+| 6 | `tests/integration/progress-state-machine.test.mjs::progress --init` | 把新 phase 加入 `expectedPhases` 数组 | 测试自然失败提示 |
+
+### 进阶：跳过条件如何表达
+
+如果新 phase 在某些 tech-stack 下不适用（如 design-brief / design-execute 仅在 `frontend.type=spa` 时跑）：
+
+7. 在 `bin/progress.mjs::shouldSkipPhase` 加分支返回 `true`，让 infer 自动标 `skipped`
+8. 在 commands/上一阶段 的"建议下一步"分支表里**显式声明跳过**，避免用户疑惑
+
+### 新增 phase 命令前的 4 个判断题
+
+**用 AskUserQuestion 自己问自己**（M6.4 路径上）——动手前必须给出明确答案：
+
+1. 这个 phase 是 **必经** 还是 **可选**？必经 → 加进 PHASE_ORDER；可选 → 用 `skipped` 状态
+2. 它的 sentinel artifact 是什么？必须是**单一文件**或**目录**，不能是动态产出（否则 infer 推断不出 completed）
+3. 它前后衔接哪两个 phase？写出 `prev → new → next` 三元组并落到命令尾部建议链
+4. 它是否触发 emit-phase / emit-decision？如不触发（纯展示型命令），跳过 1-3 的对齐——但应改为非 phase 命令（如 `/preview` `/resume`）
+
+### 反模式（v0.8.1 之前的实际错误）
+
+- ❌ "只补 VALID_PHASES 度量就好了"——会让状态机层留下断裂（D9）
+- ❌ "建议下一步先按旧的写，发版后再改"——隐式契约一旦固化，用户已经开始按错误路径用了（D1）
+- ❌ "新 phase 不需要 sentinel，靠 emit-phase end 事件标完成"——progress.mjs 是 sync 的，必须能从文件存在性 infer
+- ❌ "测试就先放着，反正本地能跑通"——`expectedPhases` 数组是契约，漏了等于让未来重构者挖坑（D9 修复时立刻被既有测试断言抓到，是正反馈）
