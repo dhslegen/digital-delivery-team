@@ -71,3 +71,29 @@ test('metrics-agent 含 M2-7 工时不可证明刚性约束', () => {
   assert.ok(text.includes('严格禁止'),
     'metrics-agent 必须明确"严格禁止"用 WBS 预估替代');
 });
+
+// v0.8.1 D1 + D10：/design 完成后必须按 frontend.type 分支建议下一步，
+// 让 design-brief / design-execute 在 spa 项目中是流程一等公民。
+test('v0.8.1 D1: /design Phase 5 必须按 frontend.type 分支给出下一步建议', () => {
+  const text = readFileSync(join(COMMANDS, 'design.md'), 'utf8');
+  assert.ok(text.includes('FRONT_TYPE') || text.includes('frontend.type'),
+    'design.md::Phase 5 必须读取 frontend.type 分支建议');
+  assert.ok(text.includes('/design-brief'),
+    'design.md::Phase 5 必须在 spa 分支建议 /design-brief（D1 修复）');
+  assert.ok(text.includes('get-frontend-type.mjs'),
+    'design.md 必须用 get-frontend-type.mjs 读取 frontend.type（D10：来源透明）');
+  // D10：frontend.type 来源（.ddt/tech-stack.json）必须显式标注
+  assert.ok(text.match(/frontend\.type[^\n]*\n[^\n]*tech-stack\.json/i)
+         || (text.includes('frontend.type:') && text.includes('.ddt/tech-stack.json')),
+    'design.md::Phase 5 输出必须显式标注 frontend.type 来源 .ddt/tech-stack.json（D10）');
+});
+
+// v0.8.1 D1：/design 不应再硬编码"建议下一步：/impl"作为唯一选项
+test('v0.8.1 D1: /design 不应硬编码"/impl"为唯一下一步（v0.8.0 BUG 回归保护）', () => {
+  const text = readFileSync(join(COMMANDS, 'design.md'), 'utf8');
+  // 旧 v0.8.0 文案"建议下一步：/impl 或 /build-web / /build-api"是 D1 BUG，跳过 design-brief
+  // 新文案应是分支表，含 spa → /design-brief
+  const hasOldHardcode = /^建议下一步[：:]\s*\/impl\s*或\s*\/build-web/m.test(text);
+  assert.ok(!hasOldHardcode,
+    'design.md 不应再含硬编码"建议下一步：/impl 或 /build-web / /build-api"（v0.8.0 D1 BUG）');
+});

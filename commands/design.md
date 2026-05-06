@@ -143,20 +143,19 @@ fi
 
 ## Phase 5 — 汇总输出
 
+```bash
+FRONT_TYPE=$(node "$DDT_PLUGIN_ROOT/bin/get-frontend-type.mjs" 2>/dev/null || echo "unknown")
+```
+
 ```
 /design 完成
-
-ADR 决策数:   <n> 条
-Endpoint 数:  <n> 个
-契约 lint:    通过
-
-产出文件:
-  docs/arch.md
-  docs/api-contract.yaml
-  docs/data-model.md
-
-建议下一步：/impl 或 /build-web / /build-api
+ADR <n> / Endpoint <n> / 契约 lint 通过
+产出: docs/arch.md / docs/api-contract.yaml / docs/data-model.md
+frontend.type: <FRONT_TYPE>  来源 .ddt/tech-stack.json
 ```
+
+按 `FRONT_TYPE` 分支输出"建议下一步"：`spa` → `/design-brief` → `/design-execute`；
+`server-side`/`none` → `/impl`；其他 → 二选一。
 
 ## --refresh
 
