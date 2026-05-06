@@ -34,16 +34,17 @@ test('commands 全部使用 .ddt-plugin-root marker fallback', () => {
   }
 });
 
-test('commands 平均行数 ≤ 140（M6.2 决策门后基线）', () => {
+test('commands 平均行数 ≤ 145（v0.8.1 hotfix 后基线）', () => {
   // M2-3 瘦身后基线 ~80（无决策门）
   // M6.2 给 10 个 phase 加决策门段落 ~50 行/个，平均 ≈ 117
-  // 设 140 留余量给后续 M6.4 改造
+  // v0.8.1 hotfix：D1 / D7 / D12 给 design.md / build-web.md / prd.md 加分支
+  //   与重试段落，整体 +3 平均行；基线提到 145 留余量给 v0.9。
   const files = readdirSync(COMMANDS).filter(f => f.endsWith('.md'));
   const totalLines = files.reduce((sum, f) =>
     sum + readFileSync(join(COMMANDS, f), 'utf8').split('\n').length, 0);
   const avg = totalLines / files.length;
-  assert.ok(avg <= 140,
-    `commands 平均行数 ${avg.toFixed(1)} 超过基线 140 行（M6.2 后允许 ≤ 140，再涨说明可能膨胀）`);
+  assert.ok(avg <= 145,
+    `commands 平均行数 ${avg.toFixed(1)} 超过基线 145 行（v0.8.1 后允许 ≤ 145，再涨说明可能膨胀）`);
 });
 
 test('M2 新增的 fix.md 与 doctor.md 已就位', () => {
@@ -91,9 +92,24 @@ test('v0.8.1 D1: /design Phase 5 必须按 frontend.type 分支给出下一步�
 // v0.8.1 D1：/design 不应再硬编码"建议下一步：/impl"作为唯一选项
 test('v0.8.1 D1: /design 不应硬编码"/impl"为唯一下一步（v0.8.0 BUG 回归保护）', () => {
   const text = readFileSync(join(COMMANDS, 'design.md'), 'utf8');
-  // 旧 v0.8.0 文案"建议下一步：/impl 或 /build-web / /build-api"是 D1 BUG，跳过 design-brief
+  // 旧 v0.8.0 文案"建议下一步：/impl 或 /build-web / /build-web / /build-api"是 D1 BUG，跳过 design-brief
   // 新文案应是分支表，含 spa → /design-brief
   const hasOldHardcode = /^建议下一步[：:]\s*\/impl\s*或\s*\/build-web/m.test(text);
   assert.ok(!hasOldHardcode,
     'design.md 不应再含硬编码"建议下一步：/impl 或 /build-web / /build-api"（v0.8.0 D1 BUG）');
+});
+
+// v0.8.1 D7：/build-web 在 frontend.type=spa 时必须前置校验 docs/design-brief.md，
+// 避免跳过 design-brief 直接 build-web 留下 brief 缺失的隐患。
+test('v0.8.1 D7: /build-web Phase 1 必须在 spa 类型强校验 docs/design-brief.md', () => {
+  const text = readFileSync(join(COMMANDS, 'build-web.md'), 'utf8');
+  // 必须含 design-brief 前置校验
+  assert.ok(text.includes('docs/design-brief.md'),
+    'build-web.md::Phase 1 必须前置校验 docs/design-brief.md（D7）');
+  // 必须仅在 spa 时强校验（避免 server-side / none 类型误拦截）
+  assert.match(text, /FRONT_TYPE.*spa[\s\S]*?design-brief\.md/,
+    'build-web.md 必须仅在 FRONT_TYPE=spa 时校验 design-brief（避免 server-side 类型误拦截）');
+  // 必须支持 --skip-brief 逃生口
+  assert.ok(text.includes('--skip-brief'),
+    'build-web.md 必须支持 --skip-brief 逃生口（D7：尊重用户显式声明）');
 });

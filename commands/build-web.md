@@ -36,6 +36,20 @@ if [ "$FRONT_TYPE" = "server-side" ] || [ "$FRONT_TYPE" = "none" ]; then
   node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-web --action end
   exit 0
 fi
+
+# v0.8.1 D7：frontend.type=spa 时强校验 docs/design-brief.md 存在，避免跳过
+# /design-brief → /design-execute 直接 build-web 让 brief 缺失但 web/ 已实现，
+# verify 时再发现已迟。--skip-brief 是显式逃生口（少见 — 例如改回归既有项目）。
+if [ "$FRONT_TYPE" = "spa" ] && [ ! -f docs/design-brief.md ]; then
+  if printf '%s' "$ARGUMENTS" | grep -q -- '--skip-brief'; then
+    echo "⚠️  --skip-brief 已声明，跳过 design-brief 前置校验（不推荐 — UI 一致性可能下降）"
+  else
+    echo "❌ frontend.type=spa 但缺 docs/design-brief.md"
+    echo "   建议路径：/design-brief（编译 SSoT）→ /design-execute --channel claude-design"
+    echo "   如确认无需 AI 设计源，加 --skip-brief 显式声明并重跑 /build-web --skip-brief"
+    exit 1
+  fi
+fi
 ```
 
 ## Phase 2 — EXPLORE
