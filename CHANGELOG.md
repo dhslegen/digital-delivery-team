@@ -4,6 +4,106 @@
 
 ---
 
+## [0.8.1] - 2026-05-06 — 实战回归 hotfix：D1-D12 体系级断裂修复
+
+源自 v0.8.0 在 `ddt-team-admin-v0.8` 项目（团队成员管理后台）跑端到端流程时
+暴露的 12 项缺陷。完整评审报告见 `docs/v0.8-validation/review-report.md`。
+
+集中在三个层面：状态机层与度量层不一致 / 隐式契约链断裂 / 解析器与外部数据格式脱节。
+
+### 🔴 P0 体系修复
+
+🔴 **D9 + D2 + D3 状态机层与度量层对齐**（commit 7126dae）
+- `bin/progress.mjs::PHASE_ARTIFACTS` 加 `design-brief` / `design-execute`（与
+  emit-phase VALID_PHASES 对齐，W7.5 R1 修复另一半）
+- 引入 `'skipped'` 状态语义；`TERMINAL_STATUSES = {completed, skipped}` 统一
+  current_phase 推进逻辑
+- infer 时读取 `.ddt/tech-stack.json::frontend.type`：
+  - `spa` → design-brief / design-execute 保持 pending
+  - `server-side` / `none` → 自动 skipped，current_phase 跳到 build-web/build-api
+- **连锁修复**：design-brief / design-execute 不再是"游离辅助命令"，新会话"继续"
+  正确推到 design-brief 而非跳到 build-web
+
+🔴 **D4 upload-package 兼容 claude.ai/design 上传白名单**（commit eba7388）
+- 引入 `wrapAsMarkdown(srcPath, language, title)` 与 `copyOrWrapForUpload`
+- claude-design / figma 通道把 `.yaml` / `.json` 源文件包装为 `.md`
+  （内容仍是原始 yaml/json 但置于 ` ```yaml ` / ` ```json ` fenced block）
+- v0 通道走 `v0-sources/` 程序化导入，保留原扩展不变
+- **解决**：用户不再被迫手动给 `03-api-contract.yaml` 加 `.md` 后缀绕过平台限制
+
+### 🟠 P1 修复
+
+🟠 **D1 + D10 /design 按 frontend.type 分支建议下一步**（commit 167dad7）
+- `commands/design.md::Phase 5` 不再硬编码 `/impl 或 /build-web`
+- 按 `FRONT_TYPE` 分支：spa → /design-brief / server-side|none → /impl
+- 显式标注 `frontend.type: <type>  来源 .ddt/tech-stack.json`（D10 透明化）
+
+🟠 **D5 + D6 解析器健壮性**（commit cf23153）
+- D5: `extractUserStories` 多策略匹配链——EARS 英文 / 中文 EARS / markdown 表格
+  （通过表头识别列位置健壮于列顺序变化），首个产出 stories 的策略获胜
+- D6: `parseVisualDirection` 结构化解析替代脆弱单行正则——支持 `tags` 中间字段
+  + `>` / `|` block scalar 多行 rationale（逐行扫描遇缩进减少即停，符合 yaml
+  block scalar 语义）
+- isPlaceholder 在 strip `<>` 之前判定占位，兼容 W7.5 R8 的 `<选 1 个>` 案例
+
+🟠 **D7 build-web 前置校验 brief**（commit a1989c6）
+- `commands/build-web.md::Phase 1` 在 `frontend.type=spa` 时强校验
+  `docs/design-brief.md` 存在
+- 缺失时给出明确引导（`/design-brief → /design-execute`）
+- 支持 `--skip-brief` 显式逃生口（少见场景：改回归既有项目）
+- server-side / none 类型不强制（PR-E 三态语义对齐）
+
+🟠 **D12 agent 失败重试 + blocker 上报**（commit 6e3283a）
+- 新增 `bin/check-agent-output.mjs`：4 种产出异常 → 4 类退出码（缺失 / 截断 /
+  含字面占位 `<persona>` `{{TOKEN}}` / 通过）
+- `commands/{prd,wbs,design}.md` 在 Task 派发后必须调用此脚本，失败时写
+  `docs/blockers.md` 让用户决策（重试 / 手动 fallback / 暂停）
+- **不再 main thread 静默接管**——保留 agent 携带的专门 prompt 与历史校准
+
+### 🟡🟢 P2/P3 修复
+
+🟡 **D8 progress.json::started_at 落 null 修复**（与 D9 同 commit）
+- `update --completed` 与 `infer` 跳到 terminal 状态时若 `started_at = null`
+  自动回填同一时刻 + `duration_estimated: true` 标记
+- aggregate 度量层可单独识别估算记录避免污染基线
+
+🟡 **D10 frontend.type sentinel 来源透明**（与 D1 同 commit）
+- design.md Phase 5 输出显式标注 `frontend.type` 来源 `.ddt/tech-stack.json`
+
+🟢 **D11 项目根 .gitignore 兜底模板**（commit 26c44c1）
+- 新增 `templates/.gitignore.template` 含 `Untitled` / `.DS_Store` /
+  `.ddt/locks/` / `staging/` / `node_modules/` 等典型派生物
+- `aggregate.mjs --bootstrap` 自动落入项目根：无 `.gitignore` 直接复制；
+  已有则追加缺失行（不重复，不破坏用户自定义）
+
+### 测试
+
+- 304 → 335（+31 回归测试覆盖 D1-D12 全部修复点）
+- D5: 中文 EARS / markdown 表格 / 列顺序变化 / 跳过 placeholder 行 / 三策略不重复
+- D6: tags 中间字段 + `>` 多行 / `|` block scalar / 单行不退化
+- D9: spa 保持 pending / server-side 自动 skipped / none 自动 skipped 三态覆盖
+- D12: 6 种产出异常 → 4 类退出码 + commands 契约
+- W7.5 R1-R12 全部 +63 回归用例不退化
+
+### 设计
+
+- 评审报告 `docs/v0.8-validation/review-report.md`：12 项缺陷的根因分析、
+  修复方案与体系级反思（"度量层 vs 状态机层"裂缝 / 隐式契约链可见性 /
+  解析器边界假设）
+
+### 迁移指南（从 v0.8.0 → v0.8.1）
+
+完全向后兼容，无 breaking change：
+- progress.json 旧 schema 仍可读，--infer 会主动填充 design-brief / design-execute
+  字段
+- 已派生的 upload-package 会在下次 `/design-execute --refresh` 时改名（无需手动迁移）
+- 旧 brief 的 visual_direction yaml 块仍可解析（单行 / 多行均兼容）
+
+升级方法：`/plugin marketplace update digital-delivery-team` →
+`/plugin install digital-delivery-team@0.8.1`，无需修改既有项目数据。
+
+---
+
 ## [0.8.0] - 2026-04-30 — 前端实现流程重构：Brief 编译器 + 3 通道分发器
 
 把"前端 UI 实现"重新定位为：**"PRD / OpenAPI 契约 → 结构化设计 Brief"的编译器 + 3 通道分发器**。
