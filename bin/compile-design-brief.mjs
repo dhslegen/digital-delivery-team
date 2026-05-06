@@ -87,23 +87,90 @@ function parseArgs(argv) {
 }
 
 // 从 PRD markdown 抽取 user stories（§4 功能/用户故事段落）
-// 兼容多种格式：
-//   **用户故事**：As a X, I want Y, so that Z.       (英文逗号 / 行内)
-//   **用户故事**\nAs a X，I want Y，so that Z。       (中文逗号 / 跨行 / 句号)
-//   **用户故事**：As a `X`, I want `Y`, so that `Z`. (引号包裹)
+// v0.8.1 D5：多策略匹配链。原 v0.8.0 仅匹配 EARS 英文格式，对 product-agent
+// 实际产出的中文 markdown 表格 (`| ID | 角色 | 我想 | 以便 |`) 抽取为 0，
+// 用户被迫手工 fallback。修复：三策略按顺序尝试，首个产出 stories 的获胜。
+//
+// 兼容格式：
+//   1. EARS 英文：**用户故事**：As a X, I want Y, so that Z.
+//   2. 中文 EARS：作为 X，我想 Y，以便 Z。（独立行 / ** 包裹 / 各种标点）
+//   3. Markdown 表格：| ID | 角色 | 我想 | 以便 | ... | （列顺序通过表头识别）
 export function extractUserStories(prdText) {
+  // Strategy 1: EARS 英文（v0.8.0 既有）
+  const stories1 = extractStoriesEarsEn(prdText);
+  if (stories1.length > 0) return stories1;
+  // Strategy 2: 中文 EARS
+  const stories2 = extractStoriesEarsZh(prdText);
+  if (stories2.length > 0) return stories2;
+  // Strategy 3: Markdown 表格
+  const stories3 = extractStoriesMarkdownTable(prdText);
+  if (stories3.length > 0) return stories3;
+  return [];
+}
+
+function extractStoriesEarsEn(prdText) {
   const stories = [];
-  // [，,] 中英文逗号；终止符 [。.\n]——句末或换行
-  // (.+?) lazy 匹配，允许中间含 backtick / 引号 / 括号（PRD 常用 `/` 等路径引用）
   const re = /\*\*用户故事\*\*\s*[：:]?\s*As a\s+(.+?)\s*[，,]\s*I want\s+(.+?)\s*[，,]\s*so that\s+(.+?)\s*[。.\n]/gi;
   let m, idx = 1;
   while ((m = re.exec(prdText)) !== null) {
     stories.push({
       id: `US-${String(idx).padStart(2, '0')}`,
-      role: m[1].trim(),
-      want: m[2].trim(),
-      value: m[3].trim(),
+      role: m[1].trim(), want: m[2].trim(), value: m[3].trim(),
     });
+    idx++;
+  }
+  return stories;
+}
+
+function extractStoriesEarsZh(prdText) {
+  const stories = [];
+  // 中文 EARS：作为 X，我想 Y，以便 Z。（标点容错：[，,、] / [。.；;\n]）
+  const re = /作为\s*(.+?)\s*[，,、]\s*我想\s*(.+?)\s*[，,、]\s*以便\s*(.+?)\s*(?:[。.；;\n]|$)/g;
+  let m, idx = 1;
+  while ((m = re.exec(prdText)) !== null) {
+    const role = m[1].trim(), want = m[2].trim(), value = m[3].trim();
+    // 跳过表头字面（"角色" / "我想" / "以便"）
+    if (/^角色$|^我想$|^以便$/.test(role)) continue;
+    stories.push({
+      id: `US-${String(idx).padStart(2, '0')}`, role, want, value,
+    });
+    idx++;
+  }
+  return stories;
+}
+
+// 解析 markdown 表格抽 user stories——通过表头识别列位置（健壮于列顺序变化）
+function extractStoriesMarkdownTable(prdText) {
+  const stories = [];
+  const lines = prdText.split('\n');
+  let headerCols = null, roleCol = -1, wantCol = -1, valueCol = -1, idCol = -1;
+  let idx = 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line.startsWith('|')) { headerCols = null; continue; }
+    const cols = line.split('|').slice(1, -1).map(c => c.trim());
+    if (cols.length < 3) { headerCols = null; continue; }
+    // 表头识别：含"角色"+"我想"+"以便"
+    if (!headerCols && cols.some(c => /角色/.test(c)) && cols.some(c => /我想/.test(c)) && cols.some(c => /以便/.test(c))) {
+      headerCols = cols;
+      idCol = cols.findIndex(c => /^ID$/i.test(c));
+      roleCol = cols.findIndex(c => /角色/.test(c));
+      wantCol = cols.findIndex(c => /我想/.test(c));
+      valueCol = cols.findIndex(c => /以便/.test(c));
+      continue;
+    }
+    if (!headerCols) continue;
+    // 跳过分隔行 |---|---| ；任意 cell 全是 - 即视为分隔
+    if (cols.every(c => /^-+:?$|^:?-+:?$|^$/.test(c))) continue;
+    // 数据行
+    const role = (cols[roleCol] || '').trim();
+    const want = (cols[wantCol] || '').trim();
+    const value = (cols[valueCol] || '').trim();
+    if (!role || !want || !value) continue;
+    // 跳过占位（<role> / <goal> / <value>）
+    if (/^<[^>]+>$/.test(role) && /^<[^>]+>$/.test(want)) continue;
+    const id = idCol >= 0 && cols[idCol] ? cols[idCol].trim() : `US-${String(idx).padStart(2, '0')}`;
+    stories.push({ id, role, want, value });
     idx++;
   }
   return stories;

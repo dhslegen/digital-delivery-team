@@ -117,6 +117,68 @@ export function isPlaceholder(value) {
 
 function cleanField(s) { return isPlaceholder(s) ? '' : String(s).trim(); }
 
+// v0.8.1 D6：visual_direction 结构化解析（支持 tags 中间字段 + 多行 rationale）
+//
+// 兼容 brief §8.1 yaml block 的多种写法：
+//   visual_direction:                     visual_direction:
+//     selected: industrial                  selected: editorial
+//     tags: [professional, dense]           rationale: >
+//     rationale: >                            团队工具，
+//       团队工具，多行说明...                 多行说明...
+//
+// 返回 { selected, tags, rationale } 或 null。
+export function parseVisualDirection(briefText) {
+  // 锁定 visual_direction: 块（直到下一个 ## 标题、--- 分隔、或 ``` 结束 fence）
+  const blockMatch = briefText.match(/visual_direction:\s*\n([\s\S]+?)(?=\n##\s|\n---\n|\n```\s*\n|\n\n[A-Za-z][a-z_]+:|$)/);
+  if (!blockMatch) return null;
+  const block = blockMatch[1];
+  // selected: 单行字符串。先抓完整一行（含空格 / 中文）再判定占位
+  // —— 用户常写 `selected: <选 1 个>` 这种含空格的占位符，必须整体捕获后由
+  // cleanField/isPlaceholder 判定是否过滤，不能在 capture 阶段截断。
+  const selMatch = block.match(/^\s+selected:\s*(.+?)\s*$/m);
+  if (!selMatch) return null;
+  // 跳过 [a, b] 数组格式（极少见但可能）
+  if (/^\[.*\]$/.test(selMatch[1].trim())) return null;
+  // tags: 数组形式 `[a, b]` 或 yaml flow `["a","b"]`
+  let tags = [];
+  const tagsMatch = block.match(/^\s+tags:\s*\[([^\]]*)\]/m);
+  if (tagsMatch) {
+    tags = tagsMatch[1].split(/\s*,\s*/).map(t => t.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+  }
+  // rationale: 多种形式
+  //   1. 单行：rationale: 文字
+  //   2. block scalar > / |：rationale: >\n  缩进多行...
+  // 用逐行扫描——遇到非续行（缩进减少 / 空行 / 新 yaml key）就停止，符合 yaml block scalar 语义
+  let rationale = '';
+  const lines = block.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const headMatch = line.match(/^(\s+)rationale:\s*([>|])?\s*(.*)$/);
+    if (!headMatch) continue;
+    const headIndent = headMatch[1].length;
+    const blockMode = headMatch[2]; // > 或 | 或 undefined
+    const inlineRest = headMatch[3].trim();
+    if (!blockMode && inlineRest) {
+      rationale = inlineRest;
+      break;
+    }
+    // block scalar：抓后续缩进 > headIndent 的行
+    const collected = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j];
+      // 空行允许夹在中间但不切断
+      if (next.trim() === '') { collected.push(''); continue; }
+      const indentMatch = next.match(/^(\s+)/);
+      const nextIndent = indentMatch ? indentMatch[1].length : 0;
+      if (nextIndent <= headIndent) break;
+      collected.push(next.trim());
+    }
+    rationale = collected.filter(Boolean).join(' ');
+    break;
+  }
+  return { selected: selMatch[1].trim(), tags, rationale };
+}
+
 // v0.8.1 D4：claude.ai/design 与 Figma Make 的上传白名单只接受 .md/.txt/.png 等
 // 文本与图片格式，会拒收 .yaml / .json。源文件名沿用原扩展会让用户手动加 .md 后缀
 // 才能上传成功（实测 ddt-team-admin-v0.8 用户被迫把 03-api-contract.yaml 改名）。
@@ -182,10 +244,16 @@ export function parseBriefMeta(briefText) {
   };
 
   // visual_direction（来自 §8.1 yaml 块）
-  const vdMatch = briefText.match(/visual_direction:\s*\n\s*selected:\s*([^\s\n]+)\s*\n\s*rationale:\s*([^\n]+)/);
-  if (vdMatch) {
-    meta.visualDirection = cleanField(vdMatch[1].replace(/^[<>]/, '').replace(/[<>]$/, ''));
-    meta.visualRationale = cleanField(vdMatch[2]);
+  // v0.8.1 D6：原 v0.8.0 单行正则要求 selected 后紧跟 rationale 且 rationale 必须单行。
+  // 但实际 brief 常含 `tags: [a, b]` 中间字段 + `rationale: >` block scalar 多行，
+  // 导致 prompt.md 显示 "<未填写>" 占位。改为结构化解析支持 tags / 多行 rationale。
+  // 注意：isPlaceholder 检查必须在 strip <> 之前——`<选 1 个>` 整体是 placeholder，
+  // 剥离 <> 后变成 "选 1 个" 看似真值但语义仍是占位（W7.5 R8 兼容）。
+  const vd = parseVisualDirection(briefText);
+  if (vd) {
+    meta.visualDirection = isPlaceholder(vd.selected) ? '' :
+      cleanField((vd.selected || '').replace(/^[<>]/, '').replace(/[<>]$/, ''));
+    meta.visualRationale = cleanField(vd.rationale);
   }
 
   // §1 Problem Alignment

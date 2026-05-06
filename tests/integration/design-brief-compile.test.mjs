@@ -152,6 +152,82 @@ test('compile-design-brief: --dry-run 不落盘', () => {
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+// v0.8.1 D5：多策略匹配链——中文 EARS / markdown 表格
+test('v0.8.1 D5: extractUserStories 支持中文 EARS（"作为 X，我想 Y，以便 Z"）', () => {
+  const prd = `# PRD
+
+## 用户故事
+
+作为 运营经理，我想 管理团队成员，以便 提高效率。
+
+作为 HR，我想 查看入职流水，以便 合规审查。
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 2, '中文 EARS 应抽出 2 条');
+  assert.match(stories[0].role, /运营经理/);
+  assert.match(stories[0].want, /管理团队成员/);
+  assert.match(stories[0].value, /提高效率/);
+  assert.equal(stories[0].id, 'US-01');
+  assert.equal(stories[1].id, 'US-02');
+});
+
+test('v0.8.1 D5: extractUserStories 支持 markdown 表格（实战 ddt-team-admin-v0.8 格式）', () => {
+  const prd = `# PRD
+
+## 用户故事
+
+| ID | 角色 | 我想 | 以便 | 优先级 |
+|----|------|------|------|-------|
+| US-01 | 运营经理 | 在分页列表中按角色筛选成员并执行批量操作 | 不需要在多个工具间跳转完成日常团队管理 | P0 |
+| US-02 | 运营经理 | 通过 4 步分步表单创建新成员 | 入职从 30 分钟降至 5 分钟 | P0 |
+| US-03 | 运营经理 | 在审计日志页检索操作记录 | 合规审查时可提供完整证据链 | P1 |
+
+无关行
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 3, '表格应抽出 3 条');
+  assert.equal(stories[0].id, 'US-01', '应保留表格中的 ID 列');
+  assert.match(stories[0].role, /运营经理/);
+  assert.match(stories[0].want, /分页列表/);
+  assert.match(stories[2].id, /US-03/);
+});
+
+test('v0.8.1 D5: extractUserStories markdown 表格列顺序变化时仍能识别', () => {
+  const prd = `# PRD
+
+| 角色 | ID | 我想 | 以便 |
+|------|----|------|------|
+| dev | US-A | 测试 | 验证 |
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 1, '列顺序变化时应通过表头识别仍能抽出');
+  assert.equal(stories[0].role, 'dev');
+  assert.equal(stories[0].id, 'US-A');
+});
+
+test('v0.8.1 D5: extractUserStories 跳过表头与 placeholder 行', () => {
+  const prd = `| ID | 角色 | 我想 | 以便 |
+|----|------|------|------|
+| US-01 | <role> | <goal> | <value> |
+| US-02 | 用户 | 实际目标 | 实际价值 |
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 1, '应跳过 placeholder 行 US-01，仅留 US-02');
+  assert.equal(stories[0].role, '用户');
+});
+
+test('v0.8.1 D5: extractUserStories 三策略不重复——EARS 英文存在时不再触发表格策略', () => {
+  const prd = `**用户故事**：As a admin, I want full access, so that I can manage everything.
+
+| ID | 角色 | 我想 | 以便 |
+|----|------|------|------|
+| US-01 | dev | 测试 | 验证 |
+`;
+  const stories = extractUserStories(prd);
+  assert.equal(stories.length, 1, '首策略产出后不应再触发后续策略（避免重复）');
+  assert.match(stories[0].role, /admin/);
+});
+
 test('extractUserStories 单元：支持中文逗号 + 跨行 + backtick', () => {
   const stories = extractUserStories(SAMPLE_PRD);
   assert.equal(stories.length, 2);

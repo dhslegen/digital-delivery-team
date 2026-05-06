@@ -280,6 +280,55 @@ visual_direction:
   assert.equal(meta.styleKeywords, 'minimal / dense');
 });
 
+// v0.8.1 D6：visual_direction 解析对实战场景（含 tags 中间字段 + 多行 rationale）健壮
+test('v0.8.1 D6: parseBriefMeta 应解析 tags 中间字段 + `>` 多行 rationale（实战格式）', async () => {
+  const { parseBriefMeta } = await import('../../bin/derive-channel-package.mjs');
+  // 实战 ddt-team-admin-v0.8 brief §8.1 格式（tags 在 selected 与 rationale 之间）
+  const brief = `## 8. Visual Direction
+
+\`\`\`yaml
+visual_direction:
+  selected: industrial
+  tags: [professional, dense]
+  rationale: >
+    团队成员管理后台是内部运营工具，目标用户每天高频使用，需要高信息
+    密度（dense）和清晰的层级对比（professional）。
+    Industrial 风格的紧凑布局与 Linear / Stripe 设计语言一致。
+\`\`\`
+`;
+  const meta = parseBriefMeta(brief);
+  assert.equal(meta.visualDirection, 'industrial',
+    'tags 中间字段不应阻断 selected 抽取（v0.8.0 D6 BUG）');
+  assert.match(meta.visualRationale, /团队成员管理后台/,
+    '`>` block scalar 多行 rationale 应被合并抽取');
+  assert.match(meta.visualRationale, /Linear/,
+    '多行 rationale 末尾段也应保留');
+});
+
+test('v0.8.1 D6: parseBriefMeta 兼容 `|` block scalar 多行 rationale', async () => {
+  const { parseBriefMeta } = await import('../../bin/derive-channel-package.mjs');
+  const brief = `visual_direction:
+  selected: editorial
+  rationale: |
+    第一行
+    第二行
+`;
+  const meta = parseBriefMeta(brief);
+  assert.equal(meta.visualDirection, 'editorial');
+  assert.match(meta.visualRationale, /第一行.*第二行/);
+});
+
+test('v0.8.1 D6: parseBriefMeta 单行 rationale 仍兼容（旧格式不退化）', async () => {
+  const { parseBriefMeta } = await import('../../bin/derive-channel-package.mjs');
+  const brief = `visual_direction:
+  selected: industrial
+  rationale: 内部物流监控（单行）
+`;
+  const meta = parseBriefMeta(brief);
+  assert.equal(meta.visualDirection, 'industrial');
+  assert.equal(meta.visualRationale, '内部物流监控（单行）');
+});
+
 test('renderTokensCss 单元：tokens.json 转标准 CSS variables + 暗色模式', () => {
   const tokens = {
     color: { primary: '#1F6FEB', danger: '#D73A49' },
