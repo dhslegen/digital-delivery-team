@@ -117,6 +117,53 @@ export function isPlaceholder(value) {
 
 function cleanField(s) { return isPlaceholder(s) ? '' : String(s).trim(); }
 
+// v0.8.1 D4：claude.ai/design 与 Figma Make 的上传白名单只接受 .md/.txt/.png 等
+// 文本与图片格式，会拒收 .yaml / .json。源文件名沿用原扩展会让用户手动加 .md 后缀
+// 才能上传成功（实测 ddt-team-admin-v0.8 用户被迫把 03-api-contract.yaml 改名）。
+//
+// 修复：claude-design 与 figma 通道复制非 markdown 源文件时改名为 .md，并把内容包装
+// 进 ```<lang>``` fenced code block —— 平台把它当 markdown 解析，但内容仍是原始 yaml/json，
+// 模型读到的语义不变。v0 通道走程序化导入（v0-sources/）不受平台白名单限制，保持原样。
+const WRAP_LANGUAGE = {
+  yaml: 'yaml',
+  yml:  'yaml',
+  json: 'json',
+};
+export function wrapAsMarkdown(srcPath, language, title) {
+  const body = readFileSync(srcPath, 'utf8');
+  return `# ${title}\n\n` +
+         `> 源文件：\`${srcPath}\`\n` +
+         '> （v0.8.1 自动包装为 markdown 以适配 claude.ai/design / Figma 上传白名单）\n\n' +
+         '```' + language + '\n' + body + '\n```\n';
+}
+
+// 给定 [src, dst, title?] 返回最终目标路径与是否需要包装
+//   .md / .txt → 原样复制
+//   .yaml / .yml / .json → 改 .md + 包装
+//   其他扩展（.png 等）→ 原样复制
+export function resolveUploadDst(src, dst, title) {
+  const ext = src.split('.').pop().toLowerCase();
+  const lang = WRAP_LANGUAGE[ext];
+  if (!lang) return { dst, wrap: null };
+  // 把原扩展替换为 .md（保留 03-api-contract → 03-api-contract.md）
+  const newDst = dst.replace(/\.(yaml|yml|json)$/i, '.md');
+  return { dst: newDst, wrap: { language: lang, title: title || dst.replace(/\.[^.]+$/, '') } };
+}
+
+// 上传专用复制：透明处理 markdown 包装，调用方只关心 [src, dst, title] 三元组
+export function copyOrWrapForUpload(srcPath, dstFilename, dstDir, opts, title) {
+  const { dst, wrap } = resolveUploadDst(srcPath, dstFilename, title);
+  const finalPath = join(dstDir, dst);
+  if (opts.dryRun) return { from: srcPath, to: finalPath, wrapped: !!wrap };
+  if (!existsSync(srcPath)) return { from: srcPath, to: finalPath, wrapped: !!wrap, missing: true };
+  if (wrap) {
+    writeFileSync(finalPath, wrapAsMarkdown(srcPath, wrap.language, wrap.title));
+  } else {
+    copyFileSync(srcPath, finalPath);
+  }
+  return { from: srcPath, to: finalPath, wrapped: !!wrap };
+}
+
 // 从 design-brief.md 抽取关键字段（用于填 prompt 模板占位）
 export function parseBriefMeta(briefText) {
   const meta = {
@@ -222,20 +269,19 @@ function deriveClaudeDesign(cwd, meta, opts) {
   }
 
   const writes = [];
-  // 复制 7 文件
+  // 复制 6 文件 + 1 references 目录
+  // v0.8.1 D4：非 .md 文件（yaml/json）通过 copyOrWrapForUpload 自动包装为 .md
+  // [src, dst, title] —— title 用于包装时的 H1
   const copies = [
-    ['docs/design-brief.md',                          '01-design-brief.md'],
-    ['docs/prd.md',                                   '02-prd.md'],
-    ['docs/api-contract.yaml',                        '03-api-contract.yaml'],
-    ['.ddt/tech-stack.json',                          '04-tech-stack.json'],
-    ['.ddt/design/tokens.json',                       '05-design-tokens.json'],
-    ['.ddt/design/components-inventory.md',           '06-components-inventory.md'],
+    ['docs/design-brief.md',                          '01-design-brief.md',         null],
+    ['docs/prd.md',                                   '02-prd.md',                  null],
+    ['docs/api-contract.yaml',                        '03-api-contract.yaml',       'API Contract (OpenAPI 3.0)'],
+    ['.ddt/tech-stack.json',                          '04-tech-stack.json',         'Tech Stack Selection'],
+    ['.ddt/design/tokens.json',                       '05-design-tokens.json',      'Design Tokens'],
+    ['.ddt/design/components-inventory.md',           '06-components-inventory.md', null],
   ];
-  for (const [src, dst] of copies) {
-    const srcPath = join(cwd, src);
-    const dstPath = join(uploadDir, dst);
-    writes.push({ from: srcPath, to: dstPath });
-    if (!opts.dryRun && existsSync(srcPath)) copyFileSync(srcPath, dstPath);
+  for (const [src, dst, title] of copies) {
+    writes.push(copyOrWrapForUpload(join(cwd, src), dst, uploadDir, opts, title));
   }
   // 复制 references/ 目录
   const assetsDir = join(cwd, '.ddt', 'design', 'assets');
@@ -294,19 +340,17 @@ function deriveFigma(cwd, meta, opts) {
 
   const writes = [];
   // figma 通道附件包结构与 claude-design 相同
+  // v0.8.1 D4：Figma Make / First Draft 同样限制 .yaml/.json 上传，走相同包装流程
   const copies = [
-    ['docs/design-brief.md',                          '01-design-brief.md'],
-    ['docs/prd.md',                                   '02-prd.md'],
-    ['docs/api-contract.yaml',                        '03-api-contract.yaml'],
-    ['.ddt/tech-stack.json',                          '04-tech-stack.json'],
-    ['.ddt/design/tokens.json',                       '05-design-tokens.json'],
-    ['.ddt/design/components-inventory.md',           '06-components-inventory.md'],
+    ['docs/design-brief.md',                          '01-design-brief.md',         null],
+    ['docs/prd.md',                                   '02-prd.md',                  null],
+    ['docs/api-contract.yaml',                        '03-api-contract.yaml',       'API Contract (OpenAPI 3.0)'],
+    ['.ddt/tech-stack.json',                          '04-tech-stack.json',         'Tech Stack Selection'],
+    ['.ddt/design/tokens.json',                       '05-design-tokens.json',      'Design Tokens'],
+    ['.ddt/design/components-inventory.md',           '06-components-inventory.md', null],
   ];
-  for (const [src, dst] of copies) {
-    const srcPath = join(cwd, src);
-    const dstPath = join(uploadDir, dst);
-    writes.push({ from: srcPath, to: dstPath });
-    if (!opts.dryRun && existsSync(srcPath)) copyFileSync(srcPath, dstPath);
+  for (const [src, dst, title] of copies) {
+    writes.push(copyOrWrapForUpload(join(cwd, src), dst, uploadDir, opts, title));
   }
   const assetsDir = join(cwd, '.ddt', 'design', 'assets');
   if (existsSync(assetsDir)) {

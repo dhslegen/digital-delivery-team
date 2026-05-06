@@ -155,10 +155,11 @@ test('E2E: /design-execute --channel all 派生 3 通道附件包', () => {
     }
 
     // claude-design 7 文件 + prompt.md
+    // v0.8.1 D4: 非 .md 源（yaml/json）改写为 .md 包装以适配 claude.ai/design 上传白名单
     const cdUpload = join(tmp, '.ddt', 'design', 'claude-design', 'upload-package');
     assert.equal(existsSync(cdUpload), true);
-    for (const f of ['01-design-brief.md', '02-prd.md', '03-api-contract.yaml',
-                     '04-tech-stack.json', '05-design-tokens.json',
+    for (const f of ['01-design-brief.md', '02-prd.md', '03-api-contract.md',
+                     '04-tech-stack.md', '05-design-tokens.md',
                      '06-components-inventory.md']) {
       assert.ok(existsSync(join(cdUpload, f)), `claude upload-package 必含 ${f}`);
     }

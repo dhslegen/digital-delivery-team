@@ -80,9 +80,21 @@ test('derive-channel-package: claude-design 通道生成 7 文件附件包 + pro
 
     const upload = join(tmp, '.ddt', 'design', 'claude-design', 'upload-package');
     assert.ok(existsSync(upload));
-    for (const f of ['01-design-brief.md', '02-prd.md', '03-api-contract.yaml', '04-tech-stack.json', '05-design-tokens.json', '06-components-inventory.md']) {
+    // v0.8.1 D4: 非 .md 源文件（yaml/json）应被包装为 .md，规避 claude.ai/design 上传白名单
+    for (const f of ['01-design-brief.md', '02-prd.md', '03-api-contract.md', '04-tech-stack.md', '05-design-tokens.md', '06-components-inventory.md']) {
       assert.ok(existsSync(join(upload, f)), `必含 ${f}`);
     }
+    // 旧扩展名不应再生成（防 D4 回归）
+    for (const f of ['03-api-contract.yaml', '04-tech-stack.json', '05-design-tokens.json']) {
+      assert.ok(!existsSync(join(upload, f)),
+        `不应再生成 ${f}（claude.ai/design 拒收）`);
+    }
+    // 包装后内容应含 fenced code block + 原始数据
+    const contractMd = readFileSync(join(upload, '03-api-contract.md'), 'utf8');
+    assert.match(contractMd, /^# API Contract/m, '包装文件首行应为 H1 标题');
+    assert.match(contractMd, /```yaml\n[\s\S]*?openapi:/, '正文应在 ```yaml 包装内含原始 yaml');
+    const techMd = readFileSync(join(upload, '04-tech-stack.md'), 'utf8');
+    assert.match(techMd, /```json\n[\s\S]*?java-modern/, 'tech-stack 应在 ```json 包装内');
     assert.ok(existsSync(join(upload, '07-references')), '必含 07-references/ 目录');
 
     const prompt = readFileSync(join(tmp, '.ddt', 'design', 'claude-design', 'prompt.md'), 'utf8');
@@ -100,6 +112,11 @@ test('derive-channel-package: figma 通道生成 7 文件 + TC-EBC prompt', () =
     const r = spawnSync(process.execPath, [DERIVE, '--channel', 'figma'], { cwd: tmp, encoding: 'utf8' });
     assert.equal(r.status, 0, `failed: ${r.stderr}`);
 
+    // v0.8.1 D4: figma 通道同样应用 .yaml/.json → .md 包装
+    const upload = join(tmp, '.ddt', 'design', 'figma', 'upload-package');
+    assert.ok(existsSync(join(upload, '03-api-contract.md')), 'figma 通道也必须 .md 包装');
+    assert.ok(!existsSync(join(upload, '03-api-contract.yaml')), 'figma 不应再生成 .yaml');
+
     const prompt = readFileSync(join(tmp, '.ddt', 'design', 'figma', 'prompt.md'), 'utf8');
     // TC-EBC 5 段都必须存在
     for (const heading of ['## Task', '## Context', '## Elements', '## Behavior', '## Constraints']) {
@@ -107,6 +124,30 @@ test('derive-channel-package: figma 通道生成 7 文件 + TC-EBC prompt', () =
     }
     assert.match(prompt, /java-modern/);
   } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D4: v0 通道不受平台白名单限制（程序化 sources 导入），保持原扩展名
+test('v0.8.1 D4: v0 通道保留 .yaml/.json 原扩展（不受 Claude/Figma 白名单影响）', () => {
+  const tmp = setupSandbox();
+  try {
+    const r = spawnSync(process.execPath, [DERIVE, '--channel', 'v0'], { cwd: tmp, encoding: 'utf8' });
+    assert.equal(r.status, 0, `failed: ${r.stderr}`);
+    const sources = join(tmp, '.ddt', 'design', 'v0', 'v0-sources');
+    assert.ok(existsSync(join(sources, 'openapi.yaml')),
+      'v0 通道 openapi.yaml 应保留原扩展（v0.dev 程序化导入支持）');
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+// v0.8.1 D4: wrapAsMarkdown / resolveUploadDst 单元行为
+test('v0.8.1 D4: resolveUploadDst 把 .yaml/.json 改写为 .md，.md 保持不变', async () => {
+  const { resolveUploadDst } = await import('../../bin/derive-channel-package.mjs');
+  assert.equal(resolveUploadDst('docs/api-contract.yaml', '03-api-contract.yaml').dst, '03-api-contract.md');
+  assert.equal(resolveUploadDst('.ddt/tech-stack.json', '04-tech-stack.json').dst, '04-tech-stack.md');
+  assert.equal(resolveUploadDst('docs/prd.md', '02-prd.md').dst, '02-prd.md');
+  // png 等资产保持原扩展
+  assert.equal(resolveUploadDst('assets/ref.png', 'ref.png').dst, 'ref.png');
+  assert.equal(resolveUploadDst('docs/api-contract.yaml', '03-api-contract.yaml').wrap.language, 'yaml');
+  assert.equal(resolveUploadDst('docs/x.json', 'x.json').wrap.language, 'json');
 });
 
 test('derive-channel-package: v0 通道生成 sources + project-instructions + 每屏 stub', () => {
