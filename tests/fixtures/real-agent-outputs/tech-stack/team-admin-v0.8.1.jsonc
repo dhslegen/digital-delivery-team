@@ -1,0 +1,51 @@
+// 来源: ddt-team-admin-v0.8.1, 时间: 2026-05-06, DDT: v0.8.1→v0.8.2
+{
+  "preset": "node-modern",
+  "label": "Node 全栈现代栈",
+  "backend": {
+    "language": "typescript",
+    "framework": "nestjs",
+    "framework_version": "10.x",
+    "build": "yarn",
+    "database": {
+      "primary": "postgres",
+      "primary_version": "16",
+      "cache": "redis"
+    },
+    "orm": "prisma",
+    "api_style": "rest-openapi",
+    "testing": "jest + supertest",
+    "scaffold_cmd": "nest new {projectName}"
+  },
+  "frontend": {
+    "language": "typescript",
+    "framework": "nextjs",
+    "framework_version": "14",
+    "app_router": true,
+    "ui": {
+      "css": "tailwindcss",
+      "components": "shadcn-ui"
+    },
+    "data_fetching": "server-actions + tanstack-query",
+    "testing": "vitest",
+    "scaffold_cmd": "npx create-next-app@latest {projectName} --ts --tailwind --app",
+    "build": "yarn",
+    "libraries": {
+      "form": "react-hook-form",
+      "validation": "zod",
+      "table": "tanstack-table"
+    },
+    "type": "spa"
+  },
+  "ai_design": {
+    "type": "claude-design",
+    "label": "Claude Artifact / web-artifacts-builder",
+    "flow": "用 Claude 生成 React + Tailwind + shadcn-ui 组件代码，直接落地 web/",
+    "skill": "ai-native-design",
+    "requires_external": false
+  },
+  "resolved_at": "2026-05-06T06:28:51.189Z",
+  "schema_version": 1,
+  "source": "askuserquestion",
+  "user_customized": true
+}

@@ -1,0 +1,1127 @@
+openapi: "3.0.3"
+info:
+  title: "Team Admin Console API"
+  version: "1.0.0"
+  description: |
+    团队成员管理后台（Team Admin Console）REST API 契约。
+
+    覆盖 5 个核心功能模块：
+    - 成员管理（Members）：列表 / 创建 / 详情 / 更新 / 软删除 / 批量状态变更
+    - 角色管理（Roles）：列表 / 权限矩阵更新（含冲突检测）
+    - 权限元数据（Permissions）：枚举所有可分配权限
+    - 审计日志（Audit Logs）：只读流水查询 + CSV 导出（**仅追加，不可改不可删**）
+
+    认证：上游 SSO 颁发的 JWT，Bearer 携带；本服务仅消费不签发。
+
+servers:
+  - url: "http://localhost:3000/api"
+    description: 本地开发
+  - url: "https://team-admin.internal/api"
+    description: 生产环境（内网域，由部署阶段替换）
+
+tags:
+  - name: members
+    description: 成员管理
+  - name: roles
+    description: 角色与权限矩阵
+  - name: permissions
+    description: 权限元数据
+  - name: audit-logs
+    description: 审计日志（只读、不可变）
+
+paths:
+  /members:
+    get:
+      tags: [members]
+      summary: "列出成员（分页 / 筛选 / 搜索）"
+      description: |
+        F1 成员列表入口；支持按角色、状态筛选与关键词搜索。
+        当 `q` 为空字符串视为不筛选；筛选无结果时返回空数组（非 404）。
+      operationId: "listMembers"
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+            example: 20
+        - name: role
+          in: query
+          required: false
+          description: 按角色 ID 精确筛选
+          schema:
+            type: string
+            format: uuid
+            example: "5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"
+        - name: status
+          in: query
+          required: false
+          description: 按成员状态筛选
+          schema:
+            type: string
+            enum: [active, disabled, deleted]
+            example: "active"
+        - name: q
+          in: query
+          required: false
+          description: 关键词（匹配 name / email / phone）
+          schema:
+            type: string
+            maxLength: 100
+            example: "alice"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedMemberResponse"
+              example:
+                data:
+                  - id: "11111111-1111-1111-1111-111111111111"
+                    email: "alice@example.com"
+                    name: "Alice"
+                    phone: "+86 13800001111"
+                    status: "active"
+                    roleIds: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+                    hireDate: "2025-09-01"
+                    notificationPrefs:
+                      email: true
+                      sms: false
+                    createdAt: "2026-04-01T08:00:00Z"
+                    updatedAt: "2026-04-15T08:00:00Z"
+                total: 50
+                page: 1
+                pageSize: 20
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [members]
+      summary: "创建成员"
+      description: |
+        F2 创建成员入口。邮箱唯一；命中已存在邮箱返回 409。
+        请求体校验失败（格式/必填）返回 422，详情逐字段返回。
+      operationId: "createMember"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMemberRequest"
+            example:
+              email: "bob@example.com"
+              name: "Bob"
+              phone: "+86 13800002222"
+              roleIds: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+              hireDate: "2026-05-10"
+              notificationPrefs:
+                email: true
+                sms: false
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+              example:
+                id: "22222222-2222-2222-2222-222222222222"
+                email: "bob@example.com"
+                name: "Bob"
+                phone: "+86 13800002222"
+                status: "active"
+                roleIds: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+                hireDate: "2026-05-10"
+                notificationPrefs:
+                  email: true
+                  sms: false
+                createdAt: "2026-05-06T10:00:00Z"
+                updatedAt: "2026-05-06T10:00:00Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /members/{id}:
+    get:
+      tags: [members]
+      summary: "获取成员详情"
+      description: F3 成员详情页数据源。包含基本信息、角色 ID 列表、通知偏好。
+      operationId: "getMemberById"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "11111111-1111-1111-1111-111111111111"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      tags: [members]
+      summary: "更新成员（基本信息 / 角色）"
+      description: |
+        部分更新；仅传入需要变更的字段。
+        - email 不可修改（创建后只读）
+        - 命中互斥角色组合返回 422
+      operationId: "updateMember"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "11111111-1111-1111-1111-111111111111"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMemberRequest"
+            example:
+              name: "Alice Liu"
+              phone: "+86 13800009999"
+              roleIds: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      tags: [members]
+      summary: "软删除成员"
+      description: |
+        F3 危险操作；要求请求头 `X-Confirm-Name` 严格等于成员当前 name 才执行。
+        命中名称不匹配返回 422；命中权限不足返回 403。
+        软删除后状态变为 `deleted`，记录不物理移除（保留审计链）。
+      operationId: "softDeleteMember"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "11111111-1111-1111-1111-111111111111"
+        - name: X-Confirm-Name
+          in: header
+          required: true
+          description: 二次确认字段，必须严格等于成员姓名
+          schema:
+            type: string
+            example: "Alice"
+      responses:
+        "204":
+          description: 软删除成功（无响应体）
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /members:batch-update:
+    post:
+      tags: [members]
+      summary: "批量启停成员状态"
+      description: |
+        F1 批量操作；body 包含 ids[] 与 action。任意一个 id 不存在或越权返回 422 + 失败明细，
+        已成功的部分不回滚（审计日志逐条记录）。
+      operationId: "batchUpdateMembers"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchUpdateMembersRequest"
+            example:
+              ids:
+                - "11111111-1111-1111-1111-111111111111"
+                - "22222222-2222-2222-2222-222222222222"
+              action: "disable"
+      responses:
+        "200":
+          description: 批量执行结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchUpdateMembersResponse"
+              example:
+                successCount: 2
+                failedItems: []
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /audit-logs:
+    get:
+      tags: [audit-logs]
+      summary: "查询审计日志（分页 / 全文搜索 / 类型筛选）"
+      description: |
+        F4 审计日志主入口。响应时间 SLA ≤ 500ms（PRD AC）。
+        **审计日志仅追加，不提供任何修改 / 删除接口（参见 ADR-005）。**
+      operationId: "listAuditLogs"
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+            example: 50
+        - name: actionType
+          in: query
+          required: false
+          description: 按操作类型筛选
+          schema:
+            type: string
+            enum:
+              - member.create
+              - member.update
+              - member.softDelete
+              - member.batchDisable
+              - member.batchEnable
+              - role.permissionChange
+              - role.create
+              - role.delete
+            example: "member.softDelete"
+        - name: q
+          in: query
+          required: false
+          description: 全文搜索（匹配 actorName / targetSnapshot / 邮箱等）
+          schema:
+            type: string
+            maxLength: 200
+            example: "alice@example.com"
+        - name: from
+          in: query
+          required: false
+          description: 起始时间（含），ISO8601
+          schema:
+            type: string
+            format: date-time
+            example: "2026-04-01T00:00:00Z"
+        - name: to
+          in: query
+          required: false
+          description: 结束时间（含），ISO8601
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-06T23:59:59Z"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedAuditLogResponse"
+              example:
+                data:
+                  - id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                    actorId: "99999999-9999-9999-9999-999999999999"
+                    actorName: "Admin Zhang"
+                    actionType: "member.softDelete"
+                    targetKind: "member"
+                    targetId: "11111111-1111-1111-1111-111111111111"
+                    beforeValue:
+                      status: "active"
+                    afterValue:
+                      status: "deleted"
+                    occurredAt: "2026-05-05T15:30:00Z"
+                total: 1234
+                page: 1
+                pageSize: 50
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /audit-logs/{id}:
+    get:
+      tags: [audit-logs]
+      summary: "查看单条审计日志"
+      description: |
+        审计日志只读接口。
+        **本资源不暴露 PATCH / PUT / DELETE 方法**——无论从哪一端尝试修改，均由 NestJS 默认返回 404 或被
+        ADR-005 第 2 层服务守卫返回 403；数据库层触发器（ADR-005 第 3 层）作为最后兜底。
+      operationId: "getAuditLogById"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /audit-logs/export.csv:
+    get:
+      tags: [audit-logs]
+      summary: "导出审计日志为 CSV"
+      description: |
+        遵循当前查询参数（同 GET /audit-logs）筛选导出。
+        响应为 `text/csv`，UTF-8 BOM；列：occurredAt / actorName / actionType / targetKind / targetId / beforeValue / afterValue。
+        **绝不包含密码、token 或任何敏感凭证字段——这些字段在 schema 中根本不存在。**
+      operationId: "exportAuditLogsCsv"
+      parameters:
+        - name: actionType
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "role.permissionChange"
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "alice"
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-04-01T00:00:00Z"
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: "2026-05-06T23:59:59Z"
+      responses:
+        "200":
+          description: CSV 文件流
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+                example: |
+                  occurredAt,actorName,actionType,targetKind,targetId,beforeValue,afterValue
+                  2026-05-05T15:30:00Z,Admin Zhang,member.softDelete,member,11111111-1111-1111-1111-111111111111,"{""status"":""active""}","{""status"":""deleted""}"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /roles:
+    get:
+      tags: [roles]
+      summary: "列出所有角色"
+      description: F5 角色管理列表入口；包含每个角色的直接权限与继承关系。
+      operationId: "listRoles"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+              example:
+                - id: "5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"
+                  name: "editor"
+                  description: "可编辑成员与基础角色"
+                  inheritsFromRoleId: null
+                  permissionIds:
+                    - "p-member-write"
+                    - "p-audit-read"
+                  createdAt: "2026-01-01T00:00:00Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /roles/{id}/permissions:
+    patch:
+      tags: [roles]
+      summary: "更新角色权限矩阵（含冲突检测）"
+      description: |
+        F5 权限矩阵编辑入口。
+        - 命中互斥权限（如同时勾选 read 与 write 同一资源）返回 422，body 详情列出冲突对
+        - 角色名称不在此处修改（参见 PATCH /roles/{id}，本契约 v1.0 暂未暴露）
+      operationId: "updateRolePermissions"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRolePermissionsRequest"
+            example:
+              permissionIds:
+                - "p-member-read"
+                - "p-member-write"
+                - "p-audit-read"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /permissions:
+    get:
+      tags: [permissions]
+      summary: "列出所有可分配权限（元数据）"
+      description: F5 权限矩阵渲染数据源；返回所有可分配的资源 × 动作组合。
+      operationId: "listPermissions"
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Permission"
+              example:
+                - id: "p-member-read"
+                  resource: "member"
+                  action: "read"
+                  description: "读取成员信息"
+                - id: "p-member-write"
+                  resource: "member"
+                  action: "write"
+                  description: "创建 / 更新成员"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    Member:
+      type: object
+      description: 团队成员实体；email 创建后只读，status=deleted 表示软删除。
+      required:
+        - id
+        - email
+        - name
+        - status
+        - roleIds
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 成员唯一 ID
+          example: "11111111-1111-1111-1111-111111111111"
+        email:
+          type: string
+          format: email
+          description: 邮箱（全局唯一，登录账号）
+          example: "alice@example.com"
+        name:
+          type: string
+          description: 姓名（也用于二次确认匹配）
+          minLength: 1
+          maxLength: 64
+          example: "Alice"
+        phone:
+          type: string
+          nullable: true
+          description: 手机号（可选）
+          maxLength: 32
+          example: "+86 13800001111"
+        status:
+          type: string
+          enum: [active, disabled, deleted]
+          description: 成员状态
+          example: "active"
+        roleIds:
+          type: array
+          description: 当前持有的角色 ID 列表
+          items:
+            type: string
+            format: uuid
+          example: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+        hireDate:
+          type: string
+          format: date
+          nullable: true
+          description: 入职日期
+          example: "2025-09-01"
+        notificationPrefs:
+          $ref: "#/components/schemas/NotificationPrefs"
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-04-01T08:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: 最近更新时间
+          example: "2026-04-15T08:00:00Z"
+
+    NotificationPrefs:
+      type: object
+      description: 通知偏好设置（F2 Step3）
+      required:
+        - email
+        - sms
+      properties:
+        email:
+          type: boolean
+          description: 是否允许邮件通知
+          example: true
+        sms:
+          type: boolean
+          description: 是否允许短信通知
+          example: false
+
+    CreateMemberRequest:
+      type: object
+      description: 创建成员请求体（对应 F2 4 步表单的合并 schema）
+      required:
+        - email
+        - name
+        - roleIds
+        - notificationPrefs
+      properties:
+        email:
+          type: string
+          format: email
+          example: "bob@example.com"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Bob"
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+          example: "+86 13800002222"
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          example: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+        hireDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-05-10"
+        notificationPrefs:
+          $ref: "#/components/schemas/NotificationPrefs"
+
+    UpdateMemberRequest:
+      type: object
+      description: 部分更新成员请求体；email 不可在此处变更。
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          example: "Alice Liu"
+        phone:
+          type: string
+          nullable: true
+          maxLength: 32
+          example: "+86 13800009999"
+        status:
+          type: string
+          enum: [active, disabled]
+          description: 状态切换；不允许在此处置为 deleted（用 DELETE 接口）
+          example: "active"
+        roleIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          example: ["5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"]
+        notificationPrefs:
+          $ref: "#/components/schemas/NotificationPrefs"
+
+    BatchUpdateMembersRequest:
+      type: object
+      description: 批量启停请求体
+      required:
+        - ids
+        - action
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 500
+          example:
+            - "11111111-1111-1111-1111-111111111111"
+            - "22222222-2222-2222-2222-222222222222"
+        action:
+          type: string
+          enum: [enable, disable]
+          description: 批量动作类型
+          example: "disable"
+
+    BatchUpdateMembersResponse:
+      type: object
+      description: 批量执行结果汇总；部分成功不回滚。
+      required:
+        - successCount
+        - failedItems
+      properties:
+        successCount:
+          type: integer
+          description: 成功条数
+          minimum: 0
+          example: 2
+        failedItems:
+          type: array
+          description: 失败明细
+          items:
+            type: object
+            required: [id, reason]
+            properties:
+              id:
+                type: string
+                format: uuid
+                example: "33333333-3333-3333-3333-333333333333"
+              reason:
+                type: string
+                example: "member not found"
+
+    Role:
+      type: object
+      description: 角色实体；权限通过 permissionIds 关联，inheritsFromRoleId 表示继承父角色。
+      required:
+        - id
+        - name
+        - permissionIds
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "5fde0c9f-3c5c-4e88-9b5c-a3a2b6c0a1d4"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 角色名称（全局唯一）
+          example: "editor"
+        description:
+          type: string
+          nullable: true
+          maxLength: 256
+          description: 角色描述
+          example: "可编辑成员与基础角色"
+        inheritsFromRoleId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 继承自的父角色 ID（自引用，可空）
+          example: null
+        permissionIds:
+          type: array
+          description: 直接持有的权限 ID 列表（不含继承）
+          items:
+            type: string
+          example: ["p-member-write", "p-audit-read"]
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-01-01T00:00:00Z"
+
+    UpdateRolePermissionsRequest:
+      type: object
+      description: 更新角色权限矩阵请求体；服务端检测互斥权限组合。
+      required:
+        - permissionIds
+      properties:
+        permissionIds:
+          type: array
+          items:
+            type: string
+          minItems: 0
+          example:
+            - "p-member-read"
+            - "p-member-write"
+            - "p-audit-read"
+
+    Permission:
+      type: object
+      description: 权限元数据；resource × action 组合唯一。
+      required:
+        - id
+        - resource
+        - action
+      properties:
+        id:
+          type: string
+          description: 权限 ID（如 p-member-write）
+          example: "p-member-write"
+        resource:
+          type: string
+          enum: [member, role, audit, permission]
+          description: 资源类型
+          example: "member"
+        action:
+          type: string
+          enum: [read, write]
+          description: 动作类型
+          example: "write"
+        description:
+          type: string
+          nullable: true
+          maxLength: 256
+          description: 权限描述
+          example: "创建 / 更新成员"
+
+    AuditLog:
+      type: object
+      description: 审计日志条目；**仅追加，不可修改不可删除**（ADR-005）。
+      required:
+        - id
+        - actorId
+        - actorName
+        - actionType
+        - targetKind
+        - targetId
+        - occurredAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        actorId:
+          type: string
+          format: uuid
+          description: 操作人 ID（即使账号已删除也保留 ID）
+          example: "99999999-9999-9999-9999-999999999999"
+        actorName:
+          type: string
+          description: 操作人姓名快照（冗余字段，防 actor 软删后失踪）
+          maxLength: 64
+          example: "Admin Zhang"
+        actionType:
+          type: string
+          enum:
+            - member.create
+            - member.update
+            - member.softDelete
+            - member.batchDisable
+            - member.batchEnable
+            - role.permissionChange
+            - role.create
+            - role.delete
+          description: 操作类型
+          example: "member.softDelete"
+        targetKind:
+          type: string
+          enum: [member, role]
+          description: 目标实体类型
+          example: "member"
+        targetId:
+          type: string
+          format: uuid
+          description: 目标实体 ID
+          example: "11111111-1111-1111-1111-111111111111"
+        beforeValue:
+          type: object
+          nullable: true
+          description: 变更前值快照（jsonb）；create 类型为 null
+          additionalProperties: true
+          example:
+            status: "active"
+        afterValue:
+          type: object
+          nullable: true
+          description: 变更后值快照（jsonb）；delete 类型可为 null
+          additionalProperties: true
+          example:
+            status: "deleted"
+        occurredAt:
+          type: string
+          format: date-time
+          description: 操作发生时间（写入即不可改）
+          example: "2026-05-05T15:30:00Z"
+
+    PaginatedMemberResponse:
+      type: object
+      description: 成员分页响应包装
+      required: [data, total, page, pageSize]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+        total:
+          type: integer
+          minimum: 0
+          example: 50
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          example: 20
+
+    PaginatedAuditLogResponse:
+      type: object
+      description: 审计日志分页响应包装
+      required: [data, total, page, pageSize]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        total:
+          type: integer
+          minimum: 0
+          example: 1234
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          example: 50
+
+    ProblemDetails:
+      type: object
+      description: |
+        统一错误响应（RFC 7807 风格简化版）。
+        所有 4xx / 5xx 响应都使用此结构；422 额外携带 fieldErrors。
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 机器可读错误码
+          enum:
+            - BAD_REQUEST
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - UNPROCESSABLE_ENTITY
+            - INTERNAL_ERROR
+          example: "UNPROCESSABLE_ENTITY"
+        message:
+          type: string
+          description: 人类可读错误描述
+          example: "email is invalid"
+        fieldErrors:
+          type: array
+          nullable: true
+          description: 422 时逐字段错误清单
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+                example: "email"
+              message:
+                type: string
+                example: "请输入有效的邮箱地址"
+        traceId:
+          type: string
+          nullable: true
+          description: 链路 ID，便于排查
+          example: "trace-abc123"
+
+  responses:
+    BadRequest:
+      description: 请求参数格式错误（query/path/header）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "BAD_REQUEST"
+            message: "page must be a positive integer"
+
+    Unauthorized:
+      description: 未授权（缺失或无效的 JWT）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "UNAUTHORIZED"
+            message: "Authentication required"
+
+    Forbidden:
+      description: 已认证但无权访问该资源 / 操作
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "FORBIDDEN"
+            message: "audit logs are append-only and cannot be modified"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "NOT_FOUND"
+            message: "member not found"
+
+    Conflict:
+      description: 资源冲突（如邮箱已存在）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "CONFLICT"
+            message: "email already bound to another member"
+
+    UnprocessableEntity:
+      description: 业务规则校验失败（含字段级 fieldErrors / 互斥权限冲突 / 二次确认不匹配）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "UNPROCESSABLE_ENTITY"
+            message: "validation failed"
+            fieldErrors:
+              - field: "email"
+                message: "请输入有效的邮箱地址"
+              - field: "roleIds"
+                message: "至少选择一个角色"
+
+    InternalError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 上游 SSO 颁发的 JWT；本服务仅校验签名与过期，不签发。
+
+security:
+  - bearerAuth: []
