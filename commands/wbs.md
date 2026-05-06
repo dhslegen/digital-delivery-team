@@ -45,6 +45,17 @@ pm-agent 产出：
 | `docs/wbs.md` | 工作分解结构，含关键路径和工时估算 |
 | `docs/risks.md` | 风险清单，含概率/影响/应对措施 |
 
+### Phase 2.1 — 产出校验（v0.8.1 D12）
+
+```bash
+if ! node "$DDT_PLUGIN_ROOT/bin/check-agent-output.mjs" \
+       --file docs/wbs.md --min-lines 30 --name pm-agent; then
+  echo "- [BLOCK-AGENT-WBS] pm-agent 产出异常（详见 stderr）" >> docs/blockers.md
+  echo "❌ pm-agent 产出校验失败，已写 docs/blockers.md"
+  exit 5
+fi
+```
+
 ## Phase 3 — 汇总输出
 
 ```

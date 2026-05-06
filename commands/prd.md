@@ -58,6 +58,28 @@ product-agent 产出 `docs/prd.md`，必须包含：
 - 每条验收标准（Given / When / Then 格式）
 - 功能优先级（P0 / P1 / P2）
 
+### Phase 4.1 — 产出校验（v0.8.1 D12：替代静默 fallback）
+
+派发完成后**必须**校验 agent 产出。如失败，**禁止 main thread 静默 fallback 自写**——
+应写 blocker 让用户决策（重试 / 手动 fallback / 暂停）。
+
+```bash
+if ! node "$DDT_PLUGIN_ROOT/bin/check-agent-output.mjs" \
+       --file docs/prd.md --min-lines 50 --name product-agent; then
+  {
+    echo ""
+    echo "## $(date -u +%Y-%m-%dT%H:%M:%SZ) — BLOCK-AGENT-PRD"
+    echo "- product-agent 产出异常（详见 stderr）"
+    echo "- 需人工决策："
+    echo "  - (a) 重试 \`/prd\` 或 \`/prd --refresh\`"
+    echo "  - (b) main thread 手动撰写（违反 agent 边界，需在 blocker 标注理由）"
+    echo "  - (c) 暂停，排查会话 / 网络 / agent 配置"
+  } >> docs/blockers.md
+  echo "❌ product-agent 产出校验失败，已写 docs/blockers.md（用户决策后重跑）"
+  exit 5
+fi
+```
+
 ## Phase 5 — 汇总输出
 
 ```

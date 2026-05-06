@@ -128,6 +128,17 @@ architect-agent 产出：
 | `docs/api-contract.yaml` | OpenAPI 3.0 契约 |
 | `docs/data-model.md` | 数据模型（ER 图文字描述 + 字段规范） |
 
+### Phase 3.1 — 产出校验（v0.8.1 D12）
+
+```bash
+if ! node "$DDT_PLUGIN_ROOT/bin/check-agent-output.mjs" \
+       --file docs/arch.md --min-lines 50 --name architect-agent; then
+  echo "- [BLOCK-AGENT-DESIGN] architect-agent 产出异常（详见 stderr）" >> docs/blockers.md
+  echo "❌ architect-agent 产出校验失败，已写 docs/blockers.md"
+  exit 5
+fi
+```
+
 ## Phase 4 — 自动契约 lint（硬门禁）
 
 ```bash
