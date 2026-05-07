@@ -148,6 +148,7 @@ test('全 commands 按"决策门 / 编排聚合 / 辅助"分类无遗漏', () =>
   // 分类：含完整决策门段落 / 编排聚合（派发别的命令）/ 辅助（只读或工具型）
   const HAS_DECISION_GATE = new Set([
     'prd', 'wbs', 'design', 'design-brief', 'design-execute', 'build-api', 'build-web',
+    'integrate',  // v0.9.11 D28：栈联调含决策门
     'test', 'review', 'fix', 'package', 'report', 'impl',
   ]);
   const ORCHESTRATION_AGGREGATE = new Set([

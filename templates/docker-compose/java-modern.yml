@@ -1,0 +1,54 @@
+# DDT v0.9.11 D28 · java-modern preset 基础组件 docker-compose
+#
+# 用途：被 bin/integrate-up.mjs 在用户项目根没有 docker-compose.yml 时复制使用。
+# 启动：docker compose up -d
+# 拆环境：docker compose down（保留 volumes 用 -v 一并清空）
+#
+# 端口约定：
+#   3306  MySQL
+#   6379  Redis
+#   ddt-app-network 共享网络让 app 进程可访问
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ddt-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: ddt_dev
+      MYSQL_USER: ddt
+      MYSQL_PASSWORD: ddt
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - ddt-app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ddt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - ddt-app-network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  ddt-app-network:
+    driver: bridge

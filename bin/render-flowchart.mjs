@@ -28,6 +28,7 @@ const PHASE_COMMANDS = new Set([
   'prd', 'wbs', 'design',
   'design-brief', 'design-execute',
   'build-web', 'build-api',
+  'integrate',  // v0.9.11 D28：栈联调 + smoke
   'test', 'review', 'fix', 'package', 'report',
 ]);
 const ORCHESTRATOR_COMMANDS = new Set(['kickoff', 'impl', 'verify', 'ship']);

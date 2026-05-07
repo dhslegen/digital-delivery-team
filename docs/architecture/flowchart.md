@@ -13,6 +13,7 @@ flowchart LR
   design["/design<br/>架构师命令 · 生成架构草案 + OpenAPI 契约 + "]
   fix["/fix<br/>修复命令 · 按 review-report 条目逐项打补丁"]
   impl(["/impl<br/>串行实现 · 串行调用 /build-api → 决策门 →"])
+  integrate["/integrate<br/>集成验证 · 起 db/redis + db migrate"]
   kickoff(["/kickoff<br/>新项目起手 · 串行跑 /prd → /wbs → /des"])
   package["/package<br/>交付命令 · 生成 README + 部署指南 + 演示脚本"]
   prd["/prd<br/>产品经理命令 · 生成或刷新 PRD（含用户故事与 Give"]
@@ -34,7 +35,9 @@ flowchart LR
   design -- spa --> design-brief
   design -- none --> impl
   fix --> verify
+  impl --> integrate
   impl --> verify
+  integrate --> verify
   kickoff --> impl
   package --> report
   prd --> wbs
@@ -48,7 +51,7 @@ flowchart LR
   %% 节点类型样式
   classDef phase fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
   classDef orch fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,stroke-dasharray:5
-  class build-api,build-web,design-brief,design-execute,design,fix,package,prd,report,review,test,wbs phase
+  class build-api,build-web,design-brief,design-execute,design,fix,integrate,package,prd,report,review,test,wbs phase
   class impl,kickoff,ship,verify orch
 ```
 

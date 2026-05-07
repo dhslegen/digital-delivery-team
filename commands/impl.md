@@ -103,7 +103,7 @@ main thread 落 `docs/impl-summary.md`：
 前端测试通过率:   <passed> / <total>
 checkpoint commits: <count>
 
-✅ 建议下一步：/verify
+✅ 建议下一步：/integrate（v0.9.11 D28：起栈联调 + smoke），通过后再 /verify
 ```
 
 ## Phase 决策门 — M6.2
@@ -125,7 +125,7 @@ fi
     multiSelect: false,
     options: [
       { label: "接受并继续 (Recommended)",
-         description: "进入 /verify",
+         description: "进入 /integrate 起栈联调（通过后再 /verify）",
          preview: "<docs/impl-summary.md 摘要>" },
       { label: "修改某个 endpoint 或页面", description: "我会指出哪个" },
       { label: "新增 endpoint 或页面", description: "我有遗漏的要补" },
@@ -136,7 +136,7 @@ fi
 ```
 
 emit resolved 后按答案分支：
-- accept → emit-phase end + 提示 /verify
+- accept → emit-phase end + 提示 /integrate（栈联调），再 /verify
 - modify/add/regenerate → 询问具体 + 跑对应 `/build-api --refresh` 或 `/build-web --refresh`
 
 ## Phase 末 — 标记阶段完成

@@ -4,6 +4,88 @@
 
 ---
 
+## [0.9.11] - 2026-05-07 — 实战 hotfix D28：新增 `/integrate` 命令填补"代码完成 → 栈跑起来"缺口
+
+源自实战：用户跑完 `/build-web` 和 `/build-api` 后，DDT 推荐 `/test`——但**数据库 / Redis 没起、server 进程没启动、前后端从未真实联调过**，`/test` 跑的是 mock + 单元，不是真实集成。/impl → /verify 之间缺"栈跑起来"环节。
+
+### 🟣 D28 新增
+
+`/integrate` 命令（含 8 phase）：
+1. 环境侦测：docker / docker-compose / 端口 8080 5173 占用 / .ddt/tech-stack.json
+2. docker-compose 准备：用户根目录配置 OR 从 plugin 模板复制（按 preset）
+3. 起基础组件：`docker compose up -d --wait`（mysql/postgres + redis + healthcheck）
+4. db migration：按 preset 跑（`mvn flyway:migrate` / `npx prisma migrate deploy` / `alembic upgrade head`）
+5. 启 server 后台：`mvn spring-boot:run` / `npm run start:dev` → 等 health 60s，PID 写 `.ddt/integrate/server.pid`
+6. 启 web 后台：`npm run dev` → 等端口 :5173 30s，PID 写 `.ddt/integrate/web.pid`
+7. smoke：GET 后端 health endpoint + OpenAPI 第一个 GET endpoint + web 端口监听
+8. 报告 `docs/integrate-report.md`；可选 `--tear-down` 拆环境
+
+### 资源结构
+
+```
+commands/integrate.md                                ← 【新】命令包装（含决策门 + --auto 跳过）
+bin/integrate-up.mjs                                 ← 【新】8 phase 编排核心 mjs
+templates/docker-compose/
+├── java-modern.yml                                  ← 【新】mysql:8 + redis:7 + healthcheck
+└── node-modern.yml                                  ← 【新】postgres:16 + redis:7 + healthcheck
+```
+
+### 关键变更
+
+- **commands/impl.md** 推荐下一步 `/verify` → `/integrate`（通过后再 /verify）
+- **commands/verify.md** 加软提醒：`docs/integrate-report.md` 不存在时 warning，仅提醒"建议先 /integrate"，**不阻塞**（适合纯后端 API / 别个单元 / 未部署项目）
+- **bin/manifest.mjs** + **bin/render-flowchart.mjs**：integrate 加入 phase 命令清单（与 prd/wbs/build-* 同列）
+- **三个 description 字段**：20 命令 → 21 命令（plugin.json / marketplace.json / package.json）
+
+### 命令参数
+
+- `--dry-run`：仅输出 8 步计划不执行
+- `--tear-down`：起栈 → smoke → 自动拆（CI / 演示一次性）
+- `--keep-stack`（默认）：起栈 + smoke 后**保留**（让 /verify 直接复用，省 1 分钟启动）
+- `--skip-server` / `--skip-web` / `--skip-smoke`：仅起部分组件（增量调试）
+
+### preset 渐进支持
+
+- ✅ `java-modern`（Spring Boot 3 + MySQL 8 + Redis 7 + flyway）
+- ✅ `node-modern`（NestJS / Next.js + Postgres 16 + Redis 7 + Prisma）
+- ⚠️ `go-modern` / `python-fastapi`：v0.9.11 输出 checklist 让用户手动跑（v0.9.12+ 增量补）
+
+### 退出码（自助 troubleshooting）
+
+| Exit | 含义 |
+|---|---|
+| 0 | 成功 |
+| 2 | docker / docker-compose 不可用 |
+| 3 | docker compose up 失败 |
+| 4 | db migration 失败 |
+| 5 | server 60s 未就绪 |
+| 6 | web 30s 未监听 |
+| 7 | smoke 测试失败 |
+| 8 | 端口冲突 |
+
+### 测试覆盖（+12 用例）
+
+`tests/integration/d28-integrate.test.mjs`：
+- commands/integrate.md 静态结构（frontmatter / 8 phase / exit code 表）
+- bin/integrate-up.mjs --dry-run 输出 8 步计划
+- docker-compose 模板 java-modern / node-modern 含 mysql/postgres + redis + healthcheck
+- commands/impl.md 推荐已切到 /integrate
+- commands/verify.md 软提醒（不阻塞）
+- 设计原则段（stage-appropriate / preset 渐进 / soft over hard）
+
+`tests/integration/m62-decision-gate.test.mjs::H9` 与 `bin/manifest.mjs` 加 integrate 到决策门类别。
+
+测试基数 469 → 481（+12 D28，零回归）。
+
+### 设计原则
+
+- **stage-appropriate**：/integrate 只做"代码 → 跑起来"桥接；不做单元测试（/test）/ 代码评审（/review）
+- **失败可重入**：每 phase 独立，挂在哪修哪；不强制从头来
+- **soft over hard**：/verify 不强制依赖 /integrate，让纯后端 API / 别个单元项目仍能用
+- **preset 渐进支持**：v0.9.11 主流栈先自动，小众栈后续迭代补
+
+---
+
 ## [0.9.10] - 2026-05-07 — 实战 hotfix D27：D26 范围收敛（删 handoff 输入类型 K，保留 cross-validation + UI 库场景化）
 
 源自实战：v0.9.9 D26 把 claude-design handoff bundle 摄取从 /design-execute 阶段拉前到 brief 阶段（输入类型 K），用户明确反馈"过早介入了"——brief 阶段武断锁死 framework / UI 库违反"brief 应宽松、/design-brief 精细化"原则。

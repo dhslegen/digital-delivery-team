@@ -19,6 +19,13 @@ argument-hint: ""
 ```bash
 test -f docs/prd.md           || { echo "❌ 请先运行 /prd"; exit 1; }
 test -f docs/api-contract.yaml || { echo "❌ 请先运行 /design"; exit 1; }
+
+# v0.9.11 D28 软提醒：建议先 /integrate 起栈联调，让 /verify 跑在真实栈上
+if [ ! -f docs/integrate-report.md ]; then
+  echo "ℹ️  建议先跑 /digital-delivery-team:integrate 起栈联调（db + redis + 前后端 + smoke）"
+  echo "   未跑 /integrate 时 test-agent 仅跑 unit + 契约校验，不验证真实集成。"
+  echo "   仅后端 API / 别个单元项目可忽略。"
+fi
 ```
 
 ## 两者都完成后汇总
