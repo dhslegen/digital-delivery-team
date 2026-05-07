@@ -172,9 +172,24 @@ B2B 项目常含"对接 X 系统"信号。skill 应：
 
 **速查**：见 `tech-stack-quick-pick.md`
 
+### §6 子字段（v0.9.9 D26）
+
+`§6 技术栈预设` 段除主 preset 名外，应**严格按 preset default 展开**填以下子字段（不能凭训练偏置自由发挥）：
+
+| 子字段 | java-modern | node-modern | go-modern | python-fastapi |
+|---|---|---|---|---|
+| 后端语言 | Java 17/21 | TypeScript（Node 22） | Go 1.22 | Python 3.12 |
+| 后端框架 | Spring Boot 3 + MyBatis-Plus | NestJS / Next.js | Gin + sqlc | FastAPI + SQLAlchemy |
+| 数据库 | MySQL 8 + Redis 7 | Postgres + Prisma | Postgres | Postgres + SQLAlchemy |
+| **前端框架** | **React 18** | Next.js 14（含 React 18） | **React 18** | **React 18** |
+| 前端构建 | Vite + TS | Next.js / Vite | Vite + TS | Vite + TS |
+| **ui_components**（v0.9.9 新增） | tailwind+shadcn-ui（B2B 中后台 → antd-5） | tailwind+shadcn-ui | tailwind+shadcn-ui | tailwind+shadcn-ui |
+
 **反模式**：
-- ❌ 替用户决定（哪怕输入暗示）——必须用 AskUserQuestion 显式确认
-- ❌ 填 `none` 或留空——/design Phase 2 会卡
+- ❌ 替用户决定 preset（哪怕输入暗示）——必须用 AskUserQuestion 显式确认
+- ❌ 填 `none` 或留空 preset —— /design Phase 2 会卡
+- ❌ **java-modern 写 Vue + Element Plus**（v0.9.9 D26 实战触发）：preset default 是 React + Vite + Tailwind + shadcn-ui，写 Vue 是凭训练偏置自由发挥；如果用户明确要 Vue，应选 `interactive` 或 `custom`，不能写 java-modern + Vue
+- ❌ **claude-design 通道 + 非 React 框架**（v0.9.9 D26 实战触发）：bundle 里全是 .jsx，写 Vue 等于把 JSX 重写成 SFC，违反通道初衷且增加 30% 改造成本；check-brief-quality 会发软警告
 
 ---
 
@@ -188,9 +203,22 @@ B2B 项目常含"对接 X 系统"信号。skill 应：
 - 含"API/服务/库/CLI/SDK" → `none`
 - 不确定 → 用 AskUserQuestion 让用户选
 
-**反模式**：
+### §7 子字段（v0.9.9 D26）
+
+`§7 前端类型` 段（仅 type=spa 时）应包含：
+
+```
+type: spa
+框架: React 18  | Next.js 14 / Vue 3 / Svelte 5（按 §6 preset default）
+构建: Vite | Next.js / Nuxt / SvelteKit
+TypeScript: true
+UI: tailwind+shadcn-ui | antd-5 | mui-5（详见 ui-library-by-scenario.md）
+```
+
+**反模式（v0.9.9 D26）**：
 - ❌ 含 Java 就推 `server-side`——很多 Java 项目也是 SPA + REST
 - ❌ 含 SaaS 就推 `spa`——也可能是 server-side rendering
+- ❌ §7 框架与 §6 preset default 不一致（如 §6=java-modern + §7 框架=Vue）→ 软警告
 
 ---
 

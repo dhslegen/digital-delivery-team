@@ -87,6 +87,86 @@ function fieldFilled(text, field) {
   return { filled: true, lengthChars: trimmed.length };
 }
 
+// v0.9.9 D26：preset 与前端框架的交叉校验
+// 4 个 React preset：java-modern / node-modern / go-modern / python-fastapi
+// 1 个 SSR preset：java-traditional（无独立前端框架）
+const REACT_PRESETS = ['java-modern', 'node-modern', 'go-modern', 'python-fastapi'];
+
+function extractPreset(text) {
+  // 匹配："**技术栈预设**: java-modern" / "preset: java-modern" / "## 技术栈预设\njava-modern"
+  const inline = text.match(/\*\*技术栈预设\*\*\s*[：:]\s*[`]?([\w-]+)[`]?/);
+  if (inline) return inline[1].toLowerCase();
+  const yaml = text.match(/^\s*preset\s*[:=]\s*([\w-]+)/m);
+  if (yaml) return yaml[1].toLowerCase();
+  // 块级章节：## 技术栈预设 → 下方第一行非空内容
+  const block = text.match(/^##\s+(?:§\d+\s+)?技术栈(?:预设|选型)[^\n]*\n+([\s\S]*?)(?=\n##\s|\Z)/m);
+  if (block) {
+    const m = block[1].match(/\b(java-modern|java-traditional|node-modern|go-modern|python-fastapi|interactive|custom)\b/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+function extractFramework(text) {
+  // 匹配多种 spelling：react / react 18 / Vue 3 / Vue.js / Svelte 5 / Angular 19 / Next.js
+  const candidates = [
+    { name: 'react',   re: /\b(?:next\.?js|react)\b/i },
+    { name: 'vue',     re: /\bvue(?:[\s.-]?\d|\.js)?\b/i },
+    { name: 'svelte',  re: /\b(?:sveltekit|svelte)\b/i },
+    { name: 'angular', re: /\bangular\b/i },
+    { name: 'solid',   re: /\bsolid(?:js|-start)?\b/i },
+  ];
+  // 仅扫 §6 §7 段落（避免在用户故事 / 非目标段误中）
+  const tech = text.match(/^##\s+(?:§\d+\s+)?(?:技术栈(?:预设|选型)|前端类型)[^\n]*\n([\s\S]*?)(?=\n##\s+(?:§|\w)|\Z)/gm);
+  if (!tech) return null;
+  const scope = tech.join('\n');
+  for (const c of candidates) {
+    if (c.re.test(scope)) return c.name;
+  }
+  return null;
+}
+
+function extractAiDesignChannel(text) {
+  // 匹配："**AI-native UI**: claude-design" / "channel: claude-design" / 块级
+  const inline = text.match(/\*\*AI[-\s]?native\s*UI\*\*\s*[：:]\s*[`]?([\w-]+)[`]?/i);
+  if (inline) return inline[1].toLowerCase();
+  const yaml = text.match(/^\s*channel\s*[:=]\s*([\w-]+)/m);
+  if (yaml) return yaml[1].toLowerCase();
+  const block = text.match(/^##\s+(?:§\d+\s+)?AI[-\s]?native\s*UI[^\n]*\n+([\s\S]*?)(?=\n##\s|\Z)/m);
+  if (block) {
+    const m = block[1].match(/\b(claude-design|figma|v0|none)\b/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+function crossValidate(text) {
+  const warnings = [];
+  const preset = extractPreset(text);
+  const framework = extractFramework(text);
+  const channel = extractAiDesignChannel(text);
+
+  // 规则 1：preset default vs 实际 framework 一致性（v0.9.9 D26）
+  if (preset && REACT_PRESETS.includes(preset) && framework && framework !== 'react') {
+    warnings.push(
+      `D26 cross-check：§6 preset=${preset} default 是 React，但 §6/§7 写了 ${framework}。` +
+      `这通常是 LLM 凭训练偏置自由发挥（如 java-modern + Vue + Element Plus）。` +
+      `如果用户确实要 ${framework}，应改用 preset=interactive 或 custom；详见 references/field-rules.md §6 反模式。`
+    );
+  }
+
+  // 规则 2：claude-design + 非 React → 软警告（30% 改造成本）
+  if (channel === 'claude-design' && framework && framework !== 'react') {
+    warnings.push(
+      `D26 cross-check：§8 ai_design=claude-design 但 §7 framework=${framework}。` +
+      `claude-design bundle 全是 .jsx prototype，写 ${framework} 等于把 JSX 重写成对应组件，约 30% 改造成本。` +
+      `详见 references/ai-design-quick-pick.md "框架选择强相关"。`
+    );
+  }
+
+  return warnings;
+}
+
 function checkBrief(text) {
   const results = FIELDS.map(field => {
     const r = fieldFilled(text, field);
@@ -109,6 +189,10 @@ function checkBrief(text) {
     .filter(r => !r.required && !r.filled)
     .map(r => `§${r.n} ${r.name}：${r.reason}`);
 
+  // v0.9.9 D26：preset / framework / ai_design 交叉校验（软警告，不阻塞 pass）
+  const crossWarnings = crossValidate(text);
+  warnings.push(...crossWarnings);
+
   return {
     fill_rate_pct: Number(fillRate),
     filled_total: `${filled}/${total}`,
@@ -116,6 +200,12 @@ function checkBrief(text) {
     pass: Number(fillRate) >= 70 && blockers.length === 0,
     blockers,
     warnings,
+    cross_validation: {
+      preset: extractPreset(text),
+      framework: extractFramework(text),
+      ai_design_channel: extractAiDesignChannel(text),
+      issues: crossWarnings,
+    },
     field_details: results,
   };
 }

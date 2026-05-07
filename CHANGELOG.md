@@ -4,6 +4,86 @@
 
 ---
 
+## [0.9.9] - 2026-05-07 — 实战 hotfix D26：claude-design handoff 输入类型 K + preset/framework 交叉校验 + UI 库场景化推荐
+
+源自实战：alv-ops 项目 brief 自动产出时，LLM 把 java-modern preset 的前端框架凭训练数据偏置写成 "Vue 3 + Element Plus"——违反 preset default（React 18 + Vite + Tailwind + shadcn-ui），同时与 D3=claude-design 通道（bundle 全 .jsx）冲突。用户已经在 https://claude.ai/design 跑过设计了，handoff bundle 含 React/JSX prototype + tokens.css + chat 决策追溯，但 brief 阶段没识别这种输入类型，下游 product-agent 看不见设计决策。
+
+用户诉求："逆向优化 DDT 本身（不改 alv-ops 演示产物），保持通用性"。本次按 skill-creator 三层规范扩展。
+
+### 🔴 D26 修复
+
+**根因 1（输入识别盲区）**：ddt-brief-builder 10 类输入识别（A-J）无 "claude-design handoff bundle"，bundle 只能等到 /design-execute 阶段才被消费——brief / /prd 阶段无法引用。
+**根因 2（LLM 自由发挥违反硬约束）**：`templates/tech-stack-presets.yaml::java-modern.frontend.framework=react` 是事实，但 brief §6 段被 LLM 凭训练偏置（国内 Java + Vue + Element Plus 模式）写成 Vue 3，没有交叉校验机制守门。
+**根因 3（UI 库 preset default 不适合 B2B 中后台）**：5 个 preset 中 4 个 frontend 是 React + Tailwind + shadcn-ui——shadcn-ui 强项是 SaaS C 端，对中后台高密度数据表格/树/抽屉表现差，但 preset 没分场景默认。
+
+### skill-creator 三层资源扩展
+
+```
+skills/ddt-brief-builder/
+├── SKILL.md                                ← 输入类型 A-J → A-K；§6 加 ui_components 子字段；D26 反模式
+├── scripts/
+│   ├── dump-design-handoff.mjs             ← 【新】解析 claude.ai/design handoff bundle
+│   ├── check-brief-quality.mjs             ← 加 D26 cross-validation：preset/framework/ai_design 一致性
+│   └── ...（其他不变）
+├── references/
+│   ├── ui-library-by-scenario.md           ← 【新】UI 库场景化推荐（B2B → AntD 5 / SaaS → shadcn-ui）
+│   ├── ai-design-quick-pick.md             ← claude-design 段加"框架强相关"（React 零迁移 / Vue 30% 改造）
+│   ├── decision-gates.md                   ← D1 速查表加"前端框架"列 + 显式标 React/Thymeleaf
+│   ├── field-rules.md                      ← §6 §7 加 D26 反模式 + ui_components 子字段
+│   └── ...
+├── examples/
+│   └── from-design-handoff.md              ← 【新】实战：URL / .tar.gz / 解压目录三种形态
+└── （其他不变）
+
+templates/project-brief.template.md         ← §6 加 ui_components 子字段 + §11 加"设计契约"示例
+tests/fixtures/real-agent-outputs/design-handoff/r_McQh94UXBuyrFdW2KynA.tar.gz
+                                            ← 【新】1.1MB 真实 claude.ai/design bundle 作 D26 测试输入
+tests/integration/d26-design-handoff-and-react-lock.test.mjs
+                                            ← 【新】+19 测试用例
+```
+
+### 修复要点
+
+- **输入类型 A-J → A-K**：新增 K = claude-design handoff bundle（URL / .tar.gz / 解压目录），dump-design-handoff.mjs 自动产出 §11 设计契约 markdown。
+- **dump-design-handoff.mjs 核心能力**：
+  - 解析 `untitled/README.md` → 项目名 + bundle 内容摘要 + instruction
+  - 解析 `untitled/chats/*.md` → 用户原始诉求 + 关键设计决策（视觉/品牌/字体/数据/创新）+ AI 提及的技术栈
+  - 解析 `untitled/project/tokens.css` → 品牌色 / 状态色 / 字体族 / total CSS variables
+  - 列 `untitled/project/*.jsx` → 推断 React 框架
+  - 输出 markdown 片段（注入 brief §11 设计契约）+ 结构化 JSON 摘要
+- **不重复造 URL 下载轮子**：URL 形态请先用 `bin/ingest-claude-design.mjs --url` 落盘到 .ddt/design/，再传给 dump 脚本。安全检查（SSRF / 体积 / magic bytes）由专职 ingest 脚本完成。
+- **check-brief-quality D26 cross-validation（核心防回归）**：
+  - 抽 §6 preset / §7 framework / §8 ai_design_channel
+  - 规则 1：4 React preset（java-modern / node-modern / go-modern / python-fastapi）+ 实际 framework=Vue/Svelte/Angular → 软警告（preset default mismatch）
+  - 规则 2：ai_design=claude-design + framework≠react → 软警告（30% 改造成本）
+  - 软警告不阻塞 pass，仅在 warnings 段提醒
+- **UI 库场景化推荐（references/ui-library-by-scenario.md）**：
+  - B2B 中后台 / 指挥中心 / 运营管理 → AntD 5（高密度表格/树/抽屉开箱即用）
+  - SaaS C 端 / 营销页 → shadcn-ui + Tailwind（视觉现代 / Vercel 生态）
+  - 移动 H5 → TDesign Mobile / Vant 4
+  - 数据可视化大屏 → AntD 5 + ECharts 5 / AntV G2
+  - 3D / 地图重型 → 加 Three.js + react-three-fiber + MapboxGL / 高德 JSAPI
+  - 解耦原则：tokens.css 是 W3C Design Tokens，可映射到任何 UI 库主题系统，UI 库选择按场景，不按 claude-design 通道锁死
+- **brief 模板 §6 加 ui_components 子字段**：候选值 `tailwind+shadcn-ui | antd-5 | mui-5 | chakra-ui-2 | mantine-7 | naive-ui | element-plus | none`；LLM 写 brief 时严格按场景填，不自由发挥。
+- **decision-gates.md D1 速查显式标 React 18 + Vite + TS**：消除 LLM 解读空间。
+- **field-rules.md §6 §7 D26 反模式**：明文禁 java-modern + Vue + Element Plus / claude-design + 非 React。
+
+### D26 测试覆盖（+19 用例）
+
+`tests/integration/d26-design-handoff-and-react-lock.test.mjs`：
+1-7. dump-design-handoff 解析真实 r_McQh94UXBuyrFdW2KynA bundle：项目名 + 框架 + UI 库 + tokens（61 vars）+ chat 决策（5 条）+ AI 推荐技术栈（React/AntD/Zustand/ECharts/Three.js）+ markdown 输出
+8-11. check-brief-quality D26 cross-validation：一致组合 0 issues / java-modern + Vue 警告 / claude-design + Vue 警告 / node-modern + Next.js 一致
+12-19. 静态文档约束：SKILL.md 输入类型 K + 字段表 D26 反模式 / field-rules / decision-gates / ai-design-quick-pick / ui-library-by-scenario / examples / brief 模板
+
+测试基数 457 → 476（+19）。`real-agent-fixtures.test.mjs::B1` 加二进制 bundle 例外（.tar.gz / .zip 上限放宽到 2MB）。
+
+### 设计原则保留
+
+- **保持通用性**：D26 不强制 React（README 明说 "recreate in whatever fits"），软警告 + 30% 改造成本说明，让用户自由选择
+- **不动 alv-ops**：alv-ops 是演示产物，本次仅优化 DDT skill 通用层；alv-ops brief 后续重跑 ddt-brief-builder 时由 v0.9.9 优化版自动校准
+
+---
+
 ## [0.9.8] - 2026-05-07 — 实战 hotfix D25：ddt-brief-builder 输入类型 J（第三方 API 文档）+ §11 集成依赖
 
 源自实战：alv-ops 项目跑 `/prd` 时 product-agent 产生 BLK-001（高，"车企接口协议未确认，阻塞 P0"）+ BLK-003（低，"视频回放可行性未确认"）—— 但用户已经爬好了新石器开放平台 API 文档（14 Cloud + 4 Video endpoints + OAuth2 鉴权 + 错误码表），文档完全可以让两条 BLK 消失。**brief 阶段没识别为"集成依赖"**是 product-agent 看不见契约的根因。

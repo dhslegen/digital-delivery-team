@@ -25,13 +25,16 @@
 
 **5 个 preset 速查**（详见 `tech-stack-quick-pick.md`）：
 
-| preset | 后端 | 前端 | DB | 适合 |
-|---|---|---|---|---|
-| **java-modern** ⭐企业首选 | Spring Boot 3 + Java 21 | React + Vite + TS | PostgreSQL 16 | B2B 后台 / 高合规 / 长服役 |
-| **java-traditional** | Spring Boot 2.7 + Java 17 | Thymeleaf SSR | MySQL 8 | 老 Java 团队 / 内部后台 |
-| **node-modern** ⭐SaaS 首选 | NestJS + Node 22 | Next.js 14 + tRPC | Postgres + Prisma | SaaS / 全栈 TS / shadcn |
-| **go-modern** | Go + Gin + sqlc | React + Vite + TS | PostgreSQL 16 | 高并发 / 微服务 / 网关 |
-| **python-fastapi** ⭐AI 首选 | FastAPI + Python 3.12 | React + Vite + TS | Postgres + SQLAlchemy | AI/ML 集成 / 数据密集 |
+| preset | 后端 | 前端框架 | UI 库（preset default） | DB | 适合 |
+|---|---|---|---|---|---|
+| **java-modern** ⭐企业首选 | Spring Boot 3 + Java 21 | **React 18 + Vite + TS** | tailwind + shadcn-ui（B2B 中后台可换 AntD 5） | PostgreSQL 16 | B2B 后台 / 高合规 / 长服役 |
+| **java-traditional** | Spring Boot 2.7 + Java 17 | **Thymeleaf SSR**（无独立前端） | — | MySQL 8 | 老 Java 团队 / 内部后台 |
+| **node-modern** ⭐SaaS 首选 | NestJS + Node 22 | **Next.js 14 + tRPC** | shadcn-ui | Postgres + Prisma | SaaS / 全栈 TS / shadcn |
+| **go-modern** | Go + Gin + sqlc | **React 18 + Vite + TS** | tailwind + shadcn-ui | PostgreSQL 16 | 高并发 / 微服务 / 网关 |
+| **python-fastapi** ⭐AI 首选 | FastAPI + Python 3.12 | **React 18 + Vite + TS** | tailwind + shadcn-ui | Postgres + SQLAlchemy | AI/ML 集成 / 数据密集 |
+
+> ⚠️ **5 个 preset 中 4 个前端是 React**——java-modern / node-modern / go-modern / python-fastapi 全 React 系。只有 java-traditional 用 Thymeleaf SSR。LLM 写 brief §6 §7 **必须严格按 preset default 填**，禁止凭训练偏置改成 Vue（v0.9.9 D26 反模式）。  
+> UI 库可按场景从默认换：B2B 中后台可换 AntD 5（详见 `ui-library-by-scenario.md`）。
 
 ## D2 前端类型（PR-E 三态）
 

@@ -27,9 +27,35 @@
 ### claude-design
 
 - **流程**：跑 `/design-execute --channel claude-design` → 用户去 claude.ai/design → 完成后 Share → Handoff to Claude Code（URL）→ DDT 摄取（v0.8.2 D14 后支持 --url）
-- **产物**：JSX < 1000 行 / 文件 + tokens.css（标准 CSS variables）
-- **DDT 摄取**：`bin/ingest-claude-design.mjs --bundle <zip> | --url <handoff>`
+- **产物**：JSX < 1000 行 / 文件 + tokens.css（标准 CSS variables）+ chats/*.md（设计决策追溯）
+- **DDT 摄取**：
+  - `bin/ingest-claude-design.mjs --bundle <zip|tar.gz> | --url <handoff>` — /design 阶段全量摄取到 .ddt/design/
+  - `skills/ddt-brief-builder/scripts/dump-design-handoff.mjs` — **brief 阶段**只抽摘要注入 §11 设计契约（v0.9.9 D26 新增）
 - **隐私**：bundle 在 claude.ai/design 项目内，不公开
+
+#### 框架选择强相关（v0.9.9 D26 新增）
+
+Bundle 里的 prototype 是 **HTML + JSX + tokens.css**，README 明说 "recreate them pixel-perfectly in whatever technology fits（React, Vue, native, whatever）"。但实战权衡：
+
+| frontend.framework | 与 claude-design 的契合度 | 备注 |
+|---|---|---|
+| **react** | ⭐ **零迁移** | bundle 里的 .jsx 直接抄；shell.jsx / page-*.jsx 即生产 React 组件骨架 |
+| vue | ⚠️ 需重写 SFC | JSX → SFC 改造工作量约 30% |
+| svelte | ⚠️ 需重写 .svelte | 同上 |
+| angular | ⚠️ 需重写 component | 同上 |
+
+> ⚠️ **不强制 React**（README 不禁止其它框架），但 brief §6 选 vue/svelte 时 check-brief-quality 会发**软警告**提醒改造成本。  
+> 真正强相关的不是"框架"，是"产物文件类型"——bundle 全 .jsx 决定 React 是 zero-rewrite 路径。
+
+#### UI 库与 tokens.css 解耦（重要）
+
+tokens.css 是 W3C Design Tokens 风格 CSS variables，可以映射到**任何 UI 库**的主题系统：
+- **AntD 5** ConfigProvider 通过 antd-theme.ts 映射
+- **shadcn-ui** 直接消费 CSS variables
+- **MUI 5** ThemeProvider 转 mapping
+- **Chakra UI** theme.tokens 映射
+
+因此 claude-design **不锁定 UI 库**——按场景选（详见 `ui-library-by-scenario.md`）。AI 在 chat 里常根据场景密度推荐：B2B 中后台 → AntD 5；SaaS C 端 → shadcn-ui。
 
 ### figma
 

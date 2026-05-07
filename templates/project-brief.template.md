@@ -42,6 +42,8 @@
 ### 快捷预设（路径 1）
 
 - **技术栈预设**：java-modern  <!-- 候选：java-modern | java-traditional | node-modern | go-modern | python-fastapi | custom | interactive -->
+- **前端框架（preset default）**：react  <!-- 严格按 preset default 填：java-modern/node-modern/go-modern/python-fastapi → react；java-traditional → 无独立前端 -->
+- **ui_components**：tailwind+shadcn-ui  <!-- 候选：tailwind+shadcn-ui | antd-5 | mui-5 | chakra-ui-2 | mantine-7 | naive-ui | element-plus | none。B2B 中后台 + 高密度数据表格 → antd-5 -->
 - **AI-native UI**：claude-design  <!-- 候选：claude-design | figma | v0 | none -->
 
 ### 后端组件（路径 3，仅在 preset=custom 时需要填）
@@ -88,7 +90,7 @@
      如有第三方 API 文档目录 / OpenAPI yaml / endpoint 表格 → 由 ddt-brief-builder 自动 dump 填充。
      无第三方依赖（纯前端 / 纯单机工具） → 留空或写"无外部集成"。 -->
 
-<!-- 示例（如对接 1 个外部系统）：
+<!-- 示例 1（API 集成）：
 ### 第三方系统：<系统名（如：新石器无人车开放平台）>
 
 | 项目 | 值 |
@@ -100,5 +102,28 @@
 | 关键能力 | <主要业务能力，1-3 个短语> |
 | 错误码 | 见 `<路径>/errors.md`（401 = token 失效） |
 | 接入流程 | 见 `<路径>/integration.md` |
+-->
+
+<!-- 示例 2（设计契约 / claude-design handoff，v0.9.9 D26 新增）：
+### 设计契约：<设计 bundle 项目名>
+
+| 项目 | 值 |
+|---|---|
+| Bundle 路径 | `<bundle.tar.gz | 解压目录>` |
+| Prototype 框架 | React (.jsx prototype)（**recreate 阶段最低成本路径**） |
+| AI 推荐 UI 库 | AntD 5（chat 中 AI 已建议） |
+| Design Tokens | <N> 个 CSS variables（含 X 阶品牌色 + Y 状态色 + Z 字体族） |
+| 设计对话 | <N> 个 chat（含用户决策追溯） |
+
+**用户原始诉求**（chat 抽取）：
+> <用户首条 prompt>
+
+**关键设计决策**：
+- **视觉**：<风格描述>
+- **品牌**：<字体 + 调性>
+
+**AI 提及的技术栈**：React / AntD / TanStack Query / Zustand / ECharts ...
+
+> ⚠️ product-agent 在 /prd 阶段可按需 Read prototype 与 tokens；/design-execute 阶段会用 `bin/ingest-claude-design.mjs` 全量摄取。
 -->
 

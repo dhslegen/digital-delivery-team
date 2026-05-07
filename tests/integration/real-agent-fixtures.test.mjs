@@ -108,14 +108,23 @@ for (const fx of briefFixtures) {
 // ─────────────────────────────────────────────────────────────────
 
 test('B1: 单个 fixture 不超 100KB（README 约定）', () => {
+  // v0.9.9 D26：design-handoff/ 子目录存放 claude.ai/design 的 .tar.gz bundle
+  // （二进制 bundle 解压后含 prototype 多文件，无法截取片段；上限放宽到 2MB
+  // 仅针对 .tar.gz / .zip 二进制 bundle）
+  const BINARY_BUNDLE_DIRS = new Set(['design-handoff']);
+  const BINARY_BUNDLE_LIMIT = 2 * 1024 * 1024;
+
   function walk(dir) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.isFile()) {
         const size = statSync(full).size;
-        assert.ok(size < 100 * 1024,
-          `fixture ${full} 体积 ${size} 超 100KB，请截取片段`);
+        const inBinaryDir = [...BINARY_BUNDLE_DIRS].some(d => full.includes(`/${d}/`));
+        const isBinaryBundle = /\.(tar\.gz|tgz|zip)$/.test(entry.name);
+        const limit = (inBinaryDir && isBinaryBundle) ? BINARY_BUNDLE_LIMIT : 100 * 1024;
+        assert.ok(size < limit,
+          `fixture ${full} 体积 ${size} 超 ${limit / 1024}KB，请截取片段`);
       }
     }
   }
