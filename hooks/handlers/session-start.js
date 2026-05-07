@@ -36,22 +36,69 @@ function maybeInferProgress(cwd) {
 // M2-1 / M5-3: 把解析好的 plugin root 持久化到 ~/.claude/delivery-metrics/.ddt-plugin-root，
 //   让 commands 用 1 行 fallback 读取代替 80 行 inline node。
 //   M5-3：写入前必须验证 root 含 bin/aggregate.mjs，避免把无效 env 值（如旧路径）污染 marker
+//   v0.9.3 D20：优先扫描 cache 目录所有版本号，按 semver 选最新——避免 env 指旧版让
+//     新装的 v0.9.x 用户继续走 v0.8.x 路径（实战 ddt-team-admin-v0.8.1 暴露）
 function persistPluginRoot() {
   try {
-    const root = process.env.DDT_PLUGIN_ROOT || process.env.CLAUDE_PLUGIN_ROOT;
-    if (!root) return;
-    if (!fs.existsSync(path.join(root, 'bin', 'aggregate.mjs'))) {
-      // env 变量指向无效目录（典型场景：用户 shell rc 设了旧路径），不写 marker
+    const os = require('os');
+    const candidate = pickLatestPluginRoot(os.homedir())
+      || process.env.DDT_PLUGIN_ROOT
+      || process.env.CLAUDE_PLUGIN_ROOT;
+    if (!candidate) return;
+    if (!fs.existsSync(path.join(candidate, 'bin', 'aggregate.mjs'))) {
+      // 候选 root 无效（典型场景：用户 shell rc 设了旧路径 / cache 损坏），不写 marker
       return;
     }
-    const os = require('os');
     const dir = process.env.DDT_METRICS_DIR ||
       path.join(os.homedir(), '.claude', 'delivery-metrics');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, '.ddt-plugin-root'), root, 'utf8');
+    fs.writeFileSync(path.join(dir, '.ddt-plugin-root'), candidate, 'utf8');
   } catch (_) {
     // 写入失败不阻塞会话启动
   }
+}
+
+// v0.9.3 D20：扫描 ~/.claude/plugins/cache/digital-delivery-team/digital-delivery-team/
+//   下所有 semver 版本目录，挑最新一个含 bin/aggregate.mjs 的。
+//   实战痛点：用户跑 /plugin install digital-delivery-team@0.9.x 安装新版本，
+//   但 marker 仍指向首次会话写入的旧版（如 0.8.1），导致新功能用不上。
+function pickLatestPluginRoot(homedir) {
+  try {
+    const cacheDir = path.join(homedir, '.claude', 'plugins', 'cache',
+      'digital-delivery-team', 'digital-delivery-team');
+    if (!fs.existsSync(cacheDir)) return null;
+    const versions = fs.readdirSync(cacheDir)
+      .filter(name => /^\d+\.\d+\.\d+/.test(name))
+      .filter(name => fs.existsSync(path.join(cacheDir, name, 'bin', 'aggregate.mjs')))
+      .sort(semverCompare);
+    if (versions.length === 0) return null;
+    return path.join(cacheDir, versions[versions.length - 1]);
+  } catch (_) { return null; }
+}
+
+// 比较两个 semver 字符串：a < b 返回负数（按升序排），相等 0，a > b 正数
+//
+// 拆"0.9.3-beta" 为 ["0","9","3","beta"]，逐位比较：
+//   - 数字 vs 数字：数值比（10 > 9）
+//   - 字符串 vs 字符串：lexical
+//   - 数字 vs 字符串：数字大（兜底，主版本号位极少出现）
+//   - **短数组 vs 长数组**：短的更大（semver: 1.0.0 > 1.0.0-rc.1，无 pre-release 部分胜出）
+function semverCompare(a, b) {
+  const pa = a.split(/[.-]/).map(p => /^\d+$/.test(p) ? Number(p) : p);
+  const pb = b.split(/[.-]/).map(p => /^\d+$/.test(p) ? Number(p) : p);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i], y = pb[i];
+    if (x === undefined) return 1;   // a 较短 → a > b（如 "0.9.3" > "0.9.3-beta"）
+    if (y === undefined) return -1;
+    if (typeof x === 'number' && typeof y === 'number') {
+      if (x !== y) return x - y;
+    } else {
+      if (typeof x === 'number') return 1;
+      if (typeof y === 'number') return -1;
+      if (x !== y) return x < y ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 function checkNodeVersion() {
@@ -210,4 +257,5 @@ if (require.main === module) {
   runCli(run);
 }
 
-module.exports = { run };
+// v0.9.3 D20：把 marker 自愈相关函数也 export 让 tests/integration/marker-self-heal.test.mjs 可测
+module.exports = { run, persistPluginRoot, pickLatestPluginRoot, semverCompare };
