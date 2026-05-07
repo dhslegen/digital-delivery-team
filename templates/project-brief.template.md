@@ -104,26 +104,7 @@
 | 接入流程 | 见 `<路径>/integration.md` |
 -->
 
-<!-- 示例 2（设计契约 / claude-design handoff，v0.9.9 D26 新增）：
-### 设计契约：<设计 bundle 项目名>
-
-| 项目 | 值 |
-|---|---|
-| Bundle 路径 | `<bundle.tar.gz | 解压目录>` |
-| Prototype 框架 | React (.jsx prototype)（**recreate 阶段最低成本路径**） |
-| AI 推荐 UI 库 | AntD 5（chat 中 AI 已建议） |
-| Design Tokens | <N> 个 CSS variables（含 X 阶品牌色 + Y 状态色 + Z 字体族） |
-| 设计对话 | <N> 个 chat（含用户决策追溯） |
-
-**用户原始诉求**（chat 抽取）：
-> <用户首条 prompt>
-
-**关键设计决策**：
-- **视觉**：<风格描述>
-- **品牌**：<字体 + 调性>
-
-**AI 提及的技术栈**：React / AntD / TanStack Query / Zustand / ECharts ...
-
-> ⚠️ product-agent 在 /prd 阶段可按需 Read prototype 与 tokens；/design-execute 阶段会用 `bin/ingest-claude-design.mjs` 全量摄取。
--->
+<!-- v0.9.10 D27 收敛：claude-design handoff bundle 不在 brief 阶段处理。
+     如已经在 claude.ai/design 跑过设计，请把 share URL 简单列在 §10 参考资料即可；
+     handoff 完整摄取由 /design-execute 阶段的 bin/ingest-claude-design.mjs 完成。-->
 

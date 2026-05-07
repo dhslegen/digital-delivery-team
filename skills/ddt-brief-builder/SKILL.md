@@ -1,6 +1,6 @@
 ---
 name: ddt-brief-builder
-description: 把任意输入（一段文字 / 文件路径 / URL / 已有 PRD / 比赛官网 / 截图 / 会议纪要 / xlsx 功能清单 / 第三方 API 文档 / claude-design handoff bundle / 多源混合）转成专业 DDT 友好的 project-brief.md，作 DDT 工作流第零步。当用户说"帮我写 project-brief"、"DDT 第零步"、"新项目设置"、"测试项目设置"、"把需求转成 brief"、"我想用 DDT 跑这个项目"、"比赛项目想用 DDT"、"项目简报"、"启动 alv-ops"，或粘贴一段需求/比赛说明/已有 PRD/会议纪要/API 文档目录/claude.ai/design handoff bundle 让你转成 DDT 输入时，立即触发本 skill。覆盖 11 类输入识别、3 个关键决策门、质量自检（含 D26 preset/framework/ai_design 交叉校验）、项目目录一键脚手、与 DDT 后续命令（/prd → /wbs → /design → /design-brief）的丝滑对接。Baseline 信息源（人员/工时/进度表）触发同包的姊妹 skill `ddt-baseline-sync`。
+description: 把任意输入（一段文字 / 文件路径 / URL / 已有 PRD / 比赛官网 / 截图 / 会议纪要 / xlsx 功能清单 / 第三方 API 文档 / 多源混合）转成专业 DDT 友好的 project-brief.md，作 DDT 工作流第零步。当用户说"帮我写 project-brief"、"DDT 第零步"、"新项目设置"、"测试项目设置"、"把需求转成 brief"、"我想用 DDT 跑这个项目"、"比赛项目想用 DDT"、"项目简报"、"启动 alv-ops"，或粘贴一段需求/比赛说明/已有 PRD/会议纪要/API 文档目录让你转成 DDT 输入时，立即触发本 skill。覆盖 10 类输入识别、3 个关键决策门、质量自检（含 D26 preset/framework/ai_design 交叉校验）、项目目录一键脚手、与 DDT 后续命令（/prd → /wbs → /design → /design-brief）的丝滑对接。Baseline 信息源（人员/工时/进度表）触发同包的姊妹 skill `ddt-baseline-sync`。claude-design handoff bundle 由 /design-execute 阶段的 `bin/ingest-claude-design.mjs` 摄取，**不在 brief 阶段处理**（避免过早介入；brief 阶段只声明"已有设计"作 §10 参考资料链接）。
 origin: DDT
 ---
 
@@ -38,7 +38,6 @@ origin: DDT
 | **H** 会议纪要 / 评审记录 | 含"会议" / "纪要" / "※" / "目标上线日" / "客户代表" | **客户驱动模式**：会议确认范围作硬约束；§2 用户分甲方/乙方 |
 | **I** xlsx / csv 功能清单 | 文件名含"功能清单" / "feature-list" / "需求" | **自动 dump**：见下方 §"如何调脚本（绝对路径）"，跑 `dump-xlsx.py` |
 | **J** 第三方 API 文档（v0.9.8 D25） | 目录名含 `API` / `开放平台` / `SDK` / `OpenAPI` / `swagger` / `集成规约` / `对接文档`；或单 yaml/json 含 `openapi:` 顶层；或单 md 含 `## GET /xxx` 章节 | **自动 dump 进 §11 集成依赖**：跑 `dump-api-docs.mjs`，强制脱敏后注入 brief。详见 `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/references/integration-detection.md` |
-| **K** claude-design handoff bundle（v0.9.9 D26） | 用户给 `https://api.anthropic.com/v1/design/h/<id>` URL / `*.tar.gz` 含 `untitled/README.md` / 解压目录含 `chats/` + `project/tokens.css` + `*.jsx` | **自动 dump 进 §11 设计契约**：跑 `dump-design-handoff.mjs`，从 chats 抽用户决策 + AI 推荐技术栈 + tokens 摘要 + 组件清单。**强相关**：bundle 全 .jsx → 推 React；chat 中 AI 推 AntD 5（B2B）/ shadcn-ui（SaaS）。URL 形态请先用 `bin/ingest-claude-design.mjs` 落盘到 `.ddt/design/` 再传给 dump 脚本。 |
 
 **识别后必须先告知用户**："识别到 ⟨类型⟩，将走 ⟨路径⟩ 提取字段"——给用户机会纠正。
 
@@ -54,7 +53,6 @@ PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
 # 然后调本 skill 的脚本（统一前缀 $PR/skills/ddt-brief-builder/scripts/）
 python3 "$PR/skills/ddt-brief-builder/scripts/dump-xlsx.py"           <path>
 node    "$PR/skills/ddt-brief-builder/scripts/dump-api-docs.mjs"      <path>             # v0.9.8 D25
-node    "$PR/skills/ddt-brief-builder/scripts/dump-design-handoff.mjs" <bundle.tar.gz|dir> # v0.9.9 D26
 node    "$PR/skills/ddt-brief-builder/scripts/check-brief-quality.mjs" <brief-path>
 node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target <dir> --brief <brief-path>
 ```
@@ -92,14 +90,18 @@ node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target 
 | 8 | AI-native UI 通道 | **决策门 D3**（仅 spa） | 同上；选 claude-design 时强相关 React |
 | 9 | 非目标 | 可选 | 留空 OK，建议 1-2 条防 scope creep |
 | 10 | 参考资料 | 可选 | URL / 文件路径；保留原始输入摘要（被动浏览） |
-| 11 | 集成依赖（v0.9.8 D25 + v0.9.9 D26 设计契约） | 可选 | 第三方 API 契约 / claude-design handoff（主动消费）；输入类型 J/K 时由 dump-api-docs / dump-design-handoff 自动产出 |
+| 11 | 集成依赖（v0.9.8 D25） | 可选 | 第三方 API 契约（主动消费）；输入类型 J 时由 dump-api-docs.mjs 自动产出 |
 
-### v0.9.9 D26 反模式（实战触发）
+### v0.9.9 D26 反模式（实战触发，v0.9.10 D27 收敛）
+
+brief 阶段保持**宽松**——给后续 /design-brief 减少摩擦，不在 brief 阶段武断锁死前端栈：
 
 - ❌ **java-modern + Vue + Element Plus**：preset default 是 React + Vite + Tailwind + shadcn-ui，写 Vue 是凭训练偏置（国内 Java 项目偏置）。如确需 Vue，应改 preset=interactive
-- ❌ **claude-design 通道 + 非 React 框架**：bundle 全 .jsx，写其他框架增加 ~30% 改造成本
+- ⚠️ **claude-design 通道 + 非 React 框架**：bundle 一般是 .jsx，但 README 明说 "recreate in whatever fits"，不强制；只在 brief §6/§7 写 Vue/Svelte 时软警告，由 /design-brief 阶段细化
 - ❌ **brief §6 留空 ui_components**：让 LLM 在下游 /prd /design 阶段自由发挥 → 训练偏置污染产出
 - ✅ **check-brief-quality 自动交叉校验**：上述反模式触发软警告（不阻塞 pass，但提醒）
+
+> 设计哲学：brief 不该过早介入设计层细节。framework / UI 库的精细化决策属于 /design-brief 范围；brief 只在明显违反 preset default 时给软警告。
 
 ## 3 个关键决策门（**必须用 AskUserQuestion**）
 
@@ -216,24 +218,24 @@ ddt-brief-builder/
 ├── scripts/
 │   ├── dump-xlsx.py                        ← xlsx 全文 dump（自动 pip install openpyxl）
 │   ├── dump-api-docs.mjs                   ← 第三方 API 文档摘要（v0.9.8 D25，零依赖 yaml + 脱敏）
-│   ├── dump-design-handoff.mjs             ← claude-design handoff bundle 摘要（v0.9.9 D26）
 │   ├── check-brief-quality.mjs             ← brief 字段填充率自检（11 字段 + D26 交叉校验）
 │   └── scaffold-brief.mjs                  ← 项目目录一键脚手（mkdir+cp+git init+commit）
 ├── references/
 │   ├── field-rules.md                      ← 11 字段决策准则（含 §6 §7 D26 反模式）
 │   ├── integration-detection.md            ← 类型 J 第三方 API 文档识别信号（v0.9.8 D25）
-│   ├── ui-library-by-scenario.md           ← UI 库场景化推荐（v0.9.9 D26）
+│   ├── ui-library-by-scenario.md           ← UI 库场景化推荐（v0.9.9 D26 / v0.9.10 D27）
 │   ├── tech-stack-quick-pick.md            ← D1 速查（输入暗示 → preset 推荐）
-│   ├── ai-design-quick-pick.md             ← D3 速查（3 通道差异 + claude-design 框架强相关）
+│   ├── ai-design-quick-pick.md             ← D3 速查（3 通道差异 + 框架推荐宽松）
 │   └── decision-gates.md                   ← D1/D2/D3 完整 AskUserQuestion 模板
 └── examples/
     ├── from-paragraph.md                   ← 用户粘贴一段文字 → brief
     ├── from-existing-prd.md                ← 已有 PRD 反向提炼 brief
     ├── from-competition-url.md             ← 比赛项目特化（评分项作硬指标）
     ├── from-meeting-minutes.md             ← B2B 多模块实战（会议纪要 + xlsx 多源）
-    ├── from-api-docs-folder.md             ← 第三方 API 文档目录 + OpenAPI yaml 双例（v0.9.8 D25）
-    └── from-design-handoff.md              ← claude-design handoff bundle 实战（v0.9.9 D26）
+    └── from-api-docs-folder.md             ← 第三方 API 文档目录 + OpenAPI yaml 双例（v0.9.8 D25）
 ```
+
+> ℹ️ **claude-design handoff 不在 brief 阶段处理**（v0.9.10 D27 收敛）：handoff bundle 由 `/design-execute` 阶段的 `bin/ingest-claude-design.mjs` 摄取到 `.ddt/design/`。brief 阶段如有"已有设计"信号，仅在 §10 参考资料列 URL 链接，不解析内容；framework / UI 库决策留给 /design-brief 阶段精细化。
 
 **姊妹 skill**：
 - `skills/ddt-baseline-sync/`：人员/工时/进度表 → `baseline/historical-projects.csv` 增量同步

@@ -4,6 +4,49 @@
 
 ---
 
+## [0.9.10] - 2026-05-07 — 实战 hotfix D27：D26 范围收敛（删 handoff 输入类型 K，保留 cross-validation + UI 库场景化）
+
+源自实战：v0.9.9 D26 把 claude-design handoff bundle 摄取从 /design-execute 阶段拉前到 brief 阶段（输入类型 K），用户明确反馈"过早介入了"——brief 阶段武断锁死 framework / UI 库违反"brief 应宽松、/design-brief 精细化"原则。
+
+用户诉求："限制 ddt-brief-builder 对前端技术栈的主观武断 Vue，但是宽松点，让我看好的技术栈能够兼容，给后续的真正 /design-brief 减少摩擦"。
+
+### 🟡 D27 收敛（v0.9.9 部分回滚）
+
+**保留（v0.9.9 真正解决问题的核心）**：
+- ✅ check-brief-quality D26 cross-validation：preset/framework/ai_design 一致性软警告（防 LLM 凭训练偏置写 java-modern + Vue + Element Plus）
+- ✅ references/ui-library-by-scenario.md：UI 库场景化推荐（B2B → AntD 5 / SaaS → shadcn-ui / 移动 H5 / 大屏 / 3D）
+- ✅ brief 模板 §6 ui_components 子字段：候选值约束防自由发挥
+- ✅ references/decision-gates.md D1 速查表显式标"前端框架"列（React 18 + Vite + TS）
+- ✅ references/field-rules.md §6 §7 D26 反模式（java-modern + Vue / claude-design + 非 React）
+
+**删除（过早介入 brief 层）**：
+- ❌ 输入类型 K（claude-design handoff bundle）——回到 A-J 10 类
+- ❌ scripts/dump-design-handoff.mjs（功能下沉回 /design-execute 阶段的 bin/ingest-claude-design.mjs）
+- ❌ examples/from-design-handoff.md
+- ❌ tests/fixtures/real-agent-outputs/design-handoff/（1.1MB bundle fixture）
+- ❌ brief 模板 §11 "设计契约示例"段
+- ❌ tests/integration/real-agent-fixtures.test.mjs::B1 二进制 bundle 例外
+
+**调整（语言放宽）**：
+- ai-design-quick-pick.md "框架强相关" → "框架推荐（宽松，由 /design-brief 阶段精细化）"：删除"30% 改造成本"硬数据；保留"react 零迁移"建议；明示 "由 /design-brief 阶段决定"
+
+### 设计哲学澄清
+
+- **brief 阶段保持宽松**：framework / UI 库的精细化决策属于 /design-brief 范围；brief 只在明显违反 preset default 时给软警告（如 java-modern preset + Vue）
+- **stage-appropriate intervention**：handoff bundle 摄取属于 design 层能力，由 /design-execute 阶段的 `bin/ingest-claude-design.mjs` 处理；brief 阶段不重复造轮子
+- **soft over hard**：cross-validation 仅产生 warnings 不阻塞 pass；尊重 README "recreate in whatever fits" 哲学
+
+### D27 测试
+
+`tests/integration/d26-react-lock.test.mjs`（重命名自 d26-design-handoff-and-react-lock.test.mjs，-7 dump 测试 + 2 D27 收敛断言 = 12 用例）：
+- cross-validation 4 用例（一致 / java-modern + Vue 警告 / claude-design + Vue 警告 / node-modern + Next.js）
+- 静态文档约束 6 用例（SKILL.md / field-rules / decision-gates / ai-design-quick-pick / ui-library / 模板 §6）
+- D27 收敛断言 2 用例（SKILL.md 不再含 K + 模板 §11 不再含设计契约示例）
+
+测试基数 476 → 469（-7 dump-design-handoff 测试）。其余测试零回归。
+
+---
+
 ## [0.9.9] - 2026-05-07 — 实战 hotfix D26：claude-design handoff 输入类型 K + preset/framework 交叉校验 + UI 库场景化推荐
 
 源自实战：alv-ops 项目 brief 自动产出时，LLM 把 java-modern preset 的前端框架凭训练数据偏置写成 "Vue 3 + Element Plus"——违反 preset default（React 18 + Vite + Tailwind + shadcn-ui），同时与 D3=claude-design 通道（bundle 全 .jsx）冲突。用户已经在 https://claude.ai/design 跑过设计了，handoff bundle 含 React/JSX prototype + tokens.css + chat 决策追溯，但 brief 阶段没识别这种输入类型，下游 product-agent 看不见设计决策。

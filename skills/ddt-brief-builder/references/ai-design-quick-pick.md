@@ -28,24 +28,20 @@
 
 - **流程**：跑 `/design-execute --channel claude-design` → 用户去 claude.ai/design → 完成后 Share → Handoff to Claude Code（URL）→ DDT 摄取（v0.8.2 D14 后支持 --url）
 - **产物**：JSX < 1000 行 / 文件 + tokens.css（标准 CSS variables）+ chats/*.md（设计决策追溯）
-- **DDT 摄取**：
-  - `bin/ingest-claude-design.mjs --bundle <zip|tar.gz> | --url <handoff>` — /design 阶段全量摄取到 .ddt/design/
-  - `skills/ddt-brief-builder/scripts/dump-design-handoff.mjs` — **brief 阶段**只抽摘要注入 §11 设计契约（v0.9.9 D26 新增）
+- **DDT 摄取**：`bin/ingest-claude-design.mjs --bundle <zip|tar.gz> | --url <handoff>` — **/design-execute 阶段**全量摄取到 `.ddt/design/`，brief 阶段不处理（v0.9.10 D27 收敛）
 - **隐私**：bundle 在 claude.ai/design 项目内，不公开
 
-#### 框架选择强相关（v0.9.9 D26 新增）
+#### 框架推荐（宽松，由 /design-brief 阶段精细化）
 
-Bundle 里的 prototype 是 **HTML + JSX + tokens.css**，README 明说 "recreate them pixel-perfectly in whatever technology fits（React, Vue, native, whatever）"。但实战权衡：
+Bundle 里的 prototype 是 **HTML + JSX + tokens.css**，README 明说 "recreate them pixel-perfectly in whatever technology fits（React, Vue, native, whatever）"。
 
-| frontend.framework | 与 claude-design 的契合度 | 备注 |
-|---|---|---|
-| **react** | ⭐ **零迁移** | bundle 里的 .jsx 直接抄；shell.jsx / page-*.jsx 即生产 React 组件骨架 |
-| vue | ⚠️ 需重写 SFC | JSX → SFC 改造工作量约 30% |
-| svelte | ⚠️ 需重写 .svelte | 同上 |
-| angular | ⚠️ 需重写 component | 同上 |
+| frontend.framework | 与 claude-design 的契合度 |
+|---|---|
+| **react** | ⭐ **零迁移**（bundle .jsx 直接抄） |
+| vue / svelte / angular | 可用，需重写组件结构（具体改造路径由 /design-brief 阶段决定） |
 
-> ⚠️ **不强制 React**（README 不禁止其它框架），但 brief §6 选 vue/svelte 时 check-brief-quality 会发**软警告**提醒改造成本。  
-> 真正强相关的不是"框架"，是"产物文件类型"——bundle 全 .jsx 决定 React 是 zero-rewrite 路径。
+> ⚠️ brief 阶段**不强制 React**，仅在 §6 写 vue/svelte + ai_design=claude-design 时给软警告（cross-validation D26）。这只是"提示"，不是 block。  
+> 真正的设计层细化（哪个 framework / 哪个 UI 库 / 怎么映射 tokens）属于 `/design-brief` 范围——brief 应保持宽松，给后续阶段留决策空间。
 
 #### UI 库与 tokens.css 解耦（重要）
 
@@ -55,7 +51,7 @@ tokens.css 是 W3C Design Tokens 风格 CSS variables，可以映射到**任何 
 - **MUI 5** ThemeProvider 转 mapping
 - **Chakra UI** theme.tokens 映射
 
-因此 claude-design **不锁定 UI 库**——按场景选（详见 `ui-library-by-scenario.md`）。AI 在 chat 里常根据场景密度推荐：B2B 中后台 → AntD 5；SaaS C 端 → shadcn-ui。
+因此 claude-design **不锁定 UI 库**——按场景选（详见 `ui-library-by-scenario.md`）。常见组合：B2B 中后台 → AntD 5；SaaS C 端 → shadcn-ui。具体由 /design-brief 阶段确认，brief 只填粗略建议。
 
 ### figma
 
