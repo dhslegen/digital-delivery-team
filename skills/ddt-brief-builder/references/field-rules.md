@@ -260,79 +260,14 @@ product-agent 实际产出的 PRD 含 `As an 运营经理`（中文 + 反引号 
 本 skill 写 brief 时应**避免**写得太结构化——保持自然语言段落，让 /prd 阶段的 product-agent 用自己习惯的格式重写。
 brief 的"核心功能"段不必用 EARS——用动名词列表就好，product-agent 会展开。
 
+
 ---
 
-## §11 baseline 增量协议（v0.9.2 新增，应对输入类型 J）
+## §11 baseline 增量（v0.9.4 抽离到姊妹 skill）
 
-**触发**：用户给的文件含人员需求表 / 工时表 / 项目计划（"项目人员需求计划表.xlsx"等）。
+人员/工时/进度表 → `baseline/historical-projects.csv` 增量同步：**改触发姊妹 skill `ddt-baseline-sync`**。
 
-**目的**：把**已知项目的真实工时数据**追加到 `baseline/historical-projects.csv`，让 pm-agent /wbs 阶段的工时估算有更准基线。
+本 skill 仅识别"输入含 baseline 信息源"信号，识别后告知用户："识别到人员需求表，将协同触发 ddt-baseline-sync skill 做 baseline 增量"，
+然后让用户确认是否同时跑（也可只跑 brief，baseline 后做）。
 
-### 解析规则
-
-人员表通常列：`姓名 | 部门 | 角色 | 进入时间 | 离开时间 | 人月 | 工作内容`
-
-按角色映射 baseline CSV 的 phase 列：
-
-| 人员表角色 | baseline phase | 备注 |
-|---|---|---|
-| 项目经理 / 架构 | architecture | 含 design 阶段产出 |
-| 产品经理 | requirements | prd + wbs 合计 |
-| UI 设计 | design | UI 部分（与架构 design 区分） |
-| 前端 | frontend | 多人就累加 |
-| 后端 | backend | 多人就累加 |
-| 测试 | test + review | 通常 7:3 拆分 |
-| 运维 / DevOps | docs（兜底） | 暂无独立列 |
-
-### 计算公式
-
-```
-总工时 = 总人月 × 22 工作日 × 8 小时
-phase 工时 = 该 phase 角色总人月 × 22 × 8
-项目类型（type 列）= B2B 后台 / SaaS / API-only / Mobile / 其他
-项目复杂度 = 工时档位（≤60 简单 / 60-200 中等 / >200 复杂）
-```
-
-### CSV 行追加
-
-写入 `<project-root>/baseline/historical-projects.csv` 一行（如 baseline 不存在则从插件根 `<DDT_PLUGIN_ROOT>/baseline/historical-projects.csv` 复制后追加）：
-
-```csv
-project_id,name,type,total_hours,prd_hours,wbs_hours,design_hours,frontend_hours,backend_hours,test_hours,review_hours,docs_hours,defect_count,coverage_pct,team_size,notes
-HIST-NNN,<项目名>,<type>,<总工时>,<prd>,<wbs>,<design>,<fe>,<be>,<test>,<review>,<docs>,,,<人数>,"<备注：人月明细 / 时间窗 / 来源 xlsx>"
-```
-
-`defect_count` `coverage_pct` 留空（项目还没跑完，无法填）。
-
-### 用户交互
-
-baseline 增量是**侵入性**操作（修改 baseline 校准数据）。skill 必须用 AskUserQuestion 确认：
-
-```typescript
-{
-  question: "识别到人员需求表（baseline 信息源）。是否追加到 baseline/historical-projects.csv 作为未来项目工时估算的参考基线？",
-  header: "baseline 增量",
-  options: [
-    { label: "追加（推荐）",
-      description: "本次项目作为 HIST-NNN 写入 baseline/historical-projects.csv，让 pm-agent /wbs 阶段更准",
-      preview: "总工时 N h / 团队 M 人 / 类型 B2B 后台" },
-    { label: "仅写 brief，不动 baseline",
-      description: "团队规模与时间窗写到 brief §5，baseline 不变" },
-    { label: "完成后再决定",
-      description: "项目跑完真实工时与计划工时对比后再决定是否入 baseline" },
-  ]
-}
-```
-
-### 与 brief §5 的协同
-
-无论 baseline 增量与否，人员表的关键信息**必须同时**写到 brief §5：
-
-```markdown
-### 团队与工期（来自人员需求表）
-
-- **团队规模**：N 人月（项目经理 X + 产品 X + UI X + 前端 X + 后端 X + 测试 X）
-- **时间窗口**：YYYY-MM-DD ~ YYYY-MM-DD（约 N 个月）
-- **总工时**：H 小时（按 22 工作日 × 8 小时折算）
-- **关键节点**：v1.0 上线 YYYY-MM-DD（前端 + UI 离场日）
-```
+`ddt-baseline-sync` 自身覆盖：人员表解析 / 角色 → phase 工时映射 / CSV 行追加 / 复杂度判定。

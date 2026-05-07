@@ -4,6 +4,91 @@
 
 ---
 
+## [0.9.4] - 2026-05-07 — skill-creator 重构：scripts 下沉 + 抽离 ddt-baseline-sync
+
+按 skill-creator 最佳实践（progressive disclosure / scripts/references/examples 三层结构）
+重构 ddt-brief-builder，并抽离 baseline 增量同步为独立 skill。最高优先级 KPI：
+**丝滑减少演示流程摩擦**——从一句话 → 可启动 DDT 全流程 ≤ 5 步互动 ≤ 90 秒。
+
+### Added — 新增
+
+🟣 **抽离 skills/ddt-baseline-sync/（13 skill = 12 + 1）**
+
+把 v0.9.2 塞在 ddt-brief-builder 里的 baseline 增量协议（100+ 行）抽出来作独立 skill：
+
+- 独立触发关键词：导入工时 / 录入人员表 / baseline 校准 / historical-projects 增量
+- `scripts/parse-staffing.py`：xlsx 人员表 → JSON（角色 → phase 映射 / 复杂度判定 / 时间窗）
+- `scripts/append-historical.mjs`：JSON → baseline/historical-projects.csv 一行（自动 HIST-NNN / 项目级优先 / fallback 插件根）
+- 管道化设计：`parse-staffing.py | append-historical.mjs --json -` 一气呵成
+- 含 example 实战演示（无人物流车 5.0 人月 / 7 角色 → HIST-009 入库）
+
+### Changed — 重构
+
+🟣 **ddt-brief-builder 三层结构化（progressive disclosure）**
+
+scripts/ 下沉（v0.9.3 内联 bash 协议段全部抽出）：
+- `scripts/dump-xlsx.py`：xlsx 全文 dump（自动 pip install openpyxl 兜底）
+- `scripts/check-brief-quality.mjs`：brief 字段填充率自检（输出 JSON 让 LLM 直接读）
+- `scripts/scaffold-brief.mjs`：项目目录一键脚手（mkdir + cp brief + cp .gitignore + git init + initial commit + 输出"下一步"引导）
+
+references/ 精简（reference → references 目录名标准化）：
+- `decision-gates.md` 新增（D1/D2/D3 完整 AskUserQuestion 模板从 SKILL.md 抽出）
+- `field-rules.md`：338 → 273 行（移除 §11 baseline 协议 100+ 行，改指针引用 ddt-baseline-sync）
+
+SKILL.md 精简：**357 → 201 行**（-44%）
+- 移除内联 bash / 改为脚本引用
+- "反模式 / 实践要点"等冗长段落合并为简短"边界（做/不做）"
+- 决策门完整模板下沉到 references/decision-gates.md
+- 末尾"资源索引"清晰列 scripts/references/examples 树状结构
+
+### KPI 验证
+
+**丝滑五步流程**（从一句话到可启动 DDT）：
+1. 用户："启动 alv-ops，brief 内容如下：..."
+2. AI 解析输入 + 跑 dump-xlsx.py / parse-staffing.py（如有）
+3. AI 一次性发 D1+D2+D3 三个 AskUserQuestion + 可选 baseline 类型门
+4. 用户点选
+5. AI scaffold-brief.mjs 一键脚手 + 输出"下一步" → ✅ 完成
+
+**预估时间**：≤ 90 秒（不含用户思考时间）
+
+### 测试
+
+- 422/422 全过（重构无破坏）
+- manifest 描述更新：12 skill → 13 skill
+
+### 设计
+
+- 应用 skill-creator 的"Domain organization"原则：可独立触发的子能力（baseline 同步）抽出来作独立 skill
+- 应用 progressive disclosure：metadata（描述）总在 context；SKILL.md ≤ 200 行；scripts/references 按需加载
+- 应用"管道化"丝滑模式：scripts 之间用 stdin/stdout 串联，避免中间 /tmp 文件
+- 应用"出错信息即修复指引"：每个脚本错误直接告诉用户下一步该跑什么命令
+
+### Migration — 升级指引
+
+完全向后兼容：
+- 旧 brief 文件继续可用
+- v0.9.3 用户跑 ddt-brief-builder 走旧路径仍能产出（但 skill 已升级到 v0.9.4 协议）
+- baseline 信息源用户：从"塞 brief"模式过渡到"独立调用 ddt-baseline-sync"模式
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.4
+# 重启 Claude Code 让 SessionStart hook 写最新 marker（v0.9.3 D20 已自愈）
+```
+
+## v0.9 系列累计
+
+| 版本 | 主题 | 关键交付 |
+|---|---|---|
+| v0.9.0 | 流程可见性 + 解析器加固 | flowchart / dry-run / progress 可视化 / fixtures + D16-D18 |
+| v0.9.1 | DDT 第零步入门丝滑 | ddt-brief-builder skill |
+| v0.9.2 | brief-builder 实战反向优化 | B2B 多模块 + xlsx + baseline 增量 |
+| v0.9.3 | 路径前缀 + marker 自愈 | D19 + D20 + D21 hotfix |
+| **v0.9.4** | **skill-creator 重构 + 抽离 baseline-sync** | **scripts 下沉 + 13 skill + 丝滑 KPI 5 步流程** |
+
+---
+
 ## [0.9.3] - 2026-05-07 — 实战 hotfix：路径前缀显式化 + marker 自愈
 
 源自实战：用户用 v0.9.2 跑 /prd（项目 alv-ops），LLM 报"templates 目录不存在"。
