@@ -1,6 +1,6 @@
 ---
 name: ddt-brief-builder
-description: 把任意输入（一段文字 / 文件路径 / URL / 已有 PRD / 比赛官网 / 截图 / 会议纪要 / xlsx 功能清单 / 多源混合）转成专业 DDT 友好的 project-brief.md，作 DDT 工作流第零步。当用户说"帮我写 project-brief"、"DDT 第零步"、"新项目设置"、"测试项目设置"、"把需求转成 brief"、"我想用 DDT 跑这个项目"、"比赛项目想用 DDT"、"项目简报"、"启动 alv-ops"，或粘贴一段需求/比赛说明/已有 PRD/会议纪要让你转成 DDT 输入时，立即触发本 skill。覆盖 9 类输入识别、3 个关键决策门、质量自检、项目目录一键脚手、与 DDT 后续命令（/prd → /wbs → /design → /design-brief）的丝滑对接。Baseline 信息源（人员/工时/进度表）触发同包的姊妹 skill `ddt-baseline-sync`。
+description: 把任意输入（一段文字 / 文件路径 / URL / 已有 PRD / 比赛官网 / 截图 / 会议纪要 / xlsx 功能清单 / 第三方 API 文档 / 多源混合）转成专业 DDT 友好的 project-brief.md，作 DDT 工作流第零步。当用户说"帮我写 project-brief"、"DDT 第零步"、"新项目设置"、"测试项目设置"、"把需求转成 brief"、"我想用 DDT 跑这个项目"、"比赛项目想用 DDT"、"项目简报"、"启动 alv-ops"，或粘贴一段需求/比赛说明/已有 PRD/会议纪要/API 文档目录让你转成 DDT 输入时，立即触发本 skill。覆盖 10 类输入识别、3 个关键决策门、质量自检、项目目录一键脚手、与 DDT 后续命令（/prd → /wbs → /design → /design-brief）的丝滑对接。Baseline 信息源（人员/工时/进度表）触发同包的姊妹 skill `ddt-baseline-sync`。
 origin: DDT
 ---
 
@@ -37,6 +37,7 @@ origin: DDT
 | **G** 多源混合 | 同时多类 | 按 PRD/URL > 文件 > 文字优先级合并 |
 | **H** 会议纪要 / 评审记录 | 含"会议" / "纪要" / "※" / "目标上线日" / "客户代表" | **客户驱动模式**：会议确认范围作硬约束；§2 用户分甲方/乙方 |
 | **I** xlsx / csv 功能清单 | 文件名含"功能清单" / "feature-list" / "需求" | **自动 dump**：见下方 §"如何调脚本（绝对路径）"，跑 `dump-xlsx.py` |
+| **J** 第三方 API 文档（v0.9.8 D25） | 目录名含 `API` / `开放平台` / `SDK` / `OpenAPI` / `swagger` / `集成规约` / `对接文档`；或单 yaml/json 含 `openapi:` 顶层；或单 md 含 `## GET /xxx` 章节 | **自动 dump 进 §11 集成依赖**：跑 `dump-api-docs.mjs`，强制脱敏后注入 brief。详见 `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/references/integration-detection.md` |
 
 **识别后必须先告知用户**："识别到 ⟨类型⟩，将走 ⟨路径⟩ 提取字段"——给用户机会纠正。
 
@@ -51,6 +52,7 @@ PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
 
 # 然后调本 skill 的脚本（统一前缀 $PR/skills/ddt-brief-builder/scripts/）
 python3 "$PR/skills/ddt-brief-builder/scripts/dump-xlsx.py"           <path>
+node    "$PR/skills/ddt-brief-builder/scripts/dump-api-docs.mjs"      <path>  # v0.9.8 D25
 node    "$PR/skills/ddt-brief-builder/scripts/check-brief-quality.mjs" <brief-path>
 node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target <dir> --brief <brief-path>
 ```
@@ -66,13 +68,13 @@ node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target 
 |---|---|
 | **B2B 项目**（"客户" / "运营" / "合同" / "网点" / "车队" / "物流" / "工厂" / "医院" / "政府"） | D1 决策门首选 **java-modern**（B2B 后台稳定性 + 合规） |
 | **多模块**（5+ 独立模块） | §4 不强制 3-7 条上限，改用模块化 markdown（每模块 H3 + P0/P1/P2） |
-| **外部接口强依赖**（"对接 X 接口" / "取决于 X 能力"） | §5 加"外部接口依赖"子项 + 未确认的接口写**软 blocker** |
+| **外部接口强依赖**（"对接 X 接口" / "取决于 X 能力"） | §5 加"外部接口依赖"子项 + 未确认的接口写**软 blocker**；**已提供文档** → 触发 dump-api-docs.mjs 注入 §11 集成依赖（v0.9.8 D25） |
 | **会议纪要 ※ / [必做]** | §4 自动转 P0；其余 P1 / P2 |
 | **工期/范围严重不匹配** | 触发软 blocker：`reasonability check 失败：N 模块 × M 子功能 vs T 人天` |
 | **客户参与决策**（会议含"客户代表"） | §2 用户分**甲方运营 / 乙方业主**两类 |
 | **包含人员/工时/进度表** | 同时触发姊妹 skill `ddt-baseline-sync` 做 baseline 增量 |
 
-## 字段提取与填充（10 字段）
+## 字段提取与填充（11 字段，v0.9.8 起）
 
 详细规则见 `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/references/field-rules.md`（用 Read 工具读绝对路径），speed cheat：
 
@@ -87,7 +89,8 @@ node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target 
 | 7 | 前端类型（PR-E 三态） | **决策门 D2** | 同上 |
 | 8 | AI-native UI 通道 | **决策门 D3**（仅 spa） | 同上 |
 | 9 | 非目标 | 可选 | 留空 OK，建议 1-2 条防 scope creep |
-| 10 | 参考资料 | 可选 | URL / 文件路径；保留原始输入摘要 |
+| 10 | 参考资料 | 可选 | URL / 文件路径；保留原始输入摘要（被动浏览） |
+| 11 | 集成依赖（v0.9.8 D25） | 可选 | 第三方 API 契约（主动消费）；输入类型 J 时由 dump-api-docs.mjs 自动产出 |
 
 ## 3 个关键决策门（**必须用 AskUserQuestion**）
 
@@ -203,10 +206,12 @@ ddt-brief-builder/
 ├── SKILL.md                                ← 本文件（识别 + 决策 + 自检 + 输出）
 ├── scripts/
 │   ├── dump-xlsx.py                        ← xlsx 全文 dump（自动 pip install openpyxl）
-│   ├── check-brief-quality.mjs             ← brief 字段填充率自检
+│   ├── dump-api-docs.mjs                   ← 第三方 API 文档摘要（v0.9.8 D25，零依赖 yaml + 脱敏）
+│   ├── check-brief-quality.mjs             ← brief 字段填充率自检（11 字段）
 │   └── scaffold-brief.mjs                  ← 项目目录一键脚手（mkdir+cp+git init+commit）
 ├── references/
-│   ├── field-rules.md                      ← 10 字段决策准则（详细规则）
+│   ├── field-rules.md                      ← 11 字段决策准则（详细规则）
+│   ├── integration-detection.md            ← 类型 J 第三方 API 文档识别信号（v0.9.8 D25）
 │   ├── tech-stack-quick-pick.md            ← D1 速查（输入暗示 → preset 推荐）
 │   ├── ai-design-quick-pick.md             ← D3 速查（3 通道差异 + 适合场景）
 │   └── decision-gates.md                   ← D1/D2/D3 完整 AskUserQuestion 模板
@@ -214,7 +219,8 @@ ddt-brief-builder/
     ├── from-paragraph.md                   ← 用户粘贴一段文字 → brief
     ├── from-existing-prd.md                ← 已有 PRD 反向提炼 brief
     ├── from-competition-url.md             ← 比赛项目特化（评分项作硬指标）
-    └── from-meeting-minutes.md             ← B2B 多模块实战（会议纪要 + xlsx 多源）
+    ├── from-meeting-minutes.md             ← B2B 多模块实战（会议纪要 + xlsx 多源）
+    └── from-api-docs-folder.md             ← 第三方 API 文档目录 + OpenAPI yaml 双例（v0.9.8 D25）
 ```
 
 **姊妹 skill**：

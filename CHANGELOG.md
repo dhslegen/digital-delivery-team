@@ -4,6 +4,63 @@
 
 ---
 
+## [0.9.8] - 2026-05-07 — 实战 hotfix D25：ddt-brief-builder 输入类型 J（第三方 API 文档）+ §11 集成依赖
+
+源自实战：alv-ops 项目跑 `/prd` 时 product-agent 产生 BLK-001（高，"车企接口协议未确认，阻塞 P0"）+ BLK-003（低，"视频回放可行性未确认"）—— 但用户已经爬好了新石器开放平台 API 文档（14 Cloud + 4 Video endpoints + OAuth2 鉴权 + 错误码表），文档完全可以让两条 BLK 消失。**brief 阶段没识别为"集成依赖"**是 product-agent 看不见契约的根因。
+
+用户诉求：逆向优化 ddt-brief-builder / /prd，按 skill-creator 三层规范彻底改造。
+
+### 🔴 D25 修复
+
+**根因 1（输入识别盲区）**：ddt-brief-builder 9 类输入识别（A-I）无"第三方 API 文档目录"这一类，第三方 API 文档被当成普通文件忽略。
+**根因 2（字段语义混淆）**：brief §10 参考资料是"被动浏览的链接"（URL 列表），无字段表达"主动消费的契约"（endpoint × 鉴权 × 错误码）—— 用户即便手填路径，product-agent 也无法判断哪些是契约源。
+**根因 3（agent 输入静态）**：product-agent Inputs 清单固定 6 项（brief / prd / baseline / acceptance-criteria / contexts / rules），不读项目内任何外部资料；同时不能违反 SSoT 原则主动扫盘。
+
+### skill-creator 三层资源扩展
+
+```
+skills/ddt-brief-builder/
+├── SKILL.md                                ← 输入类型 A-I → A-J；字段表 10 → 11
+├── scripts/
+│   ├── dump-xlsx.py                        ← 不变
+│   ├── dump-api-docs.mjs                   ← 【新】markdown 目录树 + 零依赖 OpenAPI yaml/json + 单 md endpoint
+│   ├── check-brief-quality.mjs             ← 加 §11 字段识别（optional，不阻塞 pass）
+│   └── scaffold-brief.mjs                  ← 不变
+├── references/
+│   ├── field-rules.md                      ← 加 §11 集成依赖详细规则 + 脱敏要求
+│   ├── integration-detection.md            ← 【新】类型 J 识别信号清单（关键词 / 目录结构 / 单文件 / 用户语言）
+│   └── ...
+└── examples/
+    └── from-api-docs-folder.md             ← 【新】alv-ops 实战 + OpenAPI yaml 双例
+```
+
+### 修复要点
+
+- **brief 输入类型 A-J**：新增类型 J「第三方 API 文档」，识别信号包括目录名关键词（API / 开放平台 / SDK / OpenAPI / swagger / 集成规约 / 对接文档）、单文件 OpenAPI yaml/json、单 markdown 含 `## GET /xxx` 章节、用户语言。
+- **brief 字段 10 → 11**：新增 §11 集成依赖（可选字段），与 §10 参考资料明确划分 - §10 是被动浏览的链接，§11 是主动消费的契约（endpoint × 鉴权 × 错误码）。
+- **零依赖 OpenAPI 解析**：`dump-api-docs.mjs` 手写解析 OpenAPI yaml（仅抽 info/servers/paths/securitySchemes），不引入 js-yaml 依赖；同时支持 OpenAPI JSON / 单 markdown / markdown 目录树四种形态。
+- **强制脱敏**：dump 过程中 `client_secret` / `appSecret` / `api_key` / `secret_key` / `access_token` 示例值 / `password` / `Authorization: Bearer xxx` 全部 → `***`；`client_id` 不脱敏（公开标识）。
+- **product-agent 增强**：Inputs 增加"brief §11 标注的契约文档（按需 Read，不主动扫盘）"；Hard Requirements 第 6 条强制要求"用户故事提到的外部接口必须引用 §11 endpoint 路径，禁止用'未确认'作 BLK"。
+- **/prd 命令透传**：Phase 4 派发 product-agent 时把 brief §11 标注的契约文档路径作为额外 prompt 输入。
+
+### D25 测试覆盖（+16 用例）
+
+`tests/integration/d25-integration-source.test.mjs`：
+1-5. dump-api-docs 解析 markdown 目录 / OpenAPI yaml / OpenAPI JSON / 单 markdown / 强制脱敏
+6-8. check-brief-quality §11 独立标题 / inline 风格识别 + 缺失不阻塞 pass
+9-16. 静态文档约束（防回归）：SKILL.md / field-rules.md / integration-detection.md / examples / product-agent.md / commands/prd.md
+
+测试基数 441 → 457（+16）。D23 fixture 已同步更新加 §11，alv-ops fill_rate 仍 100%。
+
+### 反向回测（v0.9.8 验证）
+
+执行修复后，alv-ops 项目的 brief 加 §11 后，重跑 `/prd` 预期：
+- BLK-001 消失（接口已对接，14 endpoints + OAuth2 全部已知）
+- BLK-002 保留（业务字典仍需客户提供）
+- BLK-003 部分消失（Video API 4 endpoints 已知 → 视频回放可行性确认；任务聚合仍待确认）
+
+---
+
 ## [0.9.7] - 2026-05-07 — 实战 hotfix D24：ddt-baseline-sync 标准化（template/example 分离 + 重入幂等 + options ≤4）
 
 源自实战：用户在 alv-ops 项目跑 `/ddt-baseline-sync` 时连撞两个隐性 bug——

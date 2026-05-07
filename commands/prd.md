@@ -58,6 +58,7 @@ test -n "$DDT_PROJECT_ID" || { node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --boots
 - `project-brief.md`（项目简报）
 - `docs/prd.md`（已有 PRD，若存在）
 - `$DDT_PLUGIN_ROOT/templates/prd.template.md`（PRD 模板，**绝对路径在插件根**——v0.9.3 D19）
+- **brief §11 集成依赖中标注的契约文档路径**（v0.9.8 D25）：派发前 grep brief 抽出 §11 提到的 `契约文档 \`<path>\`` 行（典型形态如 `项目资料/无人车开放平台API/`），在派发 prompt 里追加："**第三方接口契约**：< 列出 §11 标注的路径 >；用户故事提到的 endpoint **必须**引用契约里的具体路径，禁止编造或写'未确认'作 BLK"；若 brief 无 §11 或 §11 留空，跳过本步。
 - `$ARGUMENTS`（补充说明）
 
 product-agent 产出 `docs/prd.md`，必须包含：

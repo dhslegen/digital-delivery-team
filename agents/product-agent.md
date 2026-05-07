@@ -17,6 +17,8 @@ model: sonnet
 - `skills/acceptance-criteria/SKILL.md`（验收标准编写规范，**Skill tool 自动加载**）
 - `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**）
 - `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
+- **brief §11 集成依赖中标注的契约文档（按需 Read，v0.9.8 D25）**：
+  brief §11 列出的"契约文档"路径（如 `项目资料/无人车开放平台API/`）应**按需 Read**——仅在写到对应用户故事时拉取具体 endpoint 路径与字段。**禁止主动扫盘**寻找 brief 未声明的依赖（违反 SSoT；新依赖必须先回 brief 阶段补 §11）。
 
 ## Hard Requirements
 
@@ -27,6 +29,7 @@ model: sonnet
 3. 禁用糊弄词；凡写不清楚的点必须以 `$DDT_PLUGIN_ROOT/templates/blockers.template.md` 的字段结构**追加**（不覆盖）到 `docs/blockers.md`，并在当次输出末尾列明新增的 blocker id
 4. 可量化要求必须写成可测条件（响应时间、并发数、错误码范围、数据量级）
 5. 术语表必须包含所有首次出现的业务词汇
+6. **brief §11 集成依赖（v0.9.8 D25）**：若 brief 含 §11 集成依赖且列出契约文档路径，**用户故事提到的外部接口必须引用 §11 标注的 endpoint 路径或文件路径**（如 `GET /vehicleList`、`见 03-Cloud-API/01-获取车辆列表.md`），**禁止**写"接口协议未确认"作 BLK；若契约文档不覆盖某个所需 endpoint，仅对**该未覆盖部分**写 BLK，不否定整个 §11。
 
 ## Output Contract
 
