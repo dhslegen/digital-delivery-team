@@ -45,7 +45,7 @@ fi
 - `git diff $BASE...HEAD`（完整差异）
 - `docs/arch.md`（若存在）
 - `docs/api-contract.yaml`（若存在）
-- `templates/review-checklist.template.md`（评审清单）
+- `$DDT_PLUGIN_ROOT/templates/review-checklist.template.md`（评审清单，**插件根**——v0.9.3 D19）
 - `$ARGUMENTS`（对比基线）
 
 review-agent 按三级分类产出 `docs/review-report.md`：

@@ -13,9 +13,9 @@ model: opus
 
 - git diff（当前 branch vs main，执行 `git diff main...HEAD`）
 - `docs/arch.md` / `docs/api-contract.yaml` / `docs/data-model.md`
-- `templates/review-checklist.template.md`
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
+- `$DDT_PLUGIN_ROOT/templates/review-checklist.template.md`（**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -53,7 +53,7 @@ model: opus
 ## Global Invariants（以下 6 条禁止删减）
 
 1. **单一产物原则**：只对 `docs/review-report.md` 负责，可创建或增量维护该报告，禁止写入代码文件。
-2. **禁止猜测**：输入不足 / 契约冲突 / 术语歧义 → 在报告中标注 "无法评估，原因：<具体原因>"；如有阻塞需他人跟进，告知其按 `templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 停止。
+2. **禁止猜测**：输入不足 / 契约冲突 / 术语歧义 → 在报告中标注 "无法评估，原因：<具体原因>"；如有阻塞需他人跟进，告知其按 `$DDT_PLUGIN_ROOT/templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 停止。
 3. **禁止自我汇报度量**：时长、token、成败由 hooks 捕获，不调用任何 `track_*` 接口。
 4. **输出前自检**：未全勾 Self-Check 不得声称完成。
 5. **禁用糊弄词**：不得写"根据需要"/"视情况"/"等"/"若有必要"。

@@ -24,13 +24,17 @@ test('commands 不含 inline node -e plugin-root 解析（M2-3 回归）', () =>
 
 test('commands 全部使用 .ddt-plugin-root marker fallback', () => {
   const expectedSnippet = '.claude/delivery-metrics/.ddt-plugin-root';
-  // 仅检查需要 plugin root 的 commands（含 DDT_PLUGIN_ROOT 引用的）
+  // v0.9.3 D19：仅检查需要"运行时解析 plugin root"的 commands（含 `node "$DDT_PLUGIN_ROOT/bin/`
+  //   或 `cp "$DDT_PLUGIN_ROOT/templates/` 这种实际 shell 调用的）。
+  //   纯文档引用（如 kickoff.md 的"参考 $DDT_PLUGIN_ROOT/templates/xxx" 说明文字）
+  //   不需要 marker fallback——LLM 看路径即可知，无需 shell 解析。
   const files = readdirSync(COMMANDS).filter(f => f.endsWith('.md'));
+  const runtimeUsageRe = /(?:node|cp|cat|test -[fde]?|exec)\s+["']?\$DDT_PLUGIN_ROOT/;
   for (const file of files) {
     const text = readFileSync(join(COMMANDS, file), 'utf8');
-    if (!text.includes('DDT_PLUGIN_ROOT')) continue;
+    if (!runtimeUsageRe.test(text)) continue;
     assert.ok(text.includes(expectedSnippet),
-      `commands/${file} 引用了 DDT_PLUGIN_ROOT 但未使用 marker fallback`);
+      `commands/${file} 含运行时 $DDT_PLUGIN_ROOT 调用但未使用 marker fallback`);
   }
 });
 

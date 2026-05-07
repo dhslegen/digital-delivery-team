@@ -15,9 +15,9 @@ model: sonnet
 - `tests/test-report.md`（必读；覆盖率 < 70% 或存在 critical 缺陷则拒绝出包）
 - `docs/review-report.md`（必读；存在 must-fix 项则拒绝出包）
 - 当前代码树（通过 Glob 识别技术栈和目录结构）
-- `skills/delivery-package/SKILL.md`（交付包规范）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
+- `skills/delivery-package/SKILL.md`（交付包规范，**Skill tool 自动加载**）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -29,8 +29,8 @@ model: sonnet
 ## Output Contract
 
 - `README.md`：5 分钟上手（安装 / 运行 / 冒烟测试）
-- `docs/deploy.md`：模板 `templates/deploy.template.md`（幂等脚本、环境变量、回滚）
-- `docs/demo-script.md`：模板 `templates/demo-script.template.md`（时间轴 + 每步截图点 + 口播稿）
+- `docs/deploy.md`：模板 `$DDT_PLUGIN_ROOT/templates/deploy.template.md`（幂等脚本、环境变量、回滚）
+- `docs/demo-script.md`：模板 `$DDT_PLUGIN_ROOT/templates/demo-script.template.md`（时间轴 + 每步截图点 + 口播稿）
 
 ## Self-Check（追加到三份产物末尾）
 

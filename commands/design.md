@@ -54,7 +54,7 @@ node "$DDT_PLUGIN_ROOT/bin/resolve-tech-stack.mjs" \
 
 #### AskUserQuestion 4 步问卷模板
 
-数据来源：`templates/tech-stack-options.yaml::askuserquestion_flow`（含 4 个 step 的完整选项 + preview）
+数据来源：`$DDT_PLUGIN_ROOT/templates/tech-stack-options.yaml::askuserquestion_flow`（**插件根**——v0.9.3 D19）
 
 **Step 1：主语言栈**（4 选项 + Other）
 - Java + Spring Boot 3 (Recommended)
@@ -120,8 +120,8 @@ CLI flag > **AskUserQuestion 收集结果** > project-brief.md "技术栈预设"
 - `docs/prd.md`（需求文档）
 - `docs/wbs.md`（工作分解结构）
 - `.ddt/tech-stack.json`（**M3 必读** 技术栈选型，禁止偏离）
-- `templates/api-contract.template.yaml`（契约模板）
-- `templates/data-model.template.md`（数据模型模板）
+- `$DDT_PLUGIN_ROOT/templates/api-contract.template.yaml`（契约模板，**插件根**）
+- `$DDT_PLUGIN_ROOT/templates/data-model.template.md`（数据模型模板，**插件根**）
 - `$ARGUMENTS`（架构倾向性说明）
 
 architect-agent 产出：

@@ -13,10 +13,10 @@ model: sonnet
 
 - `docs/prd.md`（必读）
 - `docs/wbs.md`（若存在，增量修订）
-- `baseline/historical-projects.csv`（可选：参考同类项目工时分布）
-- `baseline/estimation-rules.md`（可选：估算规则参考）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
+- `baseline/historical-projects.csv`（可选：项目根优先 / fallback `$DDT_PLUGIN_ROOT/baseline/historical-projects.csv`，**v0.9.3 D19**）
+- `baseline/estimation-rules.md`（可选：项目根优先 / fallback `$DDT_PLUGIN_ROOT/baseline/estimation-rules.md`）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -28,8 +28,8 @@ model: sonnet
 
 ## Output Contract
 
-- `docs/wbs.md`：模板 `templates/wbs.template.md`
-- `docs/risks.md`：模板 `templates/risks.template.md`
+- `docs/wbs.md`：模板 `$DDT_PLUGIN_ROOT/templates/wbs.template.md`
+- `docs/risks.md`：模板 `$DDT_PLUGIN_ROOT/templates/risks.template.md`
 
 ## Self-Check（追加到两份产物末尾）
 

@@ -37,9 +37,9 @@ test -f baseline/estimation-rules.md || cp "$DDT_PLUGIN_ROOT/baseline/estimation
 
 - `docs/prd.md`（产品需求文档）
 - `docs/wbs.md`（已有 WBS，若存在，用于增量修订）
-- `templates/wbs.template.md`（WBS 模板）
-- `templates/risks.template.md`（风险清单模板）
-- `baseline/estimation-rules.md`（项目目录内的专家估算表）
+- `$DDT_PLUGIN_ROOT/templates/wbs.template.md`（WBS 模板，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/templates/risks.template.md`（风险清单模板，**插件根**）
+- `baseline/estimation-rules.md`（**项目根** 的专家估算表，未存在则 fallback `$DDT_PLUGIN_ROOT/baseline/estimation-rules.md`）
 - `$ARGUMENTS`
 
 pm-agent 产出：

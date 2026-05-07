@@ -14,10 +14,10 @@ model: opus
 - `docs/prd.md`（必读）
 - `docs/wbs.md`（必读）
 - `.ddt/tech-stack.json`（**M3 必读** 技术栈选型 SSoT，由 `/design` 自动写入）
-- `skills/api-contract-first/SKILL.md`（OpenAPI 契约规范）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
-- `rules/delivery/contract-integrity.md`（必读）
+- `skills/api-contract-first/SKILL.md`（OpenAPI 契约规范，**Skill tool 自动加载**）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
+- `$DDT_PLUGIN_ROOT/rules/delivery/contract-integrity.md`（必读，**插件根**）
 
 ## Deliverables
 
@@ -39,7 +39,7 @@ model: opus
 
 - `docs/arch.md`：架构草案，含 ADR 章节
 - `docs/api-contract.yaml`：OpenAPI 3.0，通过 lint
-- `docs/data-model.md`：模板 `templates/data-model.template.md`
+- `docs/data-model.md`：模板 `$DDT_PLUGIN_ROOT/templates/data-model.template.md`
 
 ## Self-Check（追加到三份产物末尾）
 

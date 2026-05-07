@@ -48,7 +48,7 @@ node "$DDT_PLUGIN_ROOT/bin/report.mjs" --project "$DDT_PROJECT_ID" \
 
 - `docs/efficiency-report.raw.md`（原始数据报告）
 - `baseline/baseline.locked.json`（基线）
-- `templates/efficiency-report.template.md`（报告模板）
+- `$DDT_PLUGIN_ROOT/templates/efficiency-report.template.md`（报告模板，**插件根**——v0.9.3 D19）
 - `$ARGUMENTS`（过滤阶段，如 `--stage impl`）
 
 metrics-agent 产出 `docs/efficiency-report.md`，包含：

@@ -15,9 +15,9 @@ model: sonnet
 - `docs/blockers.md`（互斥处理项 — 见下方 Hard Requirements 第 3 条）
 - `docs/api-contract.yaml`（修改后端代码时必读，禁止违反契约）
 - `docs/data-model.md`（修改持久层代码时必读）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
-- `rules/delivery/contract-integrity.md`（必读）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
+- `$DDT_PLUGIN_ROOT/rules/delivery/contract-integrity.md`（必读，**插件根**）
 
 ## Hard Requirements
 

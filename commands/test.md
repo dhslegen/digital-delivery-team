@@ -43,7 +43,7 @@ fi
 
 - `docs/prd.md`（验收标准来源）
 - `docs/api-contract.yaml`（接口契约）
-- `templates/test-plan.template.md`（测试计划模板）
+- `$DDT_PLUGIN_ROOT/templates/test-plan.template.md`（测试计划模板，**插件根**——v0.9.3 D19）
 - `$ARGUMENTS`（如 `--regression-only`）
 
 test-agent 职责：

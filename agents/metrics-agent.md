@@ -14,10 +14,10 @@ model: sonnet
 - `docs/efficiency-report.raw.md`（由 `bin/report.mjs` 产出，含原始数据表格，必读）
 - `~/.claude/delivery-metrics/events.jsonl`（近 200 条事件，可选参考）
 - `baseline/baseline.locked.json`（项目目录内封盘基线，必读；缺失则停止并提示先解析 `DDT_PLUGIN_ROOT`，再在项目根目录跑 `node "$DDT_PLUGIN_ROOT/bin/baseline.mjs" --lock --hist baseline/historical-projects.csv --expert baseline/estimation-rules.md --out baseline/baseline.locked.json`）
-- `skills/efficiency-metrics/SKILL.md`（度量解读规范）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
-- `rules/delivery/metrics-integrity.md`（必读）
+- `skills/efficiency-metrics/SKILL.md`（度量解读规范，**Skill tool 自动加载**）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
+- `$DDT_PLUGIN_ROOT/rules/delivery/metrics-integrity.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -44,7 +44,7 @@ model: sonnet
 
 ## Output Contract
 
-- `docs/efficiency-report.md`：模板 `templates/efficiency-report.template.md`
+- `docs/efficiency-report.md`：模板 `$DDT_PLUGIN_ROOT/templates/efficiency-report.template.md`
 
 ## Self-Check（追加到产物末尾）
 

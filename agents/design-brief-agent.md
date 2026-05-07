@@ -39,10 +39,10 @@ model: sonnet
 - `.ddt/tech-stack.json`（必读，决定可推荐的字体 / 框架）
 - `.ddt/design/tokens.json`（可选，用户已编辑的 tokens）
 - `.ddt/design/assets/*`（可选，用户上传的参考截图 — 用 Read 工具看图）
-- `templates/design-brief.template.md`（结构参考）
+- `$DDT_PLUGIN_ROOT/templates/design-brief.template.md`（结构参考，**插件根**——v0.9.3 D19）
 - `skills/ai-native-design/SKILL.md`（必读：visual_direction 9 选 1 + anti-patterns 11 条）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -101,9 +101,9 @@ model: sonnet
 
 ## Templates & References
 
-- `templates/design-brief.template.md`（10 字段结构）
-- `skills/ai-native-design/SKILL.md`（visual_direction + anti-patterns 引用规则）
-- `bin/compile-design-brief.mjs`（编译器协议；不要重写它已填的字段）
+- `$DDT_PLUGIN_ROOT/templates/design-brief.template.md`（10 字段结构，**插件根**——v0.9.3 D19）
+- `skills/ai-native-design/SKILL.md`（visual_direction + anti-patterns 引用规则；**Skill tool 自动加载，无需路径**）
+- `$DDT_PLUGIN_ROOT/bin/compile-design-brief.mjs`（编译器协议；不要重写它已填的字段）
 
 ## Global Invariants（以下 6 条禁止删减）
 

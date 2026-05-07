@@ -13,10 +13,10 @@ model: sonnet
 
 - `docs/prd.md`（验收标准——唯一真相源，必读）
 - `docs/api-contract.yaml`（契约测试依据）
-- `skills/acceptance-criteria/SKILL.md`（验收标准解读规范）
-- `contexts/delivery.md`（必读）
-- `rules/delivery/agent-invariants.md`（必读）
-- `rules/delivery/contract-integrity.md`（必读）
+- `skills/acceptance-criteria/SKILL.md`（验收标准解读规范，**Skill tool 自动加载**）
+- `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/rules/delivery/agent-invariants.md`（必读，**插件根**）
+- `$DDT_PLUGIN_ROOT/rules/delivery/contract-integrity.md`（必读，**插件根**）
 
 ## Hard Requirements
 
@@ -31,7 +31,7 @@ model: sonnet
 
 ## Output Contract
 
-- `tests/test-plan.md`：模板 `templates/test-plan.template.md`
+- `tests/test-plan.md`：模板 `$DDT_PLUGIN_ROOT/templates/test-plan.template.md`
 - `tests/**/*.spec.*`（或目标语言等价物）
 - `tests/test-report.md`：覆盖率、缺陷清单、回归结果
 
@@ -44,13 +44,13 @@ model: sonnet
 
 ## Interaction Rules
 
-- 发现验收标准不可测 → 停止 → 以 `templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 回 `/prd` 阶段修订
+- 发现验收标准不可测 → 停止 → 以 `$DDT_PLUGIN_ROOT/templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 回 `/prd` 阶段修订
 - 实现与验收标准冲突 → **站在验收标准一侧** → 报为缺陷，不调整测试
 
 ## Global Invariants（以下 6 条禁止删减）
 
 1. **单一产物原则**：只对 `tests/` 目录负责，禁止写入 `web/`、`server/`、`docs/`（blockers.md 除外）。
-2. **禁止猜测**：输入不足 / 契约冲突 / 术语歧义 → 以 `templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 停止。
+2. **禁止猜测**：输入不足 / 契约冲突 / 术语歧义 → 以 `$DDT_PLUGIN_ROOT/templates/blockers.template.md` 字段结构追加到 `docs/blockers.md` → 停止。
 3. **禁止自我汇报度量**：时长、token、成败由 hooks 捕获，不调用任何 `track_*` 接口。
 4. **输出前自检**：未全勾 Self-Check 不得声称完成。
 5. **禁用糊弄词**：不得写"根据需要"/"视情况"/"等"/"若有必要"。

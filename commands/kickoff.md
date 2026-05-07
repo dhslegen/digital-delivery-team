@@ -22,7 +22,7 @@ argument-hint: "[--auto] [--preset java-modern|node-modern|go-modern|python-fast
 | `custom` 且 brief 已填详细字段 | 按详细字段解析，不再问 |
 | `custom` 但 brief 字段不全 | 用 AskUserQuestion 补全缺失字段 |
 
-具体 4 步问卷模板见 `commands/design.md::Phase 2b`，或直接读取 `templates/tech-stack-options.yaml::askuserquestion_flow`。
+具体 4 步问卷模板见 `commands/design.md::Phase 2b`，或直接读取 `$DDT_PLUGIN_ROOT/templates/tech-stack-options.yaml::askuserquestion_flow`（**插件根**——v0.9.3 D19）。
 
 收集到答案后，把结果写入 `.ddt/components.json.tmp`（项目本地路径，多项目并行不冲突，跑完即删），**必须使用嵌套对象 schema**：
 

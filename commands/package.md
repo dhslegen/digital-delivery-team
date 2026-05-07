@@ -39,8 +39,8 @@ node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase package --action start
 
 - `docs/prd.md`（产品需求文档）
 - `docs/arch.md`（架构决策，若存在）
-- `templates/deploy.template.md`（部署模板）
-- `templates/demo-script.template.md`（演示脚本模板）
+- `$DDT_PLUGIN_ROOT/templates/deploy.template.md`（部署模板，**插件根**——v0.9.3 D19）
+- `$DDT_PLUGIN_ROOT/templates/demo-script.template.md`（演示脚本模板，**插件根**）
 - `$ARGUMENTS`（如 `--demo-length 5`）
 
 docs-agent 产出：
