@@ -39,8 +39,89 @@ LLM 必须先**识别输入类型**，再走对应路径。可同时存在多类
 | **E. 比赛官网/题目** | 含"比赛"、"挑战赛"、"hackathon"、"评分标准" | 特殊处理：提取硬约束 + 评分项 |
 | **F. 项目截图/草图** | 用户上传图片 | 用 Read 加载后提取布局/UI 线索作 §核心功能 |
 | **G. 多源混合** | 同时含上述多个 | 按 PRD/URL > 文件 > 文字优先级合并 |
+| **H. 会议纪要 / 评审记录** | 含"会议"、"纪要"、"参加人员"、"评审"、"※" 标识、"目标上线日" | **客户驱动模式**：把会议确认范围作硬约束 |
+| **I. xlsx / csv 功能清单类** | 路径含 `.xlsx` `.csv`，文件名含"功能清单"、"功能列表"、"feature-list" | **自动 dump**：用 `python3 -c "import openpyxl; ..."` 解析，无需用户额外操作 |
+| **J. 人员/工时/进度表（baseline 信息源）** | 文件名含"人员需求"、"工时"、"项目计划"、"进度"、"resource-plan" | **不塞 brief**——解析后追加到 `baseline/historical-projects.csv` 一行（让 pm-agent /wbs 阶段有更准的工时基准）；同时把"总人月 / 时间窗口"提取到 brief §5 |
 
 **识别后必须先告知用户**："我识别到你的输入是 ⟨类型⟩，将走 ⟨路径⟩ 提取字段"——让用户能纠正。
+
+### 关键场景特化
+
+| 场景信号 | 特化处理 |
+|---|---|
+| **B2B 项目**（"客户"、"运营"、"合同"、"账单"、"乙方/甲方"、"网点"、"车队"、"物流"、"工厂"、"医院"、"政府"、"企业内部"） | D1 决策门 **首选 java-modern**（B2B 后台对稳定性/合规/长服役要求高，Spring Boot 生态最匹配） |
+| **多模块项目**（含 5+ 个独立功能模块，每模块有独立增删改查） | §4 核心功能允许"按模块归类"，每模块 1 条 summary + 关键 sub-features，**不强制 3-7 条上限** |
+| **外部接口强依赖**（"对接 X 接口"、"取决于 X 能力"、"X 的接口协议"） | §5 关键约束新增"外部接口依赖"子项，未确认的接口写**软 blocker** |
+| **会议纪要 ※ / [必做] 标识** | 把带 ※ 的功能标 **P0**（v1.0 范围内），其余标 P1 / P2 |
+| **工期不现实**（如 5 大模块 9 天上线 / 10 人天做 50 个功能） | 必触发**软 blocker**："工期 reasonability check 失败：N 模块 × M 子功能 vs T 人天，建议确认是否已有底座或缩范围" |
+| **客户参与决策**（会议纪要含"客户代表"参与确认） | §2 目标用户分**甲方 / 乙方两类**：甲方运营人员（主要使用者）+ 乙方业主/客户（决策方/付费方/审视方） |
+
+### xlsx / csv 自动解析协议（应对输入类型 I/J）
+
+**Read 工具不直接支持 xlsx**——必须用 Bash + Python openpyxl 解析。模板：
+
+```bash
+# 检测 openpyxl 可用性
+python3 -c "import openpyxl; print('OK')" 2>&1
+# 不可用：pip3 install openpyxl --quiet
+
+# 全文 dump（功能清单 / 人员表通用）
+python3 -c "
+import openpyxl
+f = '<path-to-xlsx>'
+wb = openpyxl.load_workbook(f, data_only=True)
+for sheet_name in wb.sheetnames:
+    ws = wb[sheet_name]
+    print(f'--- Sheet: {sheet_name} ---')
+    for row in ws.iter_rows(values_only=True):
+        cells = [str(c) if c is not None else '' for c in row]
+        if any(c.strip() for c in cells):
+            print(' | '.join(cells))
+"
+```
+
+不要让用户先 export csv——skill 内部完成解析。
+
+### baseline 增量同步（应对输入类型 J）
+
+**当用户给的是"项目人员需求计划表"等 baseline 信息源时**：
+1. 解析人员表得到角色 × 进入/离开时间 × 人月
+2. **按 phase 反向映射**：
+   - 项目经理/架构 → architecture（design 阶段）
+   - 产品经理 → requirements（prd + wbs）
+   - UI 设计 → design（UI 部分）
+   - 前端 → frontend
+   - 后端 → backend
+   - 测试 → test + review
+3. 计算总工时：`总人月 × 22 工作日 × 8 小时 = 总工时`
+4. **追加一行到** `<project-root>/baseline/historical-projects.csv`（如不存在则从插件 baseline 复制后追加）
+5. 写到 brief §5 关键约束："团队规模 N 人月 / 时间窗 YYYY-MM-DD ~ YYYY-MM-DD / 总工时 H 小时"
+6. 写到 brief §10 参考资料引用人员表路径
+
+**复杂度判定**（用于 D1 默认推断）：
+- 总工时 ≤ 60h → 简单
+- 60-200h → 中等
+- > 200h → 复杂（B2B / 多模块项目典型）
+
+### 多模块项目的 §4 处理
+
+当输入有 5+ 模块时，§4 不强制 3-7 条，改用**模块化 markdown** 结构：
+
+```markdown
+## 核心功能
+
+### 模块 1：<名称>（P0）
+- 子功能 1.1：<一句话描述>
+- 子功能 1.2：<一句话描述>
+
+### 模块 2：<名称>（P0）
+- 子功能 2.1：<一句话描述>
+
+### 模块 N：<名称>（P1）
+- ...
+```
+
+每模块标 P0/P1/P2 优先级（从 ※ 标识 / "必做" / "v1.0 范围内" 等信号识别）。
 
 ---
 
@@ -102,7 +183,14 @@ DDT 后续命令对这 3 个决策**强依赖**——如果替用户选错，后
 }
 ```
 
-**默认**：用户没明确说就推 `node-modern`（最广 SaaS / Web App 适用面）。
+**默认推断**（按输入信号）：
+- 含 B2B 信号（"客户"、"运营"、"合同"、"账单"、"乙方/甲方"、"网点"、"车队"、"物流"、"工厂"、"医院"、"政府"、"企业内部"、"管理后台" + "5+ 模块"） → **java-modern**（B2B 后台稳定性/合规/长服役）
+- 含 SaaS 信号（"产品"、"订阅"、"自助注册"、"shadcn"、"Vercel"、"Next.js"） → **node-modern**
+- 含 AI/数据信号（"大模型"、"RAG"、"向量"、"NumPy"、"Jupyter"、"OpenAI SDK"） → **python-fastapi**
+- 含高并发信号（"网关"、"微服务"、"高并发"、"云原生"） → **go-modern**
+- **完全无信号 → node-modern**（最广 SaaS / Web App 适用面，DDT v0.8+ 默认）
+
+**注意**：默认仅是 AskUserQuestion 中第一选项 `(Recommended)`，**禁止替用户跳过决策门**。
 
 ### 决策门 D2：前端类型（PR-E 三态）
 

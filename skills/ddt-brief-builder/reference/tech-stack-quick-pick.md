@@ -19,11 +19,26 @@
 |---|---|
 | "Java 团队 / Spring / 企业 / 银行 / 政府 / SSO + 部门权限 / 高合规" | java-modern |
 | "Java 旧项目 / 内部后台 / 模板渲染 / Thymeleaf / 老员工" | java-traditional |
+| **B2B 后台 / 物流 / 车队 / 工厂 / 医院 / 运营管理 / 多模块（5+）/ 客户合同 / 网点 / 账单** | **java-modern**（B2B 长服役 + Spring 生态最匹配） |
 | "SaaS / 全栈 TS / Vercel / shadcn / Next.js / 设计驱动" | node-modern |
 | "高并发 / 网关 / 微服务 / 云原生 / 性能 / Cloudflare Workers" | go-modern |
 | "AI / 大模型 / 数据分析 / Jupyter / NumPy / OpenAI / RAG" | python-fastapi |
 | "比赛 / 探索 / 学习 / 新栈尝试" | interactive |
 | **任何不在以上的场景** | **node-modern**（v0.8+ DDT 实战默认） |
+
+### B2B 项目特化（v0.9.2 实战经验）
+
+B2B 后台和 SaaS 产品的差异让默认预设不同：
+
+| 维度 | B2B 后台（推 java-modern） | SaaS 产品（推 node-modern） |
+|---|---|---|
+| 客户关系 | 一对多客户合同 / 长服役（≥ 3 年）/ 离线部署 | 自助注册 / 订阅模式 / 云端 |
+| 用户量级 | 10-1000 内部 + 客户 | 10000+ 公开用户 |
+| 功能形态 | 管理后台 + 实时数据 + 报表 + 审计 | 产品功能流 + 协作 + 通知 |
+| 合规要求 | 等保 / SOC2 / 客户合同条款 / 数据隔离 | 通用 GDPR / cookie 同意 |
+| 团队栈 | 通常已有 Java 工程师 + 服务端开发 | 全栈 TS 团队 |
+
+**实战触发关键词**：物流 / 车队 / 工厂 / 医院 / 政府 / 运营 / 客户管理 / 网点 / 合同 / 账单 / 设备监控 / 车队管理 → 强推 **java-modern**。
 
 ---
 

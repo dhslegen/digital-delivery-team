@@ -4,6 +4,95 @@
 
 ---
 
+## [0.9.2] - 2026-05-07 — ddt-brief-builder 实战反向优化（B2B 多模块 + baseline 增量）
+
+源自实战：用户用真实 B2B 项目（无人物流车运营服务平台 V1.0，万集科技）
+跑 v0.9.1 ddt-brief-builder 时暴露的不足。该项目特征：
+- 6 大模块 / 13 leaf 功能（多模块）
+- 5 个外部车企接口待对接（强外部依赖）
+- 7 角色 / 5.0 人月 / 2.5 月窗口（B2B 中型团队）
+- 客户驱动（会议纪要含"客户代表"参与确认）
+- 输入是会议纪要 + xlsx 功能清单 + xlsx 人员需求计划表（多源混合）
+
+### Added — 新增（skill 能力扩展）
+
+🟣 **输入识别新增 H/I/J 三类**：
+- H 会议纪要 / 评审记录（"※" 标识 / "目标上线日" / "客户代表"）→ **客户驱动模式**
+- I xlsx / csv 功能清单类 → **自动 dump**（用 Bash + python3 openpyxl，无需用户额外操作）
+- J 人员/工时/进度表（baseline 信息源）→ **不塞 brief，追加到 baseline/historical-projects.csv**
+
+🟣 **关键场景特化（5 类信号识别）**：
+- B2B 项目 → D1 决策门首选 java-modern（不是默认 node-modern）
+- 多模块项目（5+ 模块）→ §4 允许"按模块归类"，**不强制 3-7 条上限**
+- 外部接口强依赖 → §5 加"外部接口依赖"子项 + 未确认接口写软 blocker
+- 会议纪要 ※ / [必做] 标识 → 自动转 P0（其余 P1/P2）
+- 工期不现实 → 触发 reasonability check 软 blocker
+- 客户参与决策 → §2 用户分甲方/乙方两类
+
+🟣 **xlsx / csv 自动解析协议**：
+- skill 内部 spawn `python3 -c "import openpyxl..."` 完成 dump
+- pip install openpyxl 自动检测与安装提示
+- 全文 dump（不截断）
+
+🟣 **baseline 增量协议（核心新能力）**：
+- 解析人员表得"角色 × 进入/离开时间 × 人月"
+- 按 phase 反向映射（项目经理→architecture / 产品→requirements / UI→design 等）
+- 计算总工时 = 总人月 × 22 × 8，判定复杂度（≤60 简单 / 60-200 中等 / >200 复杂）
+- AskUserQuestion 询问追加 baseline，让用户决策
+- 团队规模/时间窗口同步写到 brief §5
+
+🟣 **多模块项目 §4 markdown 结构**：
+- 每模块独立 H3 标题 + 子功能列表 + P0/P1/P2 标识
+- 优先级识别信号：※ / ★ / [必做] / [P0] / "v1.0 范围内" → P0
+
+🟣 **D1 决策门智能默认（按输入信号）**：
+- B2B 信号 → java-modern
+- SaaS 信号 → node-modern
+- AI/数据信号 → python-fastapi
+- 高并发信号 → go-modern
+- 完全无信号 → node-modern（默认）
+
+### Added — 新例 example D
+
+🟣 **examples/from-meeting-minutes.md**：基于真实"无人物流车运营平台 V1.0"实战
+- 4 类输入混合（会议纪要 + 功能清单 xlsx + 人员表 xlsx + 用户描述）
+- xlsx 自动 dump 演示
+- 6 模块归类 + ※ P0 标识识别
+- 5 个外部接口依赖处理
+- 7 角色 / 5.0 人月 → baseline 增量决策门
+- 工期 reasonability check（224 vs 880 工时通过）
+
+### reference 速查更新
+
+🟣 **tech-stack-quick-pick.md** 决策助手表加 B2B 信号行（物流/车队/工厂/医院/政府/运营 → java-modern）+ B2B vs SaaS 维度对比表
+
+🟣 **field-rules.md**：
+- §4 加多模块项目处理（模块化 markdown 结构）
+- §5 加外部接口依赖子项 + 工期 reasonability check 算法
+- 新增 §11 baseline 增量协议（解析规则 / 计算公式 / CSV 行模板 / 用户交互模板）
+
+### 设计
+
+- 实战驱动 skill 优化的"反向闭环"：v0.9.1 出 skill → v0.9.2 用真实 B2B 项目跑 → 5 项不足修正 → v0.9.2 发版
+- 产物 skill 不再只产 brief，而是**产 3 件事**：
+  1. project-brief.md（DDT 入口）
+  2. baseline/historical-projects.csv 新行（增量校准基线）
+  3. brief §5 的"团队 + 时间窗 + 外部依赖"实数据（vs v0.9.1 抽象描述）
+
+### Migration — 升级指引
+
+完全向后兼容：
+- 简单项目走旧路径（自然语言 / 文件 / URL → brief）不变
+- 多模块 / B2B / xlsx / 人员表场景自动启用新协议
+- baseline 增量是 opt-in（AskUserQuestion 询问，默认追加）
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.2
+```
+
+---
+
 ## [0.9.1] - 2026-05-06 — DDT 工作流第零步：ddt-brief-builder skill
 
 ### Added — 新增
