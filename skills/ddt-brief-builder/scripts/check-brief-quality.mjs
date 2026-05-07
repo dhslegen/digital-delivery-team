@@ -22,17 +22,25 @@ import { readFileSync, existsSync } from 'node:fs';
 
 // 10 个 brief 字段的检测规则
 // 字段编号 / 名称 / 必填 / 段落锚点正则
+// 注：JS regex 的 \b 在中文字符前后**不生效**（只对 \w 字符类有效）
+// 改用"行首 ## + 可选 §N + 字段名"模式，不约束后缀（允许"## 项目背景"/"## §1 项目背景"/"## 项目背景（含上下文）"）
 const FIELDS = [
-  { n: 1, name: '项目背景',     required: true,  re: /^##\s+项目背景\s*$/m },
-  { n: 2, name: '目标用户',     required: true,  re: /^##\s+目标用户\s*$/m },
-  { n: 3, name: '成功标准',     required: true,  re: /^##\s+成功标准\s*$/m },
-  { n: 4, name: '核心功能',     required: true,  re: /^##\s+核心功能(?:\s|（|\()/m },
-  { n: 5, name: '关键约束',     required: true,  re: /^##\s+关键约束\s*$/m },
-  { n: 6, name: '技术栈预设',   required: true,  re: /\*\*技术栈预设\*\*[：:]\s*[`\w-]+/ },
-  { n: 7, name: '前端类型',     required: false, re: /frontend\.type|前端类型|frontend_type/i },
-  { n: 8, name: 'AI-native UI', required: false, re: /\*\*AI-native UI\*\*|AI 通道|ai_design/i },
-  { n: 9, name: '非目标',       required: false, re: /^##\s+非目标/m },
-  { n:10, name: '参考资料',     required: false, re: /^##\s+参考资料/m },
+  { n: 1, name: '项目背景',     required: true,  re: /^##\s+(?:§\d+\s+)?项目背景/m },
+  { n: 2, name: '目标用户',     required: true,  re: /^##\s+(?:§\d+\s+)?目标用户/m },
+  { n: 3, name: '成功标准',     required: true,  re: /^##\s+(?:§\d+\s+)?成功标准/m },
+  { n: 4, name: '核心功能',     required: true,  re: /^##\s+(?:§\d+\s+)?核心功能/m },
+  { n: 5, name: '关键约束',     required: true,  re: /^##\s+(?:§\d+\s+)?关键约束/m },
+  // §6 技术栈：兼容 "## 技术栈预设"/"## 技术栈选型" 标题，或 inline `**技术栈预设**: <值>`
+  { n: 6, name: '技术栈预设',   required: true,
+    re: /^##\s+(?:§\d+\s+)?技术栈(?:预设|选型)|\*\*技术栈预设\*\*[：:]\s*[`\w-]+/m },
+  // §7 前端类型：独立标题 / 文中提 frontend.type / spa|server-side|none 枚举
+  { n: 7, name: '前端类型',     required: false,
+    re: /^##\s+(?:§\d+\s+)?前端类型|frontend\.?type|\*\*前端类型\*\*|frontend\.type\s*[:=]\s*(?:spa|server-side|none)/im },
+  // §8 AI 设计通道：独立标题 / inline / ai_design 字段
+  { n: 8, name: 'AI-native UI', required: false,
+    re: /^##\s+(?:§\d+\s+)?AI[-\s]?native\s*UI|^##\s+(?:§\d+\s+)?AI\s+(?:设计)?通道|\*\*AI[-\s]?native\s*UI\*\*|ai_design|\*\*AI\s+通道\*\*/im },
+  { n: 9, name: '非目标',       required: false, re: /^##\s+(?:§\d+\s+)?非目标/m },
+  { n:10, name: '参考资料',     required: false, re: /^##\s+(?:§\d+\s+)?参考资料/m },
 ];
 
 // 占位符识别（未填字段）

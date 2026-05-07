@@ -4,6 +4,65 @@
 
 ---
 
+## [0.9.6] - 2026-05-07 — 实战 hotfix D23：check-brief-quality 字段识别放宽 + 真实 fixture 防回归
+
+源自实战：用户跑 v0.9.5 ddt-brief-builder 后跑 check-brief-quality 自检，结果
+LLM 自动产出的 brief（用 §N 编号 + 独立 ## 技术栈预设 章节）**全部字段被误判为缺失**——
+脚本与自己产出的 brief 风格不兼容，制造流程摩擦。
+
+### 🔴 D23 修复
+
+**根因 1**：脚本正则用 `^##\s+项目背景\s*$` 强匹配纯标题，不识别"## §1 项目背景"。
+**根因 2**：技术栈/前端类型/AI 通道字段只识别 inline `**字段**: 值`，不识别"## 技术栈预设"独立章节。
+**根因 3**：JS regex 的 `\b` word boundary 在中文字符前后不生效，让"放宽尝试"还是失败。
+
+**修复**：
+- 所有 10 字段正则放宽兼容 4 种合法风格：
+  1. 纯标题：`## 项目背景`
+  2. §N 编号：`## §1 项目背景`
+  3. 独立章节：`## 技术栈预设`（字段名作章节标题）
+  4. inline：`**技术栈预设**: java-modern`
+- 移除中文不生效的 `\b`，改用"行首 ## + 可选 §N + 字段名"宽松匹配
+- §6 技术栈兼容"## 技术栈预设" / "## 技术栈选型" 两种标题
+- §7 §8 兼容独立章节标题
+
+### D23 fixture 防回归
+
+`tests/fixtures/real-agent-outputs/brief/`：
+- `alv-ops-llm-generated.md`（LLM 自动产出，§N + 独立章节风格 → 100% pass）
+- `team-admin-handwritten.md`（v0.9.2 手写版，## 技术栈选型 → inline → 90% pass）
+
+`tests/integration/d23-brief-quality.test.mjs`：参数化跑两个 fixture + 反向防御
+（§N 编号最小化 brief 必须识别 6/6 必填）
+
+### 测试
+
+- 423 → 429（+6 D23 测试）
+
+### 设计反思
+
+**"工具与产出风格脱节"是丝滑性的隐形敌人**：
+- v0.9.4 抽出 check-brief-quality.mjs 时只用了一份手写 fixture 验证（design/比赛项目）
+- 没用真实 LLM 产出 brief 验证 → 导致 v0.9.5 实战发现脚本与 LLM 自动产物不兼容
+- 修法：把"真实 LLM 自动产物"作为 fixture 的金标准，**不再用合成测试代替**
+
+这与 v0.8.1 D5 / v0.8.2 D15 的"测试 fixture 偏差"是同类问题，每次 LLM 自动化
+产物的脚本都应用真实数据跑回归。
+
+### Migration
+
+完全向后兼容：
+- 旧 brief 格式（手写 inline 风格）继续 pass
+- 新 brief 格式（LLM 自动 §N + 独立章节）现在也 pass
+- 用户无需手动改 brief 标题
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.6
+```
+
+---
+
 ## [0.9.5] - 2026-05-07 — 实战 hotfix D22：skill scripts/ 引用绝对路径化
 
 源自实战：用户用 v0.9.4 跑 ddt-brief-builder skill，LLM 写出
