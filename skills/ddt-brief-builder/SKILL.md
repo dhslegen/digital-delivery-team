@@ -36,9 +36,29 @@ origin: DDT
 | **F** 项目截图 / 草图 | 上传图片 | `Read` 看图后提 UI 线索作 §核心功能 |
 | **G** 多源混合 | 同时多类 | 按 PRD/URL > 文件 > 文字优先级合并 |
 | **H** 会议纪要 / 评审记录 | 含"会议" / "纪要" / "※" / "目标上线日" / "客户代表" | **客户驱动模式**：会议确认范围作硬约束；§2 用户分甲方/乙方 |
-| **I** xlsx / csv 功能清单 | 文件名含"功能清单" / "feature-list" / "需求" | **自动 dump**：跑 `scripts/dump-xlsx.py <path>` |
+| **I** xlsx / csv 功能清单 | 文件名含"功能清单" / "feature-list" / "需求" | **自动 dump**：见下方 §"如何调脚本（绝对路径）"，跑 `dump-xlsx.py` |
 
 **识别后必须先告知用户**："识别到 ⟨类型⟩，将走 ⟨路径⟩ 提取字段"——给用户机会纠正。
+
+## 如何调用本 skill 的 scripts/（v0.9.5 D22）
+
+**LLM 跑 Bash 时 cwd 是用户项目根，不是 skill 根**——必须用绝对路径调本 skill 的脚本：
+
+```bash
+# 推荐：先解析 plugin root（marker 文件 fallback chain）
+PR="${DDT_PLUGIN_ROOT:-$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
+
+# 然后调本 skill 的脚本（统一前缀 $PR/skills/ddt-brief-builder/scripts/）
+python3 "$PR/skills/ddt-brief-builder/scripts/dump-xlsx.py"           <path>
+node    "$PR/skills/ddt-brief-builder/scripts/check-brief-quality.mjs" <brief-path>
+node    "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs"      --target <dir> --brief <brief-path>
+```
+
+**禁止**：
+- ❌ `python3 scripts/dump-xlsx.py ...`（cwd 是项目根，找不到）
+- ❌ `python3 .claude/plugins/...`（路径错——`.claude` 在 `~`，不在项目里）
+- ❌ 把 skill 内绝对路径硬编码在 brief 产物里（让产物可移植）
 
 ## 关键场景特化
 
@@ -54,7 +74,7 @@ origin: DDT
 
 ## 字段提取与填充（10 字段）
 
-详细规则见 `references/field-rules.md`，speed cheat：
+详细规则见 `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/references/field-rules.md`（用 Read 工具读绝对路径），speed cheat：
 
 | # | 字段 | 必填 | 缺失处理 |
 |---|---|---|---|
@@ -71,7 +91,7 @@ origin: DDT
 
 ## 3 个关键决策门（**必须用 AskUserQuestion**）
 
-DDT 后续命令对这 3 个决策强依赖。详细模板见 `references/decision-gates.md`，**speed cheat**：
+DDT 后续命令对这 3 个决策强依赖。详细模板见 `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/references/decision-gates.md`，**speed cheat**：
 
 ```
 D1 技术栈预设  → java-modern (B2B/Recommended) | node-modern | go-modern | python-fastapi | interactive
@@ -88,10 +108,10 @@ D3 AI 设计通道 → claude-design (Recommended) | figma | v0
 
 ## 质量自检（产出前必跑）
 
-调用脚本：
+调用脚本（**绝对路径**，详见 §"如何调用本 skill 的 scripts/"）：
 
 ```bash
-node scripts/check-brief-quality.mjs <draft-brief-path> --json
+node "$PR/skills/ddt-brief-builder/scripts/check-brief-quality.mjs" <draft-brief-path> --json
 ```
 
 返回 JSON：`{ fill_rate_pct, filled_total, blockers, warnings, field_details }`
@@ -119,8 +139,8 @@ node scripts/check-brief-quality.mjs <draft-brief-path> --json
 适用于：用户给项目名 + brief 内容，期望立即 cd 进去跑 `/prd`。
 
 ```bash
-# 先把 brief 写到临时位置（如 /tmp/brief.md），再调脚本：
-node scripts/scaffold-brief.mjs --target <project-dir> --brief <brief-path>
+# 先把 brief 写到临时位置（如 /tmp/brief.md），再调脚本（**绝对路径**）：
+node "$PR/skills/ddt-brief-builder/scripts/scaffold-brief.mjs" --target <project-dir> --brief <brief-path>
 ```
 
 脚本会一次完成：mkdir → cp brief → cp .gitignore → git init → initial commit → 输出"下一步"引导。

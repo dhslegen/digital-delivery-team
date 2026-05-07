@@ -67,6 +67,49 @@ test('D19: agents/*.md 中 templates/contexts/rules 引用必须带 $DDT_PLUGIN_
     allOffenders.join('\n'));
 });
 
+// v0.9.5 D22：skill 内 SKILL.md 不能用 ` `scripts/xxx` ` / ` `references/xxx` `（无前缀）
+//   做命令执行引用——LLM Bash 跑时 cwd 是用户项目根，不是 skill 根，会找不到。
+//   必须 `$DDT_PLUGIN_ROOT/skills/<skill-name>/scripts/xxx.py`（或在引导段落里）。
+test('D22: skills/*/SKILL.md 中 scripts/ 命令引用必须带 $DDT_PLUGIN_ROOT/skills/<name>/ 前缀', () => {
+  const SKILLS = join(ROOT, 'skills');
+  const offenders = [];
+
+  // 抓"命令执行"模式：含 python3/node 后接 scripts/xxx 的行
+  // 不抓纯文档说明（如资源索引树状图、example 引导文字）—— 资源索引段允许相对路径
+  const exec_re = /(python3|node|exec|cp|mv)\s+["']?scripts\//;
+  const ref_re = /[`"']references\/[a-z][^`"'\n]*[`"']/g;
+
+  for (const skillName of readdirSync(SKILLS)) {
+    const skillMd = join(SKILLS, skillName, 'SKILL.md');
+    let text;
+    try { text = readFileSync(skillMd, 'utf8'); } catch { continue; }
+
+    // 拆掉资源索引段（``` 围栏代码块描述目录树时允许相对路径）
+    // 简化：只看 fenced code blocks 中的 bash/sh 段
+    const codeBlocks = text.matchAll(/```(?:bash|sh)\n([\s\S]*?)\n```/g);
+    for (const m of codeBlocks) {
+      const code = m[1];
+      for (const line of code.split('\n')) {
+        if (exec_re.test(line) && !line.includes('$DDT_PLUGIN_ROOT') && !line.includes('$PR/skills/')) {
+          offenders.push(`skills/${skillName}/SKILL.md: ${line.trim().slice(0, 80)}`);
+        }
+      }
+    }
+
+    // 检查 markdown 行内 ` `references/xxx.md` ` 引用
+    for (const m of text.matchAll(ref_re)) {
+      // 允许在"资源索引"段内（通常用 ├── 或缩进 markdown 列表展示树状结构）
+      const before = text.slice(Math.max(0, m.index - 80), m.index);
+      if (/├──|└──|│  |^\s*[│├└]/m.test(before)) continue;
+      offenders.push(`skills/${skillName}/SKILL.md 引用 ${m[0]} 缺前缀`);
+    }
+  }
+
+  assert.deepEqual(offenders, [],
+    `以下 skill 的 SKILL.md 含未加 $DDT_PLUGIN_ROOT/skills/<name>/ 前缀的脚本/引用：\n` +
+    offenders.join('\n'));
+});
+
 test('D19: 项目资源（docs/web/server/tests）不应带 $DDT_PLUGIN_ROOT/ 前缀', () => {
   // 反向防御：避免把 docs/ 等项目相对路径误加 $DDT_PLUGIN_ROOT/
   const offenders = [];

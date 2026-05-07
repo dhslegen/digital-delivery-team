@@ -42,6 +42,23 @@ origin: DDT
 5. 输出"baseline 已校准"+ 下一步（跑 pm-agent 时估算更准）
 ```
 
+## 如何调用本 skill 的 scripts/（v0.9.5 D22）
+
+LLM 跑 Bash 时 cwd 是用户项目根，必须用绝对路径调本 skill 脚本：
+
+```bash
+# 解析 plugin root（marker 文件 fallback chain）
+PR="${DDT_PLUGIN_ROOT:-$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
+
+# 端到端管道（推荐）
+python3 "$PR/skills/ddt-baseline-sync/scripts/parse-staffing.py" <xlsx-path> \
+  | node "$PR/skills/ddt-baseline-sync/scripts/append-historical.mjs" \
+    --json - --type "<项目类型>"
+```
+
+**禁止** `python3 scripts/parse-staffing.py ...`（cwd 是项目根，找不到）。
+
 ## 角色 → phase 映射规则
 
 `baseline/historical-projects.csv` schema 的 phase 列定义如下，本 skill 按表映射：

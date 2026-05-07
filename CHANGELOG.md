@@ -4,6 +4,64 @@
 
 ---
 
+## [0.9.5] - 2026-05-07 — 实战 hotfix D22：skill scripts/ 引用绝对路径化
+
+源自实战：用户用 v0.9.4 跑 ddt-brief-builder skill，LLM 写出
+`python3 .claude/plugins/cache/...` 错误路径——把 plugin cache 当成项目根相对路径。
+根因：v0.9.4 SKILL.md 把 `scripts/dump-xlsx.py` 当 skill 内部相对路径写，但 LLM
+跑 Bash 时 cwd 是用户项目根，不是 skill 根，找不到脚本。
+
+### 🔴 D22 修复（commit hash 待定）
+
+这是 v0.9.3 D19 的横向延伸——D19 修了 `templates/xxx`，但 v0.9.4 新增的
+`scripts/xxx` / `references/xxx` 引用又掉进同一个坑。
+
+修复：
+- ddt-brief-builder/SKILL.md：3 处 scripts/ + 2 处 references/ 引用全部加
+  `$DDT_PLUGIN_ROOT/skills/ddt-brief-builder/` 前缀
+- 新增 § "如何调用本 skill 的 scripts/" 段，给 LLM 完整的 fallback chain：
+  ```bash
+  PR="${DDT_PLUGIN_ROOT:-$(cat ~/.claude/delivery-metrics/.ddt-plugin-root 2>/dev/null)}"
+  PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
+  python3 "$PR/skills/ddt-brief-builder/scripts/dump-xlsx.py" <path>
+  ```
+- ddt-baseline-sync/SKILL.md 同步加同款"如何调用 scripts/"段
+- 显式写出反模式（`python3 scripts/xxx.py` 错；`.claude/plugins/...` 错）
+
+### D22 契约测试（防回归）
+
+`tests/unit/path-prefix-contract.test.mjs` 新增"D22"测试：
+- 扫描 skills/*/SKILL.md 中 ```bash 代码块
+- 命令执行模式（python3/node/exec/cp/mv 后接 scripts/xxx）必须含 `$DDT_PLUGIN_ROOT` 或 `$PR/skills/`
+- 行内 `references/xxx.md` 引用（不在树状索引段）必须带绝对前缀
+
+### 测试
+
+- 422 → 423（+1 D22 契约）
+
+### 设计反思
+
+v0.9.3 D19 / v0.9.5 D22 揭示**隐式契约的横向传染**：
+- D19 修了 templates/contexts/rules → 解决一类
+- v0.9.4 新增 scripts/ → 又一类同源 BUG
+- v0.9.5 D22 修 + 契约测试覆盖
+
+未来新增 SKILL.md 内任何"plugin 内资源"引用类型时，必须**前向更新契约测试**，
+让回归测试自动覆盖新类型。
+
+### Migration — 升级指引
+
+完全向后兼容：
+- 旧 v0.9.4 用户 LLM 跑 skill 时仍可能错路径，但用户重启会话后 marker 会自愈到 v0.9.5
+- v0.9.5 SKILL.md 内引用统一绝对路径，LLM 不会再写错
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.5
+```
+
+---
+
 ## [0.9.4] - 2026-05-07 — skill-creator 重构：scripts 下沉 + 抽离 ddt-baseline-sync
 
 按 skill-creator 最佳实践（progressive disclosure / scripts/references/examples 三层结构）
