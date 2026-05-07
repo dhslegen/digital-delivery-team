@@ -4,6 +4,65 @@
 
 ---
 
+## [0.9.3] - 2026-05-07 — 实战 hotfix：路径前缀显式化 + marker 自愈
+
+源自实战：用户用 v0.9.2 跑 /prd（项目 alv-ops），LLM 报"templates 目录不存在"。
+排查发现两层 BUG：(1) commands 文档把 `templates/xxx` 当相对路径让 LLM 误读为
+项目根；(2) `.ddt-plugin-root` marker 文件锁在旧版 0.8.1，让用户装的 v0.9.2
+新功能全部用不上。
+
+### 🔴 Fixed — P0 修复
+
+🔴 **D19 commands/agents 模板引用显式 \$DDT_PLUGIN_ROOT/ 前缀**（commit b579e37）
+
+21 处引用全部显式标 plugin 根：
+- commands: prd / wbs / design / review / test / report / package / kickoff
+  - prd.md：plugin root 解析提到 Phase 1 顶部，让 cp 模板时 \$DDT_PLUGIN_ROOT 已可用
+  - wbs.md：baseline 引用标"项目根优先 / fallback 插件根"
+- agents: product / pm / architect / docs / metrics / test / review / design-brief / fix
+  - 所有 contexts/delivery.md + rules/delivery/*.md 全部加前缀
+  - 所有 templates/blockers.template.md + templates/xxx.template.md 全部加前缀
+
+skills/* 引用保持不变（Claude Code Skill tool 自动加载，无需路径）
+
+🔴 **D20 marker 自愈到最新 cache 版本**（commit ba187fe）
+
+- 新增 `pickLatestPluginRoot(homedir)`：扫描
+  ~/.claude/plugins/cache/digital-delivery-team/digital-delivery-team/
+  下所有 semver 版本目录，过滤含 bin/aggregate.mjs 的，按 semver 排序挑最新
+- 新增 `semverCompare(a, b)`：完整 semver 比较（10.0 > 9.9 / pre-release < release）
+- `persistPluginRoot` 优先级：cache 最新版 > env DDT_PLUGIN_ROOT > env CLAUDE_PLUGIN_ROOT
+- 新装版本下次会话即激活（marker 自动覆盖旧值）
+
+### 测试
+
+- 409 → 422（+13 D21 契约测试）
+- tests/unit/path-prefix-contract.test.mjs：commands + agents 中 templates/contexts/rules
+  必须带 \$DDT_PLUGIN_ROOT/，项目资源不应误标
+- tests/integration/marker-self-heal.test.mjs：pickLatestPluginRoot + semverCompare +
+  persistPluginRoot 完整覆盖（cache 优先 / env fallback / degraded mode）
+
+### 设计
+
+- v0.5→v0.9 又一类隐式契约暴露——"路径前缀"。所有"plugin 内资源"必须显式标
+  \$DDT_PLUGIN_ROOT/，区分于"项目内资源"（docs/.ddt/web 等）
+- D20 让插件版本升级真正生效——marker 不再"锁死首次会话版本"
+
+### Migration — 升级指引
+
+完全向后兼容：
+- 旧 commands 用户跑 /prd 仍能工作（DDT_PLUGIN_ROOT env 在 Phase 2 内已 fallback marker）
+- D19 让文档对 LLM 更清晰，不改变运行时行为
+- D20 让用户**不需要任何操作**就能用上最新版本——下次会话启动 hook 自动覆盖 marker
+
+```
+/plugin marketplace update digital-delivery-team
+/plugin install digital-delivery-team@0.9.3
+# 重启 Claude Code 让 SessionStart hook 写最新 marker
+```
+
+---
+
 ## [0.9.2] - 2026-05-07 — ddt-brief-builder 实战反向优化（B2B 多模块 + baseline 增量）
 
 源自实战：用户用真实 B2B 项目（无人物流车运营服务平台 V1.0，万集科技）
