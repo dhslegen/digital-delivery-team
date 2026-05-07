@@ -23,7 +23,7 @@ if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
 fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase report --action start
 mkdir -p baseline
-test -f baseline/historical-projects.csv || cp "$DDT_PLUGIN_ROOT/baseline/historical-projects.csv" baseline/historical-projects.csv
+test -f baseline/historical-projects.csv || cp "$DDT_PLUGIN_ROOT/skills/ddt-baseline-sync/assets/historical-projects.template.csv" baseline/historical-projects.csv  # v0.9.7: 用 skill 模板（仅表头）初始化，避免插件示例污染用户基线
 test -f baseline/estimation-rules.md || cp "$DDT_PLUGIN_ROOT/baseline/estimation-rules.md" baseline/estimation-rules.md
 test -f baseline/baseline.locked.json || node "$DDT_PLUGIN_ROOT/bin/baseline.mjs" --lock \
   --hist baseline/historical-projects.csv --expert baseline/estimation-rules.md \

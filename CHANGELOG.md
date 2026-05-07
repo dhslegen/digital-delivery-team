@@ -4,6 +4,65 @@
 
 ---
 
+## [0.9.7] - 2026-05-07 — 实战 hotfix D24：ddt-baseline-sync 标准化（template/example 分离 + 重入幂等 + options ≤4）
+
+源自实战：用户在 alv-ops 项目跑 `/ddt-baseline-sync` 时连撞两个隐性 bug——
+1. 项目类型决策门写了 5 个 options（B2B/SaaS/API/Mobile/其他），AskUserQuestion 工具上限 4 项 → InputValidationError。
+2. 首次跑 skill 时，从插件根 `baseline/historical-projects.csv` 复制 8 行教学示例（HIST-001~HIST-008）到用户项目根，再追加用户真实数据为 HIST-009 → 用户基线被插件示例污染，pm-agent 后续做工时同类对比时把"用户认证模块 48h"当真实历史。
+
+用户诉求："baseline 这条线 标准化、稳定化、高可用化、可重入化"。本次按 skill-creator 三层资源规范彻底重构。
+
+### 🔴 D24 修复
+
+**根因 1（options 超限）**：SKILL.md 与 examples 决策门写 5 项，违反 Claude Code AskUserQuestion 单题 ≤4 项约束。
+**根因 2（示例污染）**：`append-historical.mjs` 的 `ensureBaseline()` 把"插件分发的 schema 演示数据"当用户初始数据复制；commands/wbs.md 与 commands/report.md 也直接 cp 同一文件，三处污染源。
+**根因 3（不可重入）**：append 仅以 HIST-NNN 自增为 key，不按 `project_name` 查重，同名项目重跑会无限叠加。
+**根因 4（首次 /report 中断）**：`bin/baseline.mjs --lock` 要求 hist CSV ≥1 行数据，仅表头会抛错，挡住用户首次跑 /report。
+
+### skill-creator 三层资源重构
+
+```
+skills/ddt-baseline-sync/
+├── SKILL.md
+├── scripts/
+│   ├── parse-staffing.py
+│   └── append-historical.mjs           ← 重写：模板初始化 + 查重 + 重入策略
+├── assets/                              ← 新增：用作输出的资源
+│   └── historical-projects.template.csv  ← 仅表头（用户初始化用）
+└── examples/                            ← 学习示例
+    ├── from-staffing-xlsx.md
+    ├── historical-projects.example.csv  ← HIST-001~HIST-008（教学，不被代码引用为初始数据）
+    └── historical-projects.example.md   ← schema 字段速查 + 映射效果
+```
+
+### 修复要点
+
+- **决策门 options 5→4**：B2B-后台 / SaaS-C 端 / API-Mobile / 其他（自定义）；"其他"由工具自动提供 Other 输入框，不手写第 5 项。
+- **ensureBaseline 改用 skill assets 模板**：默认从 `assets/historical-projects.template.csv`（仅表头）初始化；`--with-examples` 显式 opt-in 才用教学示例。
+- **同名查重 + 重入决策**：新增 `findByName()` 按 `project_name` 查重；存在时按 `--on-duplicate skip|overwrite|append`（默认 skip）；新增 exit code 4 表示"幂等保护"。
+- **三处 cp 统一**：`commands/wbs.md` / `commands/report.md` / `append-historical.mjs` 全部从 skill assets 模板初始化用户基线；插件根 baseline 仅作 plugin-default schema 兜底，不再被复制。
+- **bin/baseline.mjs 容忍仅表头**：CSV 无数据行时 hist=null，merged 直接等于 expert（专家估算兜底），用户首次跑 /report 不再被中断。
+
+### D24 测试覆盖（+12 用例）
+
+`tests/integration/d24-baseline-init.test.mjs`：
+1. assets/template 仅表头一行
+2. examples/example.csv 含 8 行示例
+3. 默认初始化用 template，不复制示例（HIST-001 是用户首条真实数据）
+4. --with-examples 才复制示例
+5. 同名重入 default skip（exit 4 + 幂等保护）
+6. --on-duplicate overwrite 覆盖原行（project_id 不变）
+7. --on-duplicate append 作新行
+8. SKILL.md 项目类型 options ≤4（防止超限回归）
+9. examples/from-staffing-xlsx.md options ≤4
+10. bin/baseline.mjs 容忍仅表头 hist
+11. commands/wbs.md cp 已切到 skill assets template
+12. commands/report.md cp 已切到 skill assets template
+
+测试基数 429 → 441（+12）。
+
+---
+
 ## [0.9.6] - 2026-05-07 — 实战 hotfix D23：check-brief-quality 字段识别放宽 + 真实 fixture 防回归
 
 源自实战：用户跑 v0.9.5 ddt-brief-builder 后跑 check-brief-quality 自检，结果

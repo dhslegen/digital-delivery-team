@@ -16,7 +16,10 @@ LLM 开场说："识别到人员需求表，将解析后追加 baseline。先 du
 ## 跑脚本（端到端 pipeline）
 
 ```bash
-python3 $DDT_PLUGIN_ROOT/skills/ddt-baseline-sync/scripts/parse-staffing.py \
+PR="${DDT_PLUGIN_ROOT:-$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev/null)}"
+PR="${PR:-${HOME}/.claude/plugins/marketplaces/digital-delivery-team}"
+
+python3 "$PR/skills/ddt-baseline-sync/scripts/parse-staffing.py" \
   design/比赛项目/项目人员需求计划表.xlsx
 ```
 
@@ -38,9 +41,9 @@ python3 $DDT_PLUGIN_ROOT/skills/ddt-baseline-sync/scripts/parse-staffing.py \
 }
 ```
 
-## AskUserQuestion 决策
+## AskUserQuestion 决策（项目类型 + 是否追加）
 
-LLM 把 JSON 摘要给用户后，发 1 个 AskUserQuestion 问项目类型 + 1 个问是否追加：
+> ⚠️ Claude Code 的 AskUserQuestion options 上限 4 项；"其他"由工具自动提供 Other 输入框，不要手写第 5 项。
 
 ```typescript
 {
@@ -50,9 +53,9 @@ LLM 把 JSON 摘要给用户后，发 1 个 AskUserQuestion 问项目类型 + 1 
     { label: "B2B-后台 (Recommended)",
       description: "运营 / 客户管理 / 长服役（车队、医院、政府等）",
       preview: "本项目识别信号：物流 / 客户 / 网点 / 多模块——强匹配 B2B-后台" },
-    { label: "SaaS", description: "C 端订阅 / 自助注册" },
-    { label: "API-only", description: "纯 API / SDK" },
-    { label: "Mobile", description: "iOS / Android" },
+    { label: "SaaS / C 端", description: "C 端订阅 / 自助注册 / 公开产品" },
+    { label: "API / Mobile", description: "纯 API / SDK / iOS / Android 原生" },
+    { label: "其他（自定义）", description: "在 Other 输入自定义类型" },
   ]
 }
 ```
@@ -63,7 +66,7 @@ LLM 把 JSON 摘要给用户后，发 1 个 AskUserQuestion 问项目类型 + 1 
   header: "baseline 增量",
   options: [
     { label: "追加 (Recommended)",
-      description: "本次项目作为 HIST-009 写入，让未来 pm-agent /wbs 估算更准",
+      description: "本次项目作为 HIST-NNN 写入，让未来 pm-agent /wbs 估算更准",
       preview: "type=B2B-后台 / total=880h / team=7 / 复杂度=复杂" },
     { label: "仅展示不入库", description: "解析后输出表格但不修改 baseline" },
     { label: "完成后再决定", description: "项目跑完真实工时再决定" },
@@ -74,20 +77,49 @@ LLM 把 JSON 摘要给用户后，发 1 个 AskUserQuestion 问项目类型 + 1 
 ## 跑追加（管道方式更丝滑）
 
 ```bash
-python3 $DDT_PLUGIN_ROOT/skills/ddt-baseline-sync/scripts/parse-staffing.py \
+python3 "$PR/skills/ddt-baseline-sync/scripts/parse-staffing.py" \
   design/比赛项目/项目人员需求计划表.xlsx \
-  | node $DDT_PLUGIN_ROOT/skills/ddt-baseline-sync/scripts/append-historical.mjs \
+  | node "$PR/skills/ddt-baseline-sync/scripts/append-historical.mjs" \
     --json - --type "B2B-后台"
+```
+
+输出（首次跑，从 skill assets 模板初始化）：
+```
+ℹ️  从 skill assets 模板初始化 baseline（仅表头，干净起点）→ /path/baseline/historical-projects.csv
+
+--- RESULT ---
+{
+  "status": "appended",
+  "target": "/path/baseline/historical-projects.csv",
+  "project_id": "HIST-001",
+  "new_row": "HIST-001,无人物流车运营系统,B2B-后台,880,...",
+  "initialized": true,
+  "duplicate_of": null
+}
+
+✅ 追加 HIST-001: HIST-001,无人物流车运营系统,B2B-后台,880,169,70,201,211,141,62,26,0,,,7,5 人月 / 7 角色 / 2026-01-04 ~ 2026-03-15 / 复杂度 复杂
+```
+
+## 重入场景（同名项目第二次跑，默认 skip）
+
+```bash
+node "$PR/skills/ddt-baseline-sync/scripts/append-historical.mjs" \
+  --json - --type "B2B-后台"     # 同样的 staffing JSON，第二次跑
 ```
 
 输出：
 ```
-✅ 追加到 baseline/historical-projects.csv:
-   HIST-009,无人物流车运营系统,B2B-后台,880,169,70,201,211,141,62,26,0,,,7,5 人月 / 7 角色 / 2026-01-04 ~ 2026-03-15 / 复杂度 复杂
+--- RESULT ---
+{
+  "status": "skipped_duplicate",
+  "target": "/path/baseline/historical-projects.csv",
+  "existing_project_id": "HIST-001",
+  "existing_project_name": "无人物流车运营系统",
+  "message": "同名项目已存在，本次跳过（幂等保护）。如需覆盖，重跑加 --on-duplicate overwrite；如需作两期独立项目，加 --on-duplicate append",
+  "initialized": false
+}
 
-下一步：
-  下次 /digital-delivery-team:wbs 时 pm-agent 会读到本行作为同类项目工时基准
-  /digital-delivery-team:report 阶段也会用此 baseline 做对比
+ℹ️  跳过：baseline 已含 HIST-001 "无人物流车运营系统"
 ```
 
 ## 角色 → phase 映射效果（本案例）

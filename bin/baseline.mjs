@@ -52,10 +52,11 @@ function round(value) {
 
 function parseCsv(text) {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2) {
-    throw new Error('historical CSV must include a header row and at least one data row');
+  if (lines.length < 1) {
+    throw new Error('historical CSV must include at least a header row');
   }
   const header = lines.shift().split(',').map(v => v.trim());
+  // v0.9.7: 仅表头无数据行 → 返回空数组（用户尚未累积历史，由 expert 兜底）
   return lines.map(line => {
     const values = line.split(',');
     return Object.fromEntries(values.map((value, index) => [header[index], value.trim()]));
@@ -111,6 +112,12 @@ function componentAverage(rows, component) {
 }
 
 function buildHist(rows) {
+  // v0.9.7: 用户首次跑 /report 时项目根 baseline 仅表头无数据行
+  // 此时 hist 为空，merged 由 expert 兜底（见 main 流程）
+  if (rows.length === 0) {
+    return { hist: null, componentHist: null };
+  }
+
   const componentHist = {};
   for (const component of new Set(Object.values(STAGE_COMPONENTS).flat())) {
     const avg = componentAverage(rows, component);
@@ -171,9 +178,12 @@ try {
     process.exit(2);
   }
 
-  const merged = Object.fromEntries(
-    Object.keys(STAGE_COMPONENTS).map(stage => [stage, round((hist[stage] + expert[stage]) / 2)])
-  );
+  // v0.9.7: hist 为空（仅表头）→ merged 直接等于 expert（专家兜底）
+  const merged = hist === null
+    ? Object.fromEntries(Object.keys(STAGE_COMPONENTS).map(stage => [stage, expert[stage]]))
+    : Object.fromEntries(
+        Object.keys(STAGE_COMPONENTS).map(stage => [stage, round((hist[stage] + expert[stage]) / 2)])
+      );
 
   const payload = {
     lockedAt: new Date().toISOString(),
@@ -181,11 +191,12 @@ try {
       hist: histPath,
       expert: expertPath,
       stage_components: STAGE_COMPONENTS,
+      hist_rows: hist === null ? 0 : Object.keys(STAGE_COMPONENTS).length, // 标记 hist 来源
     },
-    hist,
+    hist: hist || {},
     expert,
     merged,
-    component_hist: componentHist,
+    component_hist: componentHist || {},
   };
 
   mkdirSync(dirname(outPath), { recursive: true });
