@@ -70,6 +70,26 @@ main thread **必读**：
 如果 `web/` 已存在：扫描组件树 + 已有 hooks / store / api client；找类似页面参照。
 如果 `web/` 为空：跑 `tech-stack.json::frontend.scaffold_cmd`（如 `npm create vite@latest web -- --template react-ts`）+ 落基础配置（tailwind / shadcn）。
 
+**强制：API client 生成（v0.9.13 D30）**
+
+scaffold 完成后，main thread **必须**跑 generate-api-client：
+
+```bash
+# 把 tech-stack.json::frontend.type_generation 从声明翻译为 web/src/api/{types.ts, client.ts}
+node "$DDT_PLUGIN_ROOT/bin/generate-api-client.mjs"
+GEN_EXIT=$?
+# 失败时降级为 hint（不阻塞）：
+#   exit 0 = 成功（含 skip：未声明 / contract 未变）
+#   exit 2 = 配置不全 → echo 提示后继续
+#   exit 3 = npx 失败 → echo 提示用户安装后续手动跑
+[ "$GEN_EXIT" -gt 1 ] && echo "⚠️  API client 自动生成失败；请检查日志后手动跑：node $DDT_PLUGIN_ROOT/bin/generate-api-client.mjs"
+```
+
+**为什么强制**：
+- 让 LLM 在 PLAN/IMPLEMENT 阶段**先看到 web/src/api/types.ts 的具体 endpoint 类型签名**
+- 自然不会去抄 prototype（claude-design bundle）的 mock 数据数组
+- v0.9.13 D30 实战教训：tech-stack 声明 `type_generation: openapi-typescript` 但未自动落地 → 14 个页面全部内联 mock const，零 API 调用
+
 > Phase 1 已根据 `.ddt/tech-stack.json::frontend.type` 判断：`server-side` / `none` 类型已提前退出，不会进入 EXPLORE。
 
 落盘 `docs/build-web-exploration.md`：

@@ -54,8 +54,22 @@ origin: DDT
 
 ### Phase 2: PLAN
 
-落 `docs/build-web-plan.md`：组件树 / Files to Create / Build Sequence / Validation Strategy。
+落 `docs/build-web-plan.md`：组件树 / Files to Create / Build Sequence / **Endpoint × 组件映射表（v0.9.13 D30 强制）** / Validation Strategy。
 组件树视图让用户能扫一眼判断结构。
+
+**Endpoint × 组件映射表**（必填，v0.9.13 D30 实战驱动）：
+
+```markdown
+## Endpoint × 组件映射
+
+| 页面/组件 | 消费的 endpoint | 数据获取方式 | mock 替换状态 |
+|---|---|---|---|
+| MonitorPage | GET /vehicles + GET /alerts | useQuery + apiClient.GET | 替换 VEHICLES / ALERT_QUEUE const |
+| TasksPage | GET /tasks | useQuery + apiClient.GET | 替换 TASKS const |
+| AlertsPage | GET /alerts + POST /alerts/{id}/handle | useQuery + useMutation | 替换 ALERT_QUEUE const |
+```
+
+**为什么强制**：v0.9.13 D30 实战发现 `tech-stack.json::type_generation` 已声明 openapi-typescript，但 web 全部内联 mock const，零 API 调用。PLAN 阶段强制列映射表 → IMPLEMENT 阶段不能跳过 API client 直接抄 prototype mock。
 
 ### Phase 3: APPROVE（由 build-web.md 触发）
 
@@ -108,8 +122,38 @@ origin: DDT
 ## Don't
 
 - ❌ 不要随便加 antd / mui 等 tech-stack.json 外的 UI 库
-- ❌ 不要硬编码 mock 数据替代 API client
+- ❌ **不要把 prototype（claude-design / figma / v0 bundle）的 mock 数组直接复制到生产代码**（v0.9.13 D30 实战根因）：bundle 含 `const MON_VEHICLES = [...]` 这种**演示用假数据**，应在 IMPLEMENT 阶段**删除并改用** `apiClient.GET('/vehicles')`。bundle 是视觉与结构来源，不是数据来源。
+- ❌ 不要硬编码 mock 数据替代 API client（典型反模式：`const TASKS = [...]` 在 page 顶部 + 用 `useState(TASKS)`）
 - ❌ 不要保留 supabase / v0-sdk 等"AI 设计源框架默认依赖"
+
+## API client 强制使用（v0.9.13 D30）
+
+`/build-web` Phase 1 EXPLORE 自动跑 `bin/generate-api-client.mjs`，产出：
+
+- `web/src/api/types.ts`（openapi-typescript 自动生成；contract 未变不重生）
+- `web/src/api/client.ts`（openapi-fetch 模板；首次创建后用户可改）
+- `web/src/api/README.md`（使用说明）
+
+IMPLEMENT 阶段每个组件：
+
+```typescript
+// ✅ 正确：用 generated client + react-query
+import { apiClient, unwrap } from '@/api/client';
+import { useQuery } from '@tanstack/react-query';
+
+const vehiclesQuery = useQuery({
+  queryKey: ['vehicles'],
+  queryFn: () => unwrap(apiClient.GET('/vehicles')),
+});
+const vehicles = vehiclesQuery.data ?? [];
+
+// ❌ 错误：硬编码 mock（被 bin/check-contract-alignment.mjs D30 检测到 → warning）
+const VEHICLES = [
+  { id: 'V001', status: 'transport' },
+];
+```
+
+`bin/check-contract-alignment.mjs` 在 VERIFY 阶段扫 `web/src` 下的"contract 已定义 endpoint × 同名 mock 数组"反模式，输出清单到 `docs/build-web-summary.md`（warning 不阻塞）。
 
 ## Do
 

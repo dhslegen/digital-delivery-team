@@ -4,6 +4,104 @@
 
 ---
 
+## [0.9.13] - 2026-05-08 — 实战 hotfix D30：把 type_generation 从声明翻译为产出（消除 prototype mock 扩散）
+
+源自实战：用户在 alv-ops 项目跑完 `/build-web` 后发现产物与 claude-design bundle **高度一致**——14 个页面全部内联 mock const（VEHICLES / ALERT_QUEUE / TASKS / ROLE_LIST / USERS 等），零 API 调用。docs/api-contract.yaml 94KB / 41 paths 孤立存在，tech-stack.json 已声明 `type_generation: openapi-typescript` + `data_fetching: tanstack-query` 但**完全没落地**——@tanstack/react-query 装了不调用，openapi-typescript 没装。
+
+用户诊断："数据层没有按照 ts-openapi 编译为 ts 客户端的预期，导致界面虽然很好看，但是很多假按钮、假实现"。
+
+### 🟢 5 个核心断裂修复
+
+| # | 现象 | 修复 |
+|---|---|---|
+| 1 | 41 paths 的契约孤立；web 端零消费 | 新 `bin/generate-api-client.mjs` 把声明翻译为产出 |
+| 2 | tech-stack `type_generation: openapi-typescript` 是空声明 | /build-web Phase 1 EXPLORE **强制**调 generate-api-client |
+| 3 | 14 个页面全 mock const | `bin/check-contract-alignment.mjs` 扫 contract × 同名 mock → warning + 清单 |
+| 4 | bundle mock 数据被照搬到 web/ | ai-native-design SKILL §7 加"数据层 API 化（强制）"硬要求 + 反模式举例 |
+| 5 | check-contract-alignment 只扫 supabase/v0 残留 | 扩展识别"contract endpoint × 同名大写常量数组（≥3 项）"反模式 |
+
+### 新增 bin/generate-api-client.mjs
+
+把 `tech-stack.json::frontend.type_generation` 从声明翻译为实际产出：
+
+- 读 .ddt/tech-stack.json 检测 type_generation 字段
+- 读 docs/api-contract.yaml 计算 SHA256
+- 比对 .ddt/api-client/last-generation.json 中的 hash → 未变跳过（无脏 git diff）
+- 跑 `npx openapi-typescript@7 docs/api-contract.yaml -o web/src/api/types.ts`
+- 首次创建 `web/src/api/client.ts`（openapi-fetch + apiClient + unwrap 模板，**不覆盖**用户改动）
+- 写 `web/src/api/README.md` 反模式提醒
+
+参数：`--dry-run` / `--force`（忽略 hash） / `--target=<dir>`（默认 web）
+
+退出码：0 成功 / 0 跳过（type_generation 未声明） / 2 配置不全 / 3 generate 命令失败
+
+### check-contract-alignment.mjs 扩展
+
+新增扫描"contract endpoint × 同名 mock 数组"反模式：
+
+```js
+const MOCK_ARRAY_RE = /^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_]{2,})\s*=\s*\[/gm;
+// 抽 contract paths 的 resource 名（/vehicles → VEHICLES / VEHICLE）
+// 与 web 中大写常量数组（≥3 项）对照，命中输出清单
+```
+
+实战测试 alv-ops/web：13/13 mock 数组全部正确命中（ACCIDENTS / ALERT_QUEUE / VEHICLES / TASKS / USERS / ROLE_LIST / ROUTES / DICT_ITEMS …），0 误报。
+
+跳过自动生成产物（web/src/api/{types,client}.ts）和测试目录。warning 不阻塞 VERIFY。
+
+### commands/build-web.md Phase 1 强制跑
+
+```bash
+# scaffold 完成后 main thread 必须跑：
+node "$DDT_PLUGIN_ROOT/bin/generate-api-client.mjs"
+```
+
+让 LLM 在 PLAN/IMPLEMENT 时**先看到 web/src/api/types.ts 的具体 endpoint 类型签名**，自然不会去抄 prototype 的 mock 数据。
+
+退出码 > 1 时降级为 hint（不阻塞）：用户可手动跑生成命令。
+
+### frontend-development SKILL Phase 2 PLAN 强制 endpoint × 组件映射表
+
+PLAN 阶段必须列出"页面/组件 × 消费的 endpoint × 数据获取方式 × mock 替换状态"对照表，让 IMPLEMENT 阶段不能跳过 API client 直接抄 prototype mock。
+
+Don't 段精确化"prototype mock 复制"反模式 + 给正确替代示例（apiClient.GET + useQuery）。
+
+### ai-native-design SKILL §7 数据层 API 化
+
+claude-design 改写步骤明示：
+
+> **数据层 API 化（强制）**：prototype 的 mock 数组（如 `const MON_VEHICLES = [...]`、ALERT_QUEUE / TASKS / USERS 等）必须**删除**，改用 `web/src/api/client.ts` 的 `apiClient.GET('/<resource>')` + `useQuery`；prototype 是视觉与结构来源，不是数据来源。
+
+软警告段（不丢弃 bundle 但 main thread 改写时必处理）：
+- prototype 含 ≥3 项 `const X = [...]` mock 数组 → 改写时必删
+- prototype 同时含 mock 数组 + 同名/近义 contract endpoint → 强相关，必替换
+
+### 测试覆盖（+16 用例）
+
+`tests/integration/d30-api-client-driven.test.mjs`：
+- generate-api-client.mjs 静态 + dry-run 7 步计划
+- type_generation 未声明友好跳过 + contract/web 缺失 exit 2
+- CLIENT_TEMPLATE 含 openapi-fetch + apiClient + unwrap
+- SHA256 哈希守门
+- check-contract-alignment 真实扫描 web fixture 命中 mock
+- 跳过 api/types.ts + api/client.ts（自身产物）
+- build-web.md Phase 1 强制跑 + 退出码降级
+- frontend-development SKILL Phase 2 endpoint 映射表 + Don't 反模式
+- ai-native-design SKILL §7 数据层 API 化 + 软警告
+
+测试基数 494 → 510（+16，零回归）。
+
+### 设计哲学（延续 D29）
+
+通用问题修，项目特定留给 LLM：
+
+- ✅ 修：把 tech-stack 声明翻译为产出 / 反模式检测器 / 工作流强制
+- ❌ 不修：具体每个 mock 数组的替换（让 LLM 看 types.ts 自己改）/ 业务字段映射 / 错误处理策略
+
+`bin/check-contract-alignment.mjs` 给清单不替用户写 fix；让 LLM 在每个组件按 contract 类型签名自己重写。
+
+---
+
 ## [0.9.12] - 2026-05-08 — 实战 hotfix D29：/integrate 实战调优（仅修通用问题，项目特定留 LLM）
 
 源自实战：用户跑 `/digital-delivery-team:integrate` 时 v0.9.11 在 Phase 1 直接 fail（docker compose v2 不可用），但用户系统其实有 docker-compose v5 standalone + 已运行的 Colima 容器。`reporter.fail()` 后 `process.exit(2)` 提前退出，**报告也没生成**——用户失去了观察整体阻塞模式的能力，只能手动接管整个流程。

@@ -107,14 +107,48 @@ if (report.files.tokens_css) {
 // JSX 组件改写
 for (const jsxRel of report.files.jsx) {
   // 1. 读 raw 中的 jsx
-  // 2. 改写：
-  //    - 把 fetch / axios / 直连 API 改为 web/lib/api-client.ts 的 OpenAPI fetch
+  // 2. 改写（v0.9.13 D30 实战补强）：
+  //    - 【数据层 API 化（强制）】prototype 的 mock 数组（如 const MON_VEHICLES = [...]、
+  //      ALERT_QUEUE / TASKS / USERS 等）必须**删除**，改用 web/src/api/client.ts 的
+  //      apiClient.GET('/<resource>') + useQuery（react-query）；prototype 是视觉与
+  //      结构来源，不是数据来源。
+  //    - 把 fetch / axios / 直连 API 改为 web/src/api/client.ts 的 OpenAPI fetch
   //    - 把组件命名对齐 components-inventory（复用而非新造）
   //    - 把 Tailwind class 中的硬编码颜色 / 间距改为 tokens 变量
   //    - 把 React Router / Next.js 路由对齐项目栈
-  // 3. 落到 web/components/<screen>.tsx
+  // 3. 落到 web/components/<screen>.tsx 或 web/src/pages/<page>.tsx
 }
 ```
+
+**典型反模式**（v0.9.13 D30 实战教训）：
+
+```jsx
+// ❌ 错误：把 prototype 的 mock 数组照搬到生产代码
+// page-monitor.jsx (bundle prototype) 含：
+const MON_VEHICLES = [
+  { id: 'V001', x: 120, y: 80, status: 'transport', battery: 78, ... },
+  // ... 10 项假数据
+];
+
+// MonitorPage.tsx (生产代码) 同 schema 复制：
+const VEHICLES = [
+  { id: 'V001', x: 120, y: 80, status: 'transport', battery: 78, ... },
+  // ... 同 10 项假数据
+];
+
+// ✅ 正确：删除 mock，改用 API client + react-query
+import { apiClient, unwrap } from '@/api/client';
+import { useQuery } from '@tanstack/react-query';
+
+const vehiclesQuery = useQuery({
+  queryKey: ['vehicles'],
+  queryFn: () => unwrap(apiClient.GET('/vehicles')),
+  refetchInterval: 5000, // 大屏 5s 轮询
+});
+const vehicles = vehiclesQuery.data ?? [];
+```
+
+**自动检测**：v0.9.13 D30 起 `bin/check-contract-alignment.mjs` 在 VERIFY 阶段扫"contract 定义 endpoint × web 含同名 mock 数组（≥3 项）"反模式，命中输出 file:line 清单到 `docs/build-web-summary.md`。
 
 #### Step 3：跑构建 + 测试 + 决策门
 
@@ -137,6 +171,16 @@ node "$DDT_PLUGIN_ROOT/bin/score-design-output.mjs"      # W6 实现，10 维评
 - 含非 white-listed UI 库（antd / mui / chakra-ui）
 
 `bin/ingest-claude-design.mjs::detectRedFlags` 自动检测前 3 条；UI 库由 main thread 改写时校验 components-inventory.md 红线段。
+
+### 软警告（v0.9.13 D30）
+
+不丢弃 bundle，但 main thread 改写时**必须处理**：
+
+- prototype 含 ≥3 项的 `const X = [...]` mock 数组（典型如 `MON_VEHICLES` / `ALERT_QUEUE` / `SAMPLE_TASKS`）→ 改写时**必须删除并替换为 apiClient 调用**
+- prototype 含 useState 初始值是 mock 数组（`useState(MON_VEHICLES)`）→ 改为 `useQuery({...})`
+- prototype 同时含 mock 数组 + 同名/近义的 contract endpoint（如 prototype 含 `MON_VEHICLES` + contract 含 `GET /vehicles`）→ **强相关**，必替换
+
+VERIFY 阶段 `bin/check-contract-alignment.mjs` 会扫剩余 mock 数组，命中 → 写到 `docs/build-web-summary.md` 的警告段。
 
 ---
 
