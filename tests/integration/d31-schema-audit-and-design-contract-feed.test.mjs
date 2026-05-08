@@ -85,47 +85,8 @@ test('D31: extract-contract-summary --dry-run 输出 6 步计划', () => {
   }
 });
 
-test('D31: extract-contract-summary 在缺 types.ts 时 exit 2 + 引导用户跑 generate-api-client', () => {
-  const dir = makeTmpDir();
-  try {
-    const r = spawnSync(process.execPath, [EXTRACT_BIN], { cwd: dir, encoding: 'utf8' });
-    assert.equal(r.status, 2);
-    assert.match(r.stderr, /types\.ts.*?不存在/);
-    assert.match(r.stderr, /generate-api-client/);
-  } finally { cleanup(dir); }
-});
-
-test('D31: extract-contract-summary 解析 types.ts 输出紧凑 schema 摘要', () => {
-  const dir = makeTmpDir();
-  try {
-    const apiDir = join(dir, 'web', 'src', 'api');
-    mkdirSync(apiDir, { recursive: true });
-    writeFileSync(join(apiDir, 'types.ts'), FAKE_TYPES_TS);
-
-    const r = spawnSync(process.execPath, [EXTRACT_BIN], { cwd: dir, encoding: 'utf8' });
-    assert.equal(r.status, 0);
-    assert.match(r.stdout, /## RealtimeVehicle/, '应输出 RealtimeVehicle schema');
-    assert.match(r.stdout, /lon: number/, '应含 lon 字段');
-    assert.match(r.stdout, /lat: number/, '应含 lat 字段');
-    assert.match(r.stdout, /enum\["ON_TASK","IDLE","CHARGING"\]/, '应识别 enum 值');
-    assert.match(r.stdout, /反模式黑名单/, '应附反模式黑名单');
-  } finally { cleanup(dir); }
-});
-
-test('D31: extract-contract-summary 过滤 ApiResponseX / PageX 包装类', () => {
-  const dir = makeTmpDir();
-  try {
-    const apiDir = join(dir, 'web', 'src', 'api');
-    mkdirSync(apiDir, { recursive: true });
-    writeFileSync(join(apiDir, 'types.ts'), FAKE_TYPES_TS);
-
-    const r = spawnSync(process.execPath, [EXTRACT_BIN], { cwd: dir, encoding: 'utf8' });
-    assert.equal(r.status, 0);
-    assert.ok(!/## ApiResponseRealtimeVehicleList/.test(r.stdout),
-      '应过滤 ApiResponseX 包装类');
-    assert.match(r.stdout, /## RealtimeVehicleList/, '业务包装类（含 list 字段）应保留');
-  } finally { cleanup(dir); }
-});
+// D31 原 3 个 types.ts 测试已被 v0.9.15 D32 重构作废（extract-contract-summary 改为 yaml-only）
+// 等同功能由 d32-contract-summary-from-yaml.test.mjs 覆盖（基于 yaml SSoT 而非 types.ts 派生品）
 
 // ============================================================================
 // 2. audit-schema-alignment 字段差集行为

@@ -4,6 +4,100 @@
 
 ---
 
+## [0.9.15] - 2026-05-08 — 实战 hotfix D32：把 contract-summary 锚回 yaml SSoT（消除时序设计 bug）
+
+源自实战：用户在 alv-ops 跑 v0.9.14 D31 后发现派发包 `03b-contract-summary.md` 是占位 hint 不是真实摘要——根因是 v0.9.14 D31 让 `extract-contract-summary` 依赖 `web/src/api/types.ts`（v0.9.13 D30 generate-api-client 产物），但 `/design-execute` 在 `/build-web` 之前，web/ 整个目录都不存在。
+
+用户洞察："**yaml 是唯一真相源，types.ts 本质上也是 yaml 出来的**"——拒绝层级派生（contract.yaml → types.ts → contract-summary.md 是绕路）。
+
+### 🔵 D32 修 3 件事
+
+#### 1. extract-contract-summary 重写为 yaml-only
+
+**之前（D31 错位设计）**：读 `web/src/api/types.ts`（types.ts 是 yaml 派生品；时序错位）
+
+**现在（D32 SSoT）**：直接读 `docs/api-contract.yaml`（OpenAPI 3.x，design-execute 阶段必有）
+
+新增鲁棒 yaml schemas 解析器：
+- 找 components.schemas 段（基于缩进 + PascalCase: 标识）
+- 切分每个 schema（缩进 4 + 名字行）
+- 解析 required + properties（混合 inline + 多行展开）
+- 抽 type / enum / $ref / format / nullable
+- 实测 alv-ops contract.yaml：39 个业务 schema 全部解析，enum 值精确抽（roleCode / status / chargingStatus）
+
+#### 2. extract-contract-summary 双模式（CLI + module）
+
+```js
+// CLI 用法不变
+node bin/extract-contract-summary.mjs --output docs/contract-summary.md
+
+// 新：module 用法（供 derive-channel-package 直接 import）
+import { generateContractSummary } from './extract-contract-summary.mjs';
+const result = generateContractSummary({ projectRoot, output });
+```
+
+`isCli` 检测保证 module 导入时不触发 main()。
+
+#### 3. derive-channel-package 自动 import 调用
+
+**之前（D31）**：`docs/contract-summary.md` 不存在 → 输出占位 hint 让用户手动跑两条命令
+
+**现在（D32）**：
+
+```js
+import { generateContractSummary } from './extract-contract-summary.mjs';
+
+// 派发包构造时：
+if (src === 'docs/contract-summary.md' && !existsSync(srcPath)) {
+  const result = generateContractSummary({ projectRoot: cwd, output: srcPath });
+  // 失败时退化为占位 hint（罕见 fallback）
+}
+```
+
+不 spawn 子进程（避开 hook 误判 + 零进程开销）。
+
+### 设计哲学（用户洞察提炼）
+
+**SSoT 原则的工程意义**：每次链路里多一层派生（yaml → types.ts → summary），就多一个时序依赖 + 一个失效点。从 SSoT（yaml）直接派生所有下游产物是最稳的拓扑。
+
+**module + CLI 双模式 = 工具间集成的正解**：比 spawn 更优雅、零进程开销、零 hook 误判。
+
+**stage-appropriate 的反面**：D31 让早期阶段（design-execute）依赖晚期产物（types.ts）——这是反模式。每个工具应该锚定时序上 always 已存在的输入。
+
+### 测试覆盖（+13 用例）
+
+`tests/integration/d32-contract-summary-from-yaml.test.mjs`：
+- extract-contract-summary：dry-run / yaml 缺失 exit 2 / 不再依赖 types.ts / 解析 yaml 抽 schemas+enum+nullable / 过滤 ApiResponseX / --output 写文件
+- module 模式：导出 generateContractSummary 函数 / 返回 ok+markdown / yaml 缺失返回 ok:false
+- derive-channel-package：import 调用（不 spawn） / 自动生成
+- 端到端：派发包 03b 含真实摘要 / yaml 缺失时占位 hint
+
+D31 测试中 3 个 types.ts 相关用例已删除（被 D32 yaml-only 覆盖）：
+- `extract-contract-summary 在缺 types.ts 时 exit 2`
+- `extract-contract-summary 解析 types.ts 输出紧凑 schema 摘要`
+- `extract-contract-summary 过滤 ApiResponseX / PageX 包装类`
+
+测试基数 523 → 533（D31 -3 + D32 +13，净 +10，零回归）。
+
+### alv-ops 现场验证
+
+- 删除旧 `.ddt/design/claude-design/upload-package` + 旧 `docs/contract-summary.md`
+- 重跑 derive-channel-package → **派发包 03b 是 8.5KB 真实摘要**（39 schema + 反模式黑名单），不再是占位
+- web/src/api/types.ts 不存在不影响（yaml-only 不依赖它）
+
+### 用户下次跑 /design-execute
+
+派发包 8 文件全自动到位：
+- 01-design-brief.md
+- 02-prd.md
+- 03-api-contract.yaml（94KB 完整版）
+- **03b-contract-summary.md**（紧凑摘要，design AI 优先扫这个）⭐
+- 04-tech-stack.json / 05-design-tokens.json / 06-components-inventory.md / 07-references/
+
+不再需要任何手动命令。
+
+---
+
 ## [0.9.14] - 2026-05-08 — 实战 hotfix D31：上游修复（design AI 字段约束）+ 事后审计（schema 字段层差集）
 
 源自实战：用户在 alv-ops 项目跑完 v0.9.13 D30 之后追问"web 受 claude-design bundle 影响，玩的是自己的 mock 数据和 API 契约一点关系没有"——派 code-architect-cn 专家 agent 三方对比（web mock × contract.yaml × server DTO），实证发现：

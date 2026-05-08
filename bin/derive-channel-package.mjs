@@ -35,6 +35,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// v0.9.15 D32：直接 import 调用而非 spawn 子进程
+import { generateContractSummary } from './extract-contract-summary.mjs';
 import { execFileSync } from 'node:child_process';
 
 import { ANTI_PATTERNS } from './compile-design-brief.mjs';
@@ -352,27 +354,28 @@ function deriveClaudeDesign(cwd, meta, opts) {
   ];
   for (const [src, dst, title] of copies) {
     const srcPath = join(cwd, src);
-    // 03b 缺失时尝试现场生成 contract 摘要（v0.9.14 D31）
-    if (src === 'docs/contract-summary.md' && !existsSync(srcPath)) {
+    // v0.9.15 D32：03b 缺失时直接 import 调用 extract-contract-summary 生成
+    //   yaml 是唯一真相源（design-execute 时序上 always 已存在）
+    //   不再需要 types.ts 派生品 → 不再有时序依赖问题
+    if (src === 'docs/contract-summary.md' && !existsSync(srcPath) && !opts.dryRun) {
       try {
-        // 调用 extract-contract-summary 生成（仅在 web/src/api/types.ts 已存在时）
-        const typesPath = join(cwd, 'web', 'src', 'api', 'types.ts');
-        if (existsSync(typesPath)) {
-          // 内联调用 extract-contract-summary 的核心逻辑
-          // （避免 spawn 依赖；这里简化为提示用户先跑命令）
+        const result = generateContractSummary({ projectRoot: cwd, output: srcPath });
+        if (!result.ok) {
+          console.warn('  ⚠️  contract-summary 生成失败：' + result.message);
         }
-      } catch {}
+      } catch (e) {
+        console.warn('  ⚠️  contract-summary 生成异常：' + e.message);
+      }
     }
     if (existsSync(srcPath)) {
       writes.push(copyOrWrapForUpload(srcPath, dst, uploadDir, opts, title));
     } else if (src === 'docs/contract-summary.md') {
-      // 不存在时输出占位文件 + hint
+      // 罕见 fallback：yaml 都没有时（design 阶段未跑），输出占位 + hint
       const hintPath = join(uploadDir, dst);
-      const hint = '# Contract Schema 摘要（v0.9.14 D31）\n\n' +
-        '> ℹ️ 此文件由 `bin/extract-contract-summary.mjs` 生成；\n' +
-        '> 跑 `node $DDT_PLUGIN_ROOT/bin/extract-contract-summary.mjs --output docs/contract-summary.md`\n' +
-        '> 然后重跑 `/digital-delivery-team:design-execute --refresh` 让真实摘要进入派发包。\n\n' +
-        '当前缺失：design AI 仅依赖 03-api-contract.yaml 全文，可能"视觉合理性优先"生造字段。';
+      const hint = '# Contract Schema 摘要（v0.9.15 D32）\n\n' +
+        '> ⚠️ 自动生成失败：docs/api-contract.yaml 不存在或解析失败。\n' +
+        '> 先跑 `/digital-delivery-team:design` 生成 api-contract.yaml，\n' +
+        '> 然后重跑 `/digital-delivery-team:design-execute --refresh`。\n';
       if (!opts.dryRun) {
         writeFileSync(hintPath, hint, 'utf8');
       }

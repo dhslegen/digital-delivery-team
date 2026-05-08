@@ -1,27 +1,25 @@
 #!/usr/bin/env node
-// DDT v0.9.14 D31 · 把 OpenAPI 契约提炼为 design AI 友好的紧凑字段摘要
+// DDT v0.9.15 D32 · 把 OpenAPI 契约提炼为 design AI 友好的紧凑字段摘要
 //
-// 用途：v0.9.14 实战发现 design AI 拿到 94KB / 41 paths 的完整 contract.yaml
-// 仍然会"视觉合理性优先"生造 x/y/sla/level 等字段。根因是长文档里的关键
-// 字段约束被注意力稀释。本脚本利用 v0.9.13 generate-api-client 已生成的
-// types.ts（结构化 TS 接口）抽出每个 schema 的字段集，渲染紧凑摘要。
+// 时序设计：/design-execute 在 /build-web 之前——web/ 还没 scaffold，types.ts 不存在。
+// 因此本脚本只读 docs/api-contract.yaml（SSoT，时序上 always 已存在），
+// 不依赖 v0.9.13 D30 generate-api-client 的 types.ts 派生品。
 //
-// 输入：<target>/src/api/types.ts（v0.9.13 D30 generate-api-client 产物）
+// 输入：docs/api-contract.yaml（OpenAPI 3.x，唯一真相源）
 // 输出：默认 stdout；--output 写文件
-// 格式：
-//   ## RealtimeVehicle
-//   { vin: string, lon: number, lat: number, status: enum["ON_TASK","IDLE","CHARGING"], ... }
+// 模式：既是 CLI 又是 module（导出 generateContractSummary 供 derive-channel-package 调用）
 //
-// 用法：
+// 用法（CLI）：
 //   node bin/extract-contract-summary.mjs                      # stdout
 //   node bin/extract-contract-summary.mjs --output <path>      # 写文件
-//   node bin/extract-contract-summary.mjs --target=app         # 改前端目录
 //   node bin/extract-contract-summary.mjs --dry-run            # 计划
+//
+// 用法（module）：
+//   import { generateContractSummary } from './extract-contract-summary.mjs';
+//   const summary = generateContractSummary({ projectRoot, output });
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve, join } from 'node:path';
-
-const PROJECT_ROOT = process.cwd();
+import { dirname, resolve } from 'node:path';
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -39,72 +37,181 @@ function parseArgs(argv) {
 }
 
 // ============================================================================
-// types.ts schema 抽取
+// OpenAPI yaml schemas 解析（仅 components.schemas 段，混合 inline + 多行）
 // ============================================================================
 
-function extractSchemasBlock(text) {
-  const compStart = text.indexOf('interface components');
-  if (compStart < 0) return null;
-  const schemasStart = text.indexOf('schemas: {', compStart);
+// 找 components → schemas 段范围
+function findSchemasRange(lines) {
+  let inComponents = false;
+  let schemasStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^components:\s*$/.test(line)) { inComponents = true; continue; }
+    if (inComponents && /^  schemas:\s*$/.test(line)) { schemasStart = i + 1; break; }
+    // 顶层另一段（指 components 块结束）
+    if (inComponents && /^[a-zA-Z]/.test(line) && !/^components:/.test(line)) { inComponents = false; }
+  }
   if (schemasStart < 0) return null;
-  let depth = 1;
-  let pos = schemasStart + 'schemas: {'.length;
-  while (pos < text.length && depth > 0) {
-    const c = text[pos];
-    if (c === '{') depth++;
-    else if (c === '}') depth--;
-    pos++;
+  // 找 schemas 段终点：下一个缩进 ≤ 2 的非空非注释行
+  let schemasEnd = lines.length;
+  for (let i = schemasStart; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const indent = line.match(/^( *)/)[1].length;
+    if (indent <= 2) { schemasEnd = i; break; }
   }
-  return text.slice(schemasStart + 'schemas: {'.length, pos - 1);
+  return { start: schemasStart, end: schemasEnd };
 }
 
-function splitSchemas(schemasBlock) {
-  const schemas = [];
-  const re = /^        ([A-Za-z][\w]*):\s*\{$/gm;
-  const indices = [];
-  let m;
-  while ((m = re.exec(schemasBlock)) !== null) {
-    indices.push({ name: m[1], start: m.index, openEnd: m.index + m[0].length });
-  }
-  for (let i = 0; i < indices.length; i++) {
-    const cur = indices[i];
-    const next = indices[i + 1];
-    const bodyEnd = next ? next.start : schemasBlock.length;
-    const body = schemasBlock.slice(cur.openEnd, bodyEnd);
-    schemas.push({ name: cur.name, body });
-  }
-  return schemas;
-}
-
-function extractFields(body) {
-  const fields = [];
-  const lines = body.split(/\r?\n/);
-  for (const line of lines) {
-    const m = line.match(/^            (?:"([^"]+)"|([a-zA-Z_$][\w$]*))(\??)\s*:\s*(.+?);\s*$/);
-    if (m) {
-      const name = m[1] || m[2];
-      const optional = m[3] === '?';
-      const type = simplifyType(m[4].trim());
-      fields.push({ name, type, optional });
+// 切分每个 schema（缩进 4 + PascalCase: 行）
+function splitSchemas(lines, range) {
+  const schemaIndices = [];
+  for (let i = range.start; i < range.end; i++) {
+    const line = lines[i];
+    if (/^    [A-Z][\w]*:\s*$/.test(line)) {
+      const m = line.match(/^    (\w+):/);
+      schemaIndices.push({ name: m[1], start: i });
     }
   }
-  return fields;
+  const result = [];
+  for (let i = 0; i < schemaIndices.length; i++) {
+    const cur = schemaIndices[i];
+    const next = i + 1 < schemaIndices.length ? schemaIndices[i + 1].start : range.end;
+    result.push({ name: cur.name, lines: lines.slice(cur.start + 1, next) });
+  }
+  return result;
 }
 
-function simplifyType(t) {
-  t = t.trim();
-  if (t === 'Record<string, never>') return 'object';
+// 解析单个 schema：required + fields
+function parseSchema(name, schemaLines) {
+  const required = new Set();
+  const fields = [];
+  let inProperties = false;
+  let inRequiredList = false;
 
-  const literalUnion = t.match(/^(?:(?:"[^"]*"|\d+)\s*\|\s*)+(?:"[^"]*"|\d+)$/);
-  if (literalUnion) {
-    const vals = t.split('|').map(x => x.trim().replace(/^"|"$/g, ''));
-    return `enum[${vals.map(v => `"${v}"`).join(',')}]`;
+  for (let i = 0; i < schemaLines.length; i++) {
+    const line = schemaLines[i];
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    const indent = line.match(/^( *)/)[1].length;
+
+    // required: [a, b, c]
+    if (indent === 6 && /^      required:\s*\[/.test(line)) {
+      const m = line.match(/required:\s*\[([^\]]*)\]/);
+      if (m) m[1].split(',').forEach(s => required.add(s.trim().replace(/['"]/g, '')));
+      inRequiredList = false;
+      continue;
+    }
+    // required:\n  - a\n  - b
+    if (indent === 6 && /^      required:\s*$/.test(line)) {
+      inRequiredList = true;
+      continue;
+    }
+    if (inRequiredList && indent === 8 && /^\s+-\s*(\w+)/.test(line)) {
+      const m = line.match(/^\s+-\s*['"]?(\w+)['"]?/);
+      if (m) required.add(m[1]);
+      continue;
+    }
+    if (inRequiredList && indent <= 6) inRequiredList = false;
+
+    // properties: 段开始
+    if (indent === 6 && /^      properties:\s*$/.test(line)) {
+      inProperties = true;
+      continue;
+    }
+    // 退出 properties 段（同级或上级 key）
+    if (inProperties && indent === 6 && /\S/.test(line)) {
+      inProperties = false;
+    }
+
+    // 字段行（缩进 8）
+    if (inProperties && indent === 8) {
+      const m = line.match(/^\s+([a-zA-Z_$][\w$]*)\s*:(.*)$/);
+      if (!m) continue;
+      const fname = m[1];
+      const rest = m[2].trim();
+      const field = { name: fname, type: 'unknown', enumValues: null, isArray: false };
+
+      if (rest && rest.startsWith('{')) {
+        // inline 风格：可能跨行（用 brace 计数）
+        let inlineText = rest;
+        let braceDepth = 0;
+        for (const c of rest) {
+          if (c === '{') braceDepth++;
+          else if (c === '}') braceDepth--;
+        }
+        let j = i;
+        while (braceDepth > 0 && j + 1 < schemaLines.length) {
+          j++;
+          const next = schemaLines[j];
+          inlineText += ' ' + next.trim();
+          for (const c of next) {
+            if (c === '{') braceDepth++;
+            else if (c === '}') braceDepth--;
+          }
+        }
+        parseInlineProps(inlineText, field);
+        i = j; // 跳过已合并的行
+      } else if (rest === '') {
+        // 多行展开 → 扫子缩进（10）行
+        for (let j = i + 1; j < schemaLines.length; j++) {
+          const sub = schemaLines[j];
+          if (!sub.trim()) continue;
+          const subIndent = sub.match(/^( *)/)[1].length;
+          if (subIndent <= 8) break; // 退出当前字段
+          if (subIndent === 10) parseAttrLine(sub, field);
+          // 12+ 缩进是嵌套属性的子细节，忽略
+        }
+      } else {
+        // 形如 `fieldName: integer`（少见，但 OpenAPI 允许）
+        // 不做处理
+      }
+      fields.push({ ...field, optional: !required.has(fname) });
+    }
   }
 
-  t = t.replace(/components\["schemas"\]\["([^"]+)"\]/g, '$1');
-  if (t.endsWith('[]')) return `array<${t.slice(0, -2)}>`;
+  return { name, fields };
+}
 
-  return t;
+function parseInlineProps(inlineText, field) {
+  // inline: { type: string, format: date-time, enum: [A, B], $ref: '...', nullable: true }
+  const typeMatch = inlineText.match(/\btype:\s*(\w+)/);
+  if (typeMatch) field.type = typeMatch[1];
+
+  const enumMatch = inlineText.match(/\benum:\s*\[([^\]]*)\]/);
+  if (enumMatch) {
+    field.enumValues = enumMatch[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
+  }
+
+  const refMatch = inlineText.match(/\$ref:\s*['"]?#\/components\/schemas\/(\w+)['"]?/);
+  if (refMatch) field.type = refMatch[1];
+
+  const formatMatch = inlineText.match(/\bformat:\s*([\w-]+)/);
+  if (formatMatch && (formatMatch[1] === 'date-time' || formatMatch[1] === 'date')) {
+    field.type = formatMatch[1];
+  }
+
+  if (field.type === 'array') field.isArray = true;
+}
+
+function parseAttrLine(line, field) {
+  const trimmed = line.trim();
+
+  if (/^type:\s*\w+/.test(trimmed)) {
+    const m = trimmed.match(/^type:\s*(\w+)/);
+    if (m) field.type = m[1];
+  }
+  if (/^format:\s*[\w-]+/.test(trimmed)) {
+    const m = trimmed.match(/^format:\s*([\w-]+)/);
+    if (m && (m[1] === 'date-time' || m[1] === 'date')) field.type = m[1];
+  }
+  if (/^enum:\s*\[/.test(trimmed)) {
+    const m = trimmed.match(/^enum:\s*\[([^\]]*)\]/);
+    if (m) field.enumValues = m[1].split(',').map(s => s.trim().replace(/['"]/g, '')).filter(Boolean);
+  }
+  if (/\$ref:/.test(trimmed)) {
+    const m = trimmed.match(/\$ref:\s*['"]?#\/components\/schemas\/(\w+)['"]?/);
+    if (m) field.type = m[1];
+  }
 }
 
 // ============================================================================
@@ -112,7 +219,11 @@ function simplifyType(t) {
 // ============================================================================
 
 function fieldToString(f) {
-  return `${f.name}${f.optional ? '?' : ''}: ${f.type}`;
+  let typeStr = f.type;
+  if (f.enumValues && f.enumValues.length) {
+    typeStr = 'enum["' + f.enumValues.join('","') + '"]';
+  }
+  return f.name + (f.optional ? '?' : '') + ': ' + typeStr;
 }
 
 const WRAPPER_PREFIXES = ['ApiResponse', 'Page', 'PageVo'];
@@ -122,21 +233,21 @@ function isBusinessSchema(name) {
 
 function render(schemas) {
   const lines = [
-    '# Contract Schema 摘要（v0.9.14 D31 · design AI 字段约束）',
+    '# Contract Schema 摘要（v0.9.15 D32 · design AI 字段约束）',
     '',
     '> ⚠️ **此文件是字段名硬约束**：design AI 设计 mock 数据时 **必须使用以下字段名**，',
     '> 禁止凭训练偏置生造视觉用字段（如 `x` `y` `sla` `level` `progress` 等——除非 contract 真有）。',
     '> 如果你需要某个字段而 contract 里没有，请在输出里**显式 flag**："发现需要 `<field>` 但 contract 未定义，请用户决策"。',
     '',
-    `共 ${schemas.length} 个业务 schema（已过滤 ApiResponseX / PageX 包装）。`,
+    '> 来源：`docs/api-contract.yaml` · ' + schemas.length + ' 个业务 schema（已过滤 ApiResponseX / PageX 包装）',
     '',
   ];
 
   for (const s of schemas) {
     if (s.fields.length === 0) continue;
-    lines.push(`## ${s.name}`);
+    lines.push('## ' + s.name);
     lines.push('');
-    lines.push(`{ ${s.fields.map(fieldToString).join(', ')} }`);
+    lines.push('{ ' + s.fields.map(fieldToString).join(', ') + ' }');
     lines.push('');
   }
 
@@ -162,60 +273,86 @@ function render(schemas) {
 }
 
 // ============================================================================
-// 主流程
+// 核心 module 函数（既给 CLI 用也给 derive-channel-package 用）
 // ============================================================================
 
-function main() {
+export function generateContractSummary(options) {
+  const projectRoot = options.projectRoot || process.cwd();
+  const yamlPath = options.yamlPath || resolve(projectRoot, 'docs/api-contract.yaml');
+
+  if (!existsSync(yamlPath)) {
+    return { ok: false, error: 'YAML_NOT_FOUND', message: yamlPath + ' 不存在' };
+  }
+
+  const text = readFileSync(yamlPath, 'utf8');
+  const lines = text.split(/\r?\n/);
+  const range = findSchemasRange(lines);
+  if (!range) {
+    return { ok: false, error: 'SCHEMAS_NOT_FOUND', message: 'yaml 中找不到 components.schemas 段' };
+  }
+
+  const allSchemas = splitSchemas(lines, range).map(s => parseSchema(s.name, s.lines));
+  const businessSchemas = allSchemas.filter(s => isBusinessSchema(s.name) && s.fields.length > 0);
+
+  const markdown = render(businessSchemas);
+
+  if (options.output) {
+    const outPath = resolve(options.output);
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, markdown);
+  }
+
+  return {
+    ok: true,
+    markdown,
+    totalSchemas: allSchemas.length,
+    businessSchemas: businessSchemas.length,
+    yamlPath,
+    outputPath: options.output ? resolve(options.output) : null,
+  };
+}
+
+// ============================================================================
+// CLI 入口（仅在直接运行时触发）
+// ============================================================================
+
+import { fileURLToPath } from 'node:url';
+const isCli = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isCli) {
   const args = parseArgs(process.argv.slice(2));
-  const target = args.target || 'web';
-  const typesPath = join(PROJECT_ROOT, target, 'src', 'api', 'types.ts');
 
   if (args['dry-run']) {
     console.log('# extract-contract-summary --dry-run');
-    console.log('1. 读 ' + typesPath + '（v0.9.13 D30 generate-api-client 产物）');
-    console.log('2. 不存在则提示用户先跑 generate-api-client.mjs');
-    console.log('3. 解析 components.schemas 段抽每个 schema 的字段集');
-    console.log('4. 过滤 ApiResponseX / PageX 包装（仅展示业务 schema）');
-    console.log('5. 渲染紧凑摘要 + v0.9.14 D31 反模式黑名单');
-    console.log(args.output ? '6. 写到 ' + args.output : '6. 输出到 stdout');
+    console.log('1. 读 docs/api-contract.yaml（OpenAPI 3.x SSoT）');
+    console.log('2. 找 components.schemas 段范围');
+    console.log('3. 切分每个 schema（缩进 4 + PascalCase: 行）');
+    console.log('4. 解析每个 schema 的 required + properties 字段（混合 inline + 多行展开）');
+    console.log('5. 过滤 ApiResponseX / PageX 包装类');
+    console.log('6. 渲染紧凑摘要：## SchemaName → { field?: type, ... } + enum 值');
+    console.log('7. 末尾附 v0.9.14 D31 反模式黑名单');
+    console.log(args.output ? '8. 写到 ' + args.output : '8. 输出到 stdout');
     process.exit(0);
   }
 
-  if (!existsSync(typesPath)) {
-    console.error('❌ ' + typesPath + ' 不存在');
-    console.error('💡 请先跑：node $DDT_PLUGIN_ROOT/bin/generate-api-client.mjs');
-    console.error('   该命令会从 docs/api-contract.yaml 生成 types.ts，本脚本依赖之');
-    process.exit(2);
-  }
+  const result = generateContractSummary({
+    projectRoot: process.cwd(),
+    output: args.output,
+  });
 
-  const text = readFileSync(typesPath, 'utf8');
-  const schemasBlock = extractSchemasBlock(text);
-  if (!schemasBlock) {
-    console.error('❌ 在 types.ts 中找不到 components.schemas 段；types.ts 格式可能与预期不符');
+  if (!result.ok) {
+    if (result.error === 'YAML_NOT_FOUND') {
+      console.error('❌ ' + result.message + '；先跑 /design');
+      process.exit(2);
+    }
+    console.error('❌ ' + result.message);
     process.exit(3);
   }
 
-  const allSchemas = splitSchemas(schemasBlock).map(s => ({
-    ...s,
-    fields: extractFields(s.body),
-  }));
-
-  const businessSchemas = allSchemas.filter(s =>
-    isBusinessSchema(s.name) && s.fields.length > 0
-  );
-
-  const output = render(businessSchemas);
-
-  if (args.output) {
-    const outPath = resolve(args.output);
-    mkdirSync(dirname(outPath), { recursive: true });
-    writeFileSync(outPath, output);
-    console.log('✅ 写入 ' + outPath + '（' + businessSchemas.length + ' 业务 schema / 总 ' + allSchemas.length + '）');
+  if (result.outputPath) {
+    console.log('✅ 写入 ' + result.outputPath + '（' + result.businessSchemas + ' 业务 schema / 总 ' + result.totalSchemas + '）');
   } else {
-    console.log(output);
+    console.log(result.markdown);
   }
-
   process.exit(0);
 }
-
-main();
