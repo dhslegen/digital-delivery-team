@@ -2,11 +2,13 @@
 
 > 一人一队 · 全栈工程师的 AI 数字员工交付插件
 
-为 Claude Code 提供 **契约先行（Contract-First）+ 数字员工分工（Agent-Owned）+ 自动度量（Hooks-Driven）+ 人机协作（Decision-Gated）** 的端到端交付工作流。**一句话**：从产品需求到上线交付，由 8 个数字员工接力完成，每个关键节点你都能介入决策，每个阶段自动度量，每条产物可追溯。
+为 Claude Code 提供 **契约先行（Contract-First）+ 数字员工分工（Agent-Owned）+ 自动度量（Hooks-Driven）+ 人机协作（Decision-Gated）** 的端到端交付工作流。**一句话**：从产品需求到上线交付，由数字员工接力完成，每个关键节点你都能介入决策，每个阶段自动度量，每条产物可追溯。
 
-8 数字员工 · 19 命令 · 11 技能 · 8 类 Hook · 5 套技术栈预设 · 4 套 AI-native UI 通道 · 6-phase 开发范式 · 决策门 · 进度状态机 · 跨会话接力 · Node 22+ 零 npm 依赖
+9 数字员工 · 21 命令 · 13 技能 · 8 类 Hook · 5 套技术栈预设 · 3 套 AI-native UI 通道 · 6-phase 开发范式 · 决策门 · 进度状态机 · 跨会话接力 · Node 22+ 零 npm 依赖
 
-[![Tests](https://img.shields.io/badge/tests-122%2F122%20passing-brightgreen)](#testing) [![Version](https://img.shields.io/badge/version-0.7.0-blue)](./CHANGELOG.md) [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![Tests](https://img.shields.io/badge/tests-548%2F548%20passing-brightgreen)](#testing) [![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
+> 历史变更与每个特性的引入版本见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -28,7 +30,7 @@
 /digital-delivery-team:doctor
 ```
 
-应见 11 项全部 ✅。任一未通过按提示处理。
+应见各项全部 ✅。任一未通过按提示处理。
 
 ---
 
@@ -44,14 +46,15 @@ echo "我要做一个任务清单 Web App，支持看板视图和标签管理" >
 ```text
 /kickoff                    # 默认 interactive 模式：每个 phase 落盘后暂停决策门
 /impl                       # 串行 /build-api → 决策门 → /build-web，每文件 validation
+/integrate                  # 编排前后端联调（docker compose + db migrate + smoke）
 /verify                     # 测试 + 评审并行
 /ship                       # 文档 + 效率报告 + 打包
 ```
 
-如果想要旧版"一键自动"体验：
+如果想要"一键自动"体验：
 
 ```text
-/kickoff --auto             # 跳过所有决策门，按 v0.6.x 串行 chain 跑
+/kickoff --auto             # 跳过所有决策门，按串行 chain 一气呵成
 ```
 
 完成后产出全部位于项目目录：
@@ -61,6 +64,7 @@ docs/prd.md  docs/wbs.md  docs/risks.md
 docs/arch.md  docs/api-contract.yaml  docs/data-model.md
 docs/build-api-exploration.md  docs/build-api-plan.md  docs/build-api-summary.md
 docs/build-web-exploration.md  docs/build-web-plan.md  docs/build-web-summary.md
+docs/external-integration-audit.md  docs/schema-alignment-audit.md
 web/...  server/...  tests/test-report.md
 docs/review-report.md  docs/efficiency-report.md
 README.md  docs/deploy.md  docs/demo-script.md
@@ -72,11 +76,11 @@ delivery-<project-id>-<timestamp>.tar.gz   ← 一键交付包
 
 ---
 
-## v0.7.0 三大核心能力
+## 三大核心能力
 
 ### 1. 6-phase 开发范式（去 subagent 黑盒）
 
-`/build-api` 与 `/build-web` 不再用 subagent 黑盒派发，改为 main thread 流式 6-phase：
+`/build-api` 与 `/build-web` 在 main thread 内流式执行 6-phase：
 
 ```
 EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
@@ -89,7 +93,7 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 
 ### 2. 决策门（去盲盒）
 
-10 个 phase 落盘后强制触发 `AskUserQuestion` 4 选项问卷：
+每个 phase 落盘后强制触发 `AskUserQuestion` 4 选项问卷：
 
 - **接受并继续** → 进入下一 phase
 - **修改某条具体内容** → 询问哪条 + 怎么改 → `--refresh` 增量
@@ -128,18 +132,19 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 | 文档 | `/package` | `README.md` + `docs/deploy.md` + `docs/demo-script.md` | docs-agent |
 | 度量 | `/report` | `docs/efficiency-report.md`（含洞察 + 优化建议） | metrics-agent |
 
-> v0.7.0 起 `/build-api` `/build-web` 不再用 subagent 派发，改为 main thread 流式可见 + 每文件 validation。
+> `/build-api` `/build-web` 不再用 subagent 派发，改为 main thread 流式可见 + 每文件 validation。
 
-### 编排命令（4 个）
+### 编排命令（5 个）
 
 | 命令 | 等价于 | 适用场景 |
 |------|--------|---------|
 | `/kickoff [--auto] [--preset]` | `/prd` → `/wbs` → `/design` | 新项目起手；默认 interactive |
 | `/impl [--web-only\|--api-only] [--auto] [--module <name>]` | **串行** `/build-api` → `/build-web` | 设计冻结后实现 |
+| `/integrate [--reuse-stack] [--tear-down]` | `docker compose up` → `db migrate` → 启动 server/web → smoke | 前后端联调出包前一步 |
 | `/verify` | `/test` ‖ `/review`（并行） | 实现完成后并行验收 |
 | `/ship` | `/package` → `/report` + 打包 tar.gz | 交付出包 |
 
-### 辅助命令（5 个）
+### 辅助命令（6 个）
 
 | 命令 | 用途 |
 |------|------|
@@ -149,7 +154,7 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 | `/preview <prd\|wbs\|design\|impl\|test\|review\|fix\|package\|report\|all>` | 输出指定 phase 关键摘要 + diff（决策门前快速扫一眼） |
 | `/resume` | 显示当前进度 + 下一步建议（同会话恢复） |
 | `/relay [--out <path>]` | **跨会话接力**：13 段式 prompt 输出，复制到下一会话即可续作 |
-| `/digital-delivery-team:doctor` | 11 项安装自检 |
+| `/digital-delivery-team:doctor` | 安装自检 |
 
 ---
 
@@ -167,7 +172,7 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 | `go-modern` | Gin + Postgres + GORM | React 18 + Tailwind + shadcn-ui | claude-design |
 | `python-fastapi` | FastAPI + Postgres + SQLAlchemy + Alembic | React 18 + Tailwind + shadcn-ui | claude-design |
 
-### Spring Initializr 等价问卷（推荐路径，v0.6.1+）
+### Spring Initializr 等价问卷（推荐路径）
 
 `project-brief.md` 中写 `**技术栈预设**: interactive`，跑 `/kickoff` 时 LLM 主动调用 `AskUserQuestion` 4 步问卷：
 
@@ -184,13 +189,13 @@ EXPLORE  →  PLAN  →  APPROVE  →  IMPLEMENT  →  VERIFY  →  SUMMARY
 
 CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.ddt/tech-stack.json` → manifest 自动检测（`pom.xml`/`package.json`/`go.mod`/`pyproject.toml`）→ 默认 `java-modern`。
 
-> `.ddt/tech-stack.json` 是技术栈 SSoT，**仅 `bin/resolve-tech-stack.mjs` 可写入**；agent / LLM 直接编辑会被 PreToolUse hook 硬拦截（v0.6.1+）。
+> `.ddt/tech-stack.json` 是技术栈 SSoT，**仅 `bin/resolve-tech-stack.mjs` 可写入**；agent / LLM 直接编辑会被 PreToolUse hook 硬拦截。
 
 ---
 
-## AI-native UI 通道（v0.8 W3 重构：brief 编译器 + 3 通道分发器）
+## AI-native UI 通道
 
-工作流分两步（v0.8 删除 `/import-design` 与 `lovable` 通道）：
+工作流分两步：
 
 ```text
 /design-brief                                    # 从 PRD + 契约编译 10 字段 brief
@@ -202,8 +207,6 @@ CLI flag → `project-brief.md`：技术栈预设字段 → 已存在的 `.ddt/t
 | `claude-design` ⭐ | 首选默认；用户已订阅 Claude，零成本零网络外发 | brief → claude.ai/design 迭代 → `--bundle <zip>` 摄取 → main thread 按 SKILL §7 改写 |
 | `figma` | 设计稿驱动 | brief → figma MCP 引导清单 → main thread 调 `get_design_context` → 转 React + Tailwind |
 | `v0` | Next.js 现代化 UI | brief → `--url <share>` → 解析 v0 share URL → `npx shadcn add` → 接 OpenAPI client |
-
-> v0.7 的 `lovable` 通道在 v0.8 删除——强 Supabase 集成与 DDT 后端契约冲突，不做 alias（密集开发期无历史用户）。
 
 详细工作流见 `skills/ai-native-design/SKILL.md`。
 
@@ -222,10 +225,14 @@ project-brief.md
         ├─ /build-api  EXPLORE → PLAN → APPROVE → IMPLEMENT → VERIFY → SUMMARY
         │              （main thread + skills/backend-development）
         │              （每文件 validation-loop + checkpoint-commit）
+        │              （VERIFY 阶段调 audit-external-integration：扫 brief §11 vs server 实际 client 类）
         │
         └─ /build-web  EXPLORE → PLAN → APPROVE → IMPLEMENT → VERIFY → SUMMARY
                        （main thread + skills/frontend-development）
-                       （ai_design.type 决定 UI 来源）
+                       （ai_design.type 决定 UI 来源；强制跑 generate-api-client 生成 types.ts）
+
+    └─ /integrate ──── 启动 docker compose + db migrate + server + web + smoke
+                       （编排前后端联调出包前一步）
 
     └─ /verify ─────── test-agent      ──► tests/test-report.md          （并行）
                   └─── review-agent    ──► docs/review-report.md         （并行）
@@ -241,32 +248,34 @@ project-brief.md
 
 | 目录 | 内容 |
 |------|------|
-| `agents/` | 8 个数字员工子代理（v0.7.0 删除 backend/frontend，转入 skills） |
-| `commands/` | 19 个命令（10 岗位 + 4 编排 + 5 辅助 + relay/preview） |
-| `skills/` | 11 个领域知识 + 范式包 |
+| `agents/` | 9 个数字员工子代理（product / pm / architect / design-brief / test / review / fix / docs / metrics） |
+| `commands/` | 21 个命令（10 岗位 + 5 编排 + 6 辅助） |
+| `skills/` | 13 个领域知识 + 范式包 |
 | `hooks/` | 8 类事件注册 + handlers + lib/ |
-| `bin/` | 15 个脚本（aggregate / report / progress / resume / relay / preview / emit-phase / emit-decision / doctor / ...） |
-| `templates/` | 12 个模板（含 **tech-stack-presets** + **tech-stack-options** Spring Initializr 等价清单） |
+| `bin/` | 36 个脚本（aggregate / report / progress / resume / relay / preview / emit-phase / emit-decision / doctor / generate-api-client / generate-external-client / audit-* / integrate-up / ...） |
+| `templates/` | 模板（含 **tech-stack-presets** + **tech-stack-options** Spring Initializr 等价清单 + docker-compose 预设） |
 | `contexts/delivery.md` | 全局交付上下文（agent 必读） |
-| `rules/delivery/` | 6 条 Global Invariants 权威定义 |
-| `tests/` | 22 个测试文件（122 用例） |
+| `rules/delivery/` | Global Invariants 权威定义 |
+| `tests/` | 60 个测试文件（548 用例） |
 | `baseline/` | 历史项目基准数据 + 估算规则 |
 
-### 11 个 skill（v0.7.0）
+### 13 个 skill
 
-| Skill | 用途 | 来源 |
-|-------|------|------|
-| `acceptance-criteria` | Given/When/Then 验收标准写法 | DDT |
-| `api-contract-first` | OpenAPI 3.0 契约设计规范 | DDT |
-| `efficiency-metrics` | 度量基线 + 效率报告 | DDT |
-| `delivery-package` | README/deploy/demo 模板 | DDT |
-| `ai-native-design` | 3 套 AI 设计源工作流（claude/figma/v0；v0.8 删 lovable） | DDT |
-| **`backend-development`** | 后端实现知识包（替代 backend-agent，v0.7.0） | DDT |
-| **`frontend-development`** | 前端实现知识包（替代 frontend-agent，v0.7.0） | DDT |
-| **`validation-loop`** | 每文件 build/lint/test，失败立即停 | DDT (v0.7.0) |
-| **`checkpoint-commit`** | 每 step git commit + .ddt/checkpoints.log | DDT (v0.7.0) |
-| **`decision-gate`** | 标准 4 选项决策门模板 | DDT (v0.6.2) |
-| **`relay`** | 跨会话接力 13 段式 prompt | DDT (v0.6.0) |
+| Skill | 用途 |
+|-------|------|
+| `acceptance-criteria` | Given/When/Then 验收标准写法 |
+| `api-contract-first` | OpenAPI 3.0 契约设计规范 |
+| `efficiency-metrics` | 度量基线 + 效率报告 |
+| `delivery-package` | README/deploy/demo 模板 |
+| `ai-native-design` | 3 套 AI 设计源工作流（claude-design / figma / v0） |
+| `backend-development` | 后端实现知识包（替代 backend-agent） |
+| `frontend-development` | 前端实现知识包（替代 frontend-agent） |
+| `validation-loop` | 每文件 build/lint/test，失败立即停 |
+| `checkpoint-commit` | 每 step git commit + .ddt/checkpoints.log |
+| `decision-gate` | 标准 4 选项决策门模板 |
+| `relay` | 跨会话接力 13 段式 prompt |
+| `ddt-brief-builder` | brief 第零步：从原始需求文档构建结构化 brief |
+| `ddt-baseline-sync` | 工时基线 baseline.locked.json 同步规则 |
 
 ---
 
@@ -285,7 +294,7 @@ project-brief.md
 | `SubagentStop` | 子代理完成 | 通过 lookback join 反查 PreToolUse 记录的 `subagent_start`，重建真实 name + duration |
 | `Stop` | 每个 turn 结束 | 关闭未闭合 phase + 后台触发 metrics 聚合 + progress.json infer |
 
-数据链路（v0.6.0+ 增量 ingest）：
+数据链路（watermark 增量 ingest）：
 
 ```text
 hooks → ~/.claude/delivery-metrics/events.jsonl
@@ -368,6 +377,7 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 | Claude Code | v2.1+（hook 自动加载 + AskUserQuestion 工具支持） |
 | 操作系统 | macOS / Linux / Windows（建议 WSL2） |
 | 可选工具 | `@redocly/cli`（OpenAPI lint，命令首次运行时 `npx` 自动拉取） |
+| `/integrate` 联调 | Docker（含 docker-compose v2 plugin 或 v1/v5 standalone）+ Colima/Docker Desktop |
 
 ### 可选环境变量
 
@@ -390,7 +400,7 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 /digital-delivery-team:doctor
 ```
 
-11 项检查覆盖：Node 版本 / 插件 root / SessionStart marker / hooks.json 8 个事件注册 / events.jsonl 可写 / metrics.db 完整 / `@redocly/cli` 可用 / `check-blockers.sh` 权限 / M3-M6 脚本完整 / 技术栈预设与 ai-native-design skill / progress.json 写入路径。
+自检覆盖：Node 版本 / 插件 root / SessionStart marker / hooks.json 8 个事件注册 / events.jsonl 可写 / metrics.db 完整 / `@redocly/cli` 可用 / `check-blockers.sh` 权限 / 关键脚本完整 / 技术栈预设与 ai-native-design skill / progress.json 写入路径。
 
 **常见问题**：
 
@@ -401,7 +411,8 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 | `@redocly/cli ❌` | 确认网络可达；首次执行命令时 `npx --yes @redocly/cli` 会自动安装 |
 | `progress.json 状态错误` | 手动校正：`node "$DDT_PLUGIN_ROOT/bin/progress.mjs" --update <phase> <status>` |
 | 跨会话忘记进度 | `/resume`（同会话）或 `/relay`（跨会话） |
-| `efficiency-report 工时膨胀` | v0.5.x bug，升级到 v0.6.0+ 后跑 `node bin/aggregate.mjs --project <id> --rebuild` |
+| `efficiency-report 工时膨胀` | 跑 `node bin/aggregate.mjs --project <id> --rebuild` 重建 |
+| `/integrate` docker compose 找不到 | 自动 fallback：依次尝试 `docker compose` / `docker-compose` / `colima docker compose` |
 
 ---
 
@@ -409,43 +420,31 @@ OpenAPI 契约 lint 是**硬门禁**：lint 不通过禁止推进到 `/build-web
 
 ```bash
 cd plugins/digital-delivery-team
-npm test                  # 全量（122 个测试用例 / 22 个文件）
+npm test                  # 全量（548 个测试用例 / 60 个文件）
 npm run test:unit         # 仅 unit
 npm run test:integration  # 仅 integration
 ```
 
-| 测试套（22 个文件 / 122 用例） | 覆盖 |
-|-----|------|
-| `tests/unit/frontmatter.test.mjs` | agents/skills/commands frontmatter 必填 |
-| `tests/unit/hooks-registration.test.mjs` | hooks.json 合法性 + entry id 唯一 |
-| `tests/unit/plugin-manifest.test.mjs` | manifest --check 通过 |
-| `tests/unit/v3-semantics.test.mjs` | metrics-integrity / contract-integrity / refresh 增量语义 |
-| `tests/unit/phase-detection.test.mjs` | UserPromptSubmit slash command 识别 |
-| `tests/unit/commands-slim.test.mjs` | 防 commands 退化 |
-| `tests/unit/find-plugin-root.test.mjs` | plugin-root 5 级解析链 |
-| `tests/unit/m3-agents.test.mjs` | architect/backend/frontend 必读 tech-stack.json + skill 替代 agent |
-| `tests/unit/advisory-lock.test.mjs` | 白名单 / 冲突 / stale / 释放 |
-| `tests/integration/metric-chain.test.mjs` | aggregate → baseline → report 全链路 |
-| `tests/integration/blocker-gate.test.mjs` | blocker 门禁 |
-| `tests/integration/lookback-join.test.mjs` | subagent_start lookback + phase_runs + FIFO |
-| `tests/integration/end-to-end-phase-coverage.test.mjs` | 完整 6 阶段：raw report 各 stage 实际工时非空（P0 守门） |
-| `tests/integration/tech-stack.test.mjs` | 5 级优先级链解析 |
-| `tests/integration/progress-state-machine.test.mjs` | progress.mjs / resume.mjs |
-| `tests/integration/concurrent-events.test.mjs` | 100 并发 appendEvent 不丢/不交错 |
-| `tests/integration/session-start-context.test.mjs` | additionalContext 注入 |
-| `tests/integration/marketplaces-path.test.mjs` | v2.1+ 安装路径解析 |
-| `tests/integration/m6-watermark-emit-relay.test.mjs` | aggregate watermark + emit-phase + relay prompt |
-| `tests/integration/m62-decision-gate.test.mjs` | decision-gate skill + emit-decision + 10 commands 决策门 + preview |
-| `tests/integration/m63-tech-stack.test.mjs` | tech-stack-options.yaml + AskUserQuestion 4 步问卷 + tech-stack hard gate |
-| `tests/integration/m64-build-phase.test.mjs` | 6-phase 结构 / 4 个新 skill / impl 串行 / agents 数量 |
-| **合计** | **122 / 122 passing** |
+测试套覆盖维度：
+
+| 维度 | 内容 |
+|------|------|
+| frontmatter / 配置完整性 | agents/skills/commands frontmatter 必填、hooks.json 合法性、plugin manifest |
+| 度量 v3 语义 | metrics-integrity / contract-integrity / refresh 增量语义 / phase-detection |
+| Hook 集成 | 全链路 aggregate → baseline → report、blocker 门禁、subagent lookback join、并发 appendEvent |
+| 进度状态机 | progress.mjs / resume.mjs / additionalContext 注入 / marker 自愈 |
+| 决策门 | emit-decision skill + 决策门 + preview |
+| 技术栈 | 5 级优先级链解析 + tech-stack-options + AskUserQuestion 4 步问卷 + tech-stack hard gate |
+| 6-phase 范式 | 6-phase 结构 / skill 替代 agent / impl 串行 |
+| AI-native UI | 3 通道 brief 编译 + design-execute / channel package / ingest channels |
+| 实战 hotfix | gitignore 模板 / blocker soft-hard / brief quality / baseline init / integration source / react lock / **integrate** / **api-client driven** / **schema audit & design-contract feed** / **contract summary from yaml** / **external integration audit & client gen** |
 
 ---
 
 ## 相关文档
 
 - [USAGE.md](./USAGE.md) — 场景化使用示例
-- [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录
+- [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录（每个特性的引入版本）
 - 设计原则：契约先行 + 数字员工分工 + 自动度量 + 决策门 + 6-phase 范式（EXPLORE/PLAN/APPROVE/IMPLEMENT/VERIFY/SUMMARY）
 - 数据来源：Spring Initializr 22 分组 200+ 组件清单 + Claude Code AskUserQuestion 工具 schema
 
@@ -459,4 +458,4 @@ npm run test:integration  # 仅 integration
 
 ---
 
-> **版本**：v0.7.0 · **许可**：[MIT](./LICENSE) · **作者**：[@dhslegen](https://github.com/dhslegen)
+> **许可**：[MIT](./LICENSE) · **作者**：[@dhslegen](https://github.com/dhslegen) · **变更记录**：[CHANGELOG.md](./CHANGELOG.md)

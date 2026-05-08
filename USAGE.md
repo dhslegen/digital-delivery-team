@@ -1,6 +1,6 @@
 # USAGE · digital-delivery-team
 
-场景化使用示例。完整命令参考与安装方式见 [README.md](./README.md)。
+场景化使用示例。完整命令参考与安装方式见 [README.md](./README.md)。变更历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
@@ -21,17 +21,18 @@ echo "用户可以创建任务、分配给团队成员、设置截止日期、�
                         # → /prd → 决策门 → /wbs → 决策门 → /design → 决策门
 /impl                   # 串行 /build-api → 决策门 → /build-web → 决策门
                         # 每文件 validation-loop + 每 step checkpoint commit
+/integrate              # 启动 docker compose + db migrate + server + web + smoke
 /verify                 # 测试 + 评审并行
 /ship                   # 文档 + 效率报告 + 打包
 ```
 
-**v0.7.0 行为变化**：每个 phase 落盘后会用 `AskUserQuestion` 4 选项问你：
+**默认决策门行为**：每个 phase 落盘后会用 `AskUserQuestion` 4 选项问你：
 - 接受并继续（推荐）
 - 修改某条具体内容
 - 新增内容
 - 重新生成（带说明）
 
-如果想要 v0.6.x 的"一键自动"体验：
+如果想要"一键自动"体验：
 
 ```text
 /kickoff --auto         # 跳过所有决策门
@@ -45,6 +46,7 @@ docs/prd.md  docs/wbs.md  docs/risks.md
 docs/arch.md  docs/api-contract.yaml  docs/data-model.md
 docs/build-api-exploration.md  build-api-plan.md  build-api-summary.md
 docs/build-web-exploration.md  build-web-plan.md  build-web-summary.md
+docs/external-integration-audit.md  docs/schema-alignment-audit.md
 web/...   server/...   tests/test-report.md
 docs/review-report.md   docs/efficiency-report.md
 README.md  docs/deploy.md  docs/demo-script.md
@@ -64,7 +66,7 @@ delivery-<project-id>-<timestamp>.tar.gz
 
 ---
 
-## 场景二：技术栈交互式选型（v0.6.1+，推荐路径）
+## 场景二：技术栈交互式选型
 
 **适用**：项目要求灵活技术栈；想从 Spring Initializr 等价问卷中选；想要 claude-design / figma / v0 设计源接入。
 
@@ -154,12 +156,12 @@ brief 中填详细字段：
 
 ```text
 /design                 # 单独补架构设计
-/build-api --module auth   # 只补认证模块（v0.7.0 --module 分块）
+/build-api --module auth   # 只补认证模块（--module 分块）
 /verify                 # 只跑测试 + 评审
 ```
 
 > 强制重新生成用 `--refresh`：`/prd --refresh "新需求..."` / `/design --refresh`。
-> v0.7.0 起 main thread 实现 `/build-api` `/build-web`，无 subagent 黑盒；EXPLORE 阶段会先扫现状，避免重写已有代码。
+> main thread 实现 `/build-api` `/build-web`，无 subagent 黑盒；EXPLORE 阶段会先扫现状，避免重写已有代码。
 
 ---
 
@@ -188,11 +190,11 @@ brief 中填详细字段：
 
 ---
 
-## 场景五：AI 原生 UI 设计与代码一体化（v0.8 W3 重构）
+## 场景五：AI 原生 UI 设计与代码一体化
 
 **适用**：UI 设计在 claude.ai/design / figma / v0 完成，要落地为符合契约的 React + Tailwind 代码。
 
-工作流分两步（`/import-design` 在 v0.8 直接删除，无 alias 链）：
+工作流分两步：
 
 ```text
 # Step 1：从 PRD + 契约编译结构化 brief（10 字段 SSoT）
@@ -213,11 +215,13 @@ brief 中填详细字段：
 
 摄取产物落入 `.ddt/design/<channel>/raw/`（staging），main thread 按 `skills/ai-native-design/SKILL.md::§7 main thread 改写 7 步流程` 改写为 `web/components/` + `web/styles/tokens.css`，通过契约对齐检查（`bin/check-contract-alignment.mjs`）。
 
+随后 `/build-web` 强制跑 `bin/generate-api-client.mjs` 生成 `web/src/api/{types.ts,client.ts}`，组件必须接真 client（不准复制 prototype mock）；`bin/audit-schema-alignment.mjs` 在 IMPLEMENT 阶段后扫"mock 字段集 vs contract schema 字段集"差集，捕获反模式（如 x/y/sla/level/progress 等设计层冲突字段）。
+
 详细工作流见 `skills/ai-native-design/SKILL.md`。
 
 ---
 
-## 场景六：复杂需求分块实现（v0.7.0 新）
+## 场景六：复杂需求分块实现
 
 **适用**：需求 endpoint ≥ 10 个，一次写不完丢上下文。
 
@@ -240,7 +244,7 @@ brief 中填详细字段：
 
 ---
 
-## 场景七：跨会话接力（v0.6.0 新）
+## 场景七：跨会话接力
 
 **适用**：
 
@@ -279,11 +283,11 @@ cat /tmp/relay.md | pbcopy        # macOS 复制到剪贴板
 
 ---
 
-## 场景八：决策门交互（v0.6.2 新）
+## 场景八：决策门交互
 
 **适用**：用户希望每个 phase 落盘后参与决策。
 
-默认行为（**v0.7.0 起所有 phase 都启用决策门**）：
+默认行为（**所有 phase 都启用决策门**）：
 
 ```text
 # 跑完 /prd 后
@@ -304,12 +308,37 @@ PRD review:
 /preview prd           → 用户故事数 / AC 数 / 优先级 / vs HEAD diff
 /preview design        → ADR 数 / endpoint 数 / 数据模型实体
 /preview impl          → 后端文件 / 前端组件 / 测试数
-/preview all           → 全部 9 个 phase 一次输出
+/preview all           → 全部 phase 一次输出
 ```
 
 ---
 
-## 场景九：查看实际效率数据
+## 场景九：前后端联调与出包前 smoke
+
+**适用**：`/impl` 跑完后想验证 server 与 web 能跑起来再 `/verify`。
+
+```text
+/integrate                       # 默认 ddt-managed：自动 docker compose + db migrate + 启动 server/web + smoke
+/integrate --reuse-stack         # 已有 docker compose 在跑，跳过 up，仅 db migrate + smoke
+/integrate --tear-down           # 收尾：docker compose down + 关闭后台 server/web 进程
+```
+
+**8 个 phase 自动编排**：
+
+1. 环境侦测（Docker / Colima / docker-compose 多路径 fallback）
+2. 选模板：`templates/docker-compose/<preset>.yml`（java-modern / node-modern）
+3. `docker compose up -d` 启动数据库 + Redis
+4. 数据迁移（按 tech-stack.json 中 `db.migrate_cmd`）
+5. 后台启动 server（端口检测 + 健康检查）
+6. 后台启动 web（端口检测 + dev server 就绪）
+7. Smoke 测试：`curl /health` + 关键页面 200
+8. 报告 `docs/integrate-report.md`（含端口 / 容器状态 / 失败堆栈）
+
+每个项目环境都不同——脚本只修通用问题（多路径 docker compose 解析 / NO_PROXY 自动注入 / try-finally 清理），项目特定问题（如 Colima 网络、DNS、防火墙）由 LLM 看报告临场处理。
+
+---
+
+## 场景十：查看实际效率数据
 
 **适用**：项目结束或阶段结束后，分析哪个环节耗时最多。
 
@@ -321,14 +350,14 @@ PRD review:
 
 产出 `docs/efficiency-report.md`（含自然语言洞察 + 三问分析 + Top 3 优化建议）。
 
-如果 v0.5.x 时代留下的 metrics.db 数据膨胀，先重建：
+如果 metrics.db 数据膨胀，先重建：
 
 ```bash
 node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID" --rebuild
 ```
 
-> v0.6.0+ 起 `aggregate.mjs` 用 watermark 增量 ingest，phase_runs 不再 4× 膨胀；
-> v0.6.2+ 起 `metrics-agent` 严格判定"工时不可证明"，禁止用 WBS 预估替代实际工时。
+> `aggregate.mjs` 用 watermark 增量 ingest，phase_runs 不会膨胀；
+> `metrics-agent` 严格判定"工时不可证明"，禁止用 WBS 预估替代实际工时。
 
 **报告包含**：
 - 阶段级对比表（实际 h vs 基线 h vs Δ%）
@@ -337,7 +366,7 @@ node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID" --rebuild
 
 ---
 
-## 场景十：只跑单个岗位命令
+## 场景十一：只跑单个岗位命令
 
 ```text
 # 只要 PRD
@@ -362,14 +391,14 @@ node "$DDT_PLUGIN_ROOT/bin/aggregate.mjs" --project "$DDT_PROJECT_ID" --rebuild
 
 ## 常见问题
 
-**Q: v0.7.0 的 /impl 为什么变慢了？**
-A: 改成串行 + 决策门后用户参与了关键节点；不再"agent 黑盒一气呵成"。如果想要旧体验：`/impl --auto` 跳过决策门。但工时数据更精确（lookback join 并发错配从根上消失）。
+**Q: /impl 为什么有时会变慢？**
+A: 默认串行 + 决策门，用户参与了关键节点；不再"agent 黑盒一气呵成"。如果想要更快体验：`/impl --auto` 跳过决策门。但工时数据更精确（lookback join 并发错配从根上消失）。
 
 **Q: --module 怎么知道有哪些模块？**
 A: 模块名来自 `docs/wbs.md` 中的任务分组。如 wbs.md 含 "## 模块: auth"、"## 模块: tasks"，就用 `--module auth` `--module tasks`。
 
-**Q: `/build-api` 为什么不再用 backend-agent？**
-A: v0.7.0 改 main thread 模式：每写一个文件你都能看到 + 每文件立即 validation + 每 step git commit。subagent 黑盒导致的"工时不可证明 + 用户失语"两大问题从根上消失。`backend-agent.md` 的知识全部迁到 `skills/backend-development/SKILL.md`，由 main thread auto-load。
+**Q: `/build-api` 为什么不用 backend-agent？**
+A: main thread 模式：每写一个文件你都能看到 + 每文件立即 validation + 每 step git commit。subagent 黑盒导致的"工时不可证明 + 用户失语"两大问题从根上消失。`backend-agent` 的知识全部迁到 `skills/backend-development/SKILL.md`，由 main thread auto-load。
 
 **Q: 决策门弹出时，preview 字段没看到关键信息怎么办？**
 A: 选 "Other"（自定义文本），输入"我想看 X 详情"——LLM 会再展示。或者跑 `/preview <phase>` 查更详细摘要。
@@ -384,7 +413,7 @@ A: 设 `DDT_DISABLED_HOOKS=ddt:pre-tool-use`（CSV 多个）。DDT 用独立命�
 A: 需要 ≥ 22.0.0（使用内置 `node:sqlite`，零 npm 依赖）。运行 `nvm install 22 && nvm use 22` 升级。
 
 **Q: efficiency-report 阶段对比表里某个 stage 的实际工时是 `—`？**
-A: 说明该阶段没有捕获到 phase 工时事件。先确认插件 ≥ v0.6.0；老项目跑一次 `aggregate.mjs --rebuild` 重新 ingest；新项目重启会话让 SessionStart hook 重新推断。`metrics-agent` 在工时缺失时严格输出"不可证明"，不会用 WBS 预估替代。
+A: 说明该阶段没有捕获到 phase 工时事件。老项目跑一次 `aggregate.mjs --rebuild` 重新 ingest；新项目重启会话让 SessionStart hook 重新推断。`metrics-agent` 在工时缺失时严格输出"不可证明"，不会用 WBS 预估替代。
 
 **Q: 想换技术栈但已经跑过 /design 怎么办？**
 A: `rm .ddt/tech-stack.json` 后重跑 `/design --preset <new>` 或 `/design --refresh`。注意：架构产物会被增量刷新，但既有代码可能与新栈冲突，建议在新分支操作。
@@ -392,6 +421,12 @@ A: `rm .ddt/tech-stack.json` 后重跑 `/design --preset <new>` 或 `/design --r
 **Q: 跨会话怎么不失忆？**
 A: `/relay` 输出 13 段式 prompt 复制到下一会话；自动注入 progress / tech-stack / 关键产物路径 / git log。同设备/跨设备/跨 AI 都能用。
 
+**Q: web 端组件接的好像是假数据，没接真 API？**
+A: 跑 `node "$DDT_PLUGIN_ROOT/bin/audit-schema-alignment.mjs" --web web/src` 看 mock 字段 vs contract schema 字段集差集。`/build-web` 现强制跑 `generate-api-client` 生成 types.ts；如果还是接假数据，多半是 prototype mock 复制反模式（看 `skills/frontend-development/SKILL.md::Don't 反模式`）。
+
+**Q: server 端外部依赖（如第三方开放平台 API）没体现在代码里？**
+A: 跑 `node "$DDT_PLUGIN_ROOT/bin/audit-external-integration.mjs" --server server` 扫 brief §11 vs server 实际 client 类。可一键生成骨架：`node bin/generate-external-client.mjs --server server`（输出 6 个 Java 类：Properties / SignatureUtil / OAuthService / Client interface / MockClient / ClientConfig）。
+
 ---
 
-> v0.7.0 · M6 路线图收官 · 完整变更见 [CHANGELOG.md](./CHANGELOG.md)
+> 完整变更见 [CHANGELOG.md](./CHANGELOG.md)。

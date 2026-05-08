@@ -4,6 +4,49 @@
 
 ---
 
+## [0.9.17] - 2026-05-09 — 文档清理：去 vx.x.x 版本印记 + 计数同步
+
+源自用户反馈："README 不应关心升级日志，只关心如何向开发者讲清道明，日志有专门的文件"。本次仅改文档，不动任何 agent / command / skill / hook / bin 行为。
+
+### 📘 改动
+
+#### 1. 重写 `README.md`（145 行变动）
+
+- **删除**：徽章里的 `version-0.7.0-blue`、所有 "v0.x.x 三大核心能力 / v0.7.0 起 / v0.6.1+ / v0.8 W3 重构" 等版本印记、底部 "版本：v0.7.0" 行、"M3-M6 路线图" 引用
+- **新增**：顶部一行指向 CHANGELOG 的句子（"历史变更与每个特性的引入版本见 CHANGELOG.md"）
+- **更新计数与现状**：
+  - 8 → 9 数字员工 / 19 → 21 命令 / 11 → 13 技能 / 122 → 548 测试 / 22 → 60 测试文件
+  - 4 → 3 设计通道（去 lovable）/ 4 → 5 编排命令（加 `/integrate`）/ 5 → 6 辅助命令（加 `/design-brief`）
+  - 15 → 36 bin 脚本
+- **新增内容**：
+  - 13 个 skill 列表加上 `ddt-brief-builder` 与 `ddt-baseline-sync`
+  - 架构图加 `/integrate` 一段
+  - `/build-api` VERIFY 阶段标注 `audit-external-integration`
+  - `/build-web` IMPLEMENT 阶段标注 `generate-api-client`
+  - 环境要求加 Docker 一行
+  - 故障排查加 `/integrate docker compose 找不到` 一行
+
+#### 2. 重写 `USAGE.md`（83 行变动）
+
+- **删除**：所有 "v0.7.0 行为变化 / v0.6.x 的 / v0.6.1+ / v0.8 W3 重构 / v0.7.0 新 / v0.6.0 新 / v0.6.2 新" 等版本前缀；底部 "v0.7.0 · M6 路线图收官" 行
+- **改写**：场景标题去版本号（"v0.6.1+，推荐路径" → "技术栈交互式选型"；"v0.7.0 新" → 通用描述）
+- **新增场景九**：`/integrate` 联调出包前 smoke（8 个 phase 编排，Colima/Docker 多路径 fallback）
+- **新增 FAQ 两条**：web 端假数据如何 audit / server 端外部依赖如何 audit + 一键生成骨架
+
+### 🎯 设计原则
+
+README 与 CHANGELOG 是两类文档：
+- **README** 回答"它是什么 / 怎么用"（面向新读者），不随每次发版抖动
+- **CHANGELOG** 回答"何时变成这样"（面向升级者）
+
+把版本号从 README 拆出来后，新读者不被半截历史劝退；维护负担从平方降为线性。
+
+### ✅ 测试
+
+零回归（548/548 passing）。本次纯文档清理，未新增/修改测试。
+
+---
+
 ## [0.9.16] - 2026-05-09 — 实战 hotfix D33：server 端外部集成审计 + Spring 6 RestClient 骨架生成
 
 源自实战：用户在 alv-ops 项目跑完前述所有 hotfix 后追问"外部依赖（新石器无人车开放平台 API）在项目中体现了吗，server 有对它进行封装吗？"——派 code-architect-cn 专家三方对比 brief §11 / server 实际代码 / API 文档，实证发现：
