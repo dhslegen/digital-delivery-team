@@ -141,6 +141,9 @@ npm test --run
 
 node "$DDT_PLUGIN_ROOT/bin/check-contract-alignment.mjs" server || exit 3
 test -f server/Makefile && (cd server && make smoke) || true
+
+# v0.9.16 D33：外部集成审计（warning 不阻塞，输出 docs/external-integration-audit.md）
+node "$DDT_PLUGIN_ROOT/bin/audit-external-integration.mjs" --server=server 2>&1 || true
 ```
 
 任一失败 → 写 blocker → 停止。

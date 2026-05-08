@@ -72,10 +72,25 @@ origin: DDT
 ## Build Sequence（依赖序）
 1. types & contracts（生成 OpenAPI types）
 2. db layer（migration + connection）
-3. service layer（业务逻辑 + 单测）
-4. routing layer（endpoint + 集成测试）
-5. middleware（errorHandler / requestId / logging）
-6. main entry（server.ts 启动 + 路由注册）
+3. **External Integration（v0.9.16 D33 强制）**：如 brief §11 声明外部依赖，Phase 2 必须列下方"外部 Endpoint × Server Client 类"映射表
+4. service layer（业务逻辑 + 单测）
+5. routing layer（endpoint + 集成测试）
+6. middleware（errorHandler / requestId / logging）
+7. main entry（server.ts 启动 + 路由注册）
+
+## External Endpoint × Server Client 映射表（v0.9.16 D33 强制，brief §11 有声明则必填）
+
+```markdown
+| 外部 Endpoint（来自 brief §11） | Server Client 类 | Mock 实现状态 | 业务消费位置 |
+|---|---|---|---|
+| GET /vehicles (新石器 Cloud API) | NeolixClient.listVehicles() | ✅ MockClient 返回 fixture | VehicleService.triggerSync() 注入 |
+| POST /vehicleStart (任务下发) | NeolixClient.dispatchTask(...) | ⚠️ TODO | TaskController.dispatch() 应注入 |
+| GET /videoStreamUrl | NeolixClient.startVideoStream(...) | ⚠️ TODO | AlertController.video() 应注入 |
+```
+
+**为什么强制**：v0.9.16 D33 实战发现 alv-ops/server 与外部平台耦合度 **0%**——18 个 endpoint 全没调，6 处 Service 返回假 success。PLAN 阶段强制列映射表 → IMPLEMENT 阶段不能跳过 client 注入直接写假 sync。
+
+**生成器**：跑 `node $DDT_PLUGIN_ROOT/bin/generate-external-client.mjs` 自动生成 6 个核心类骨架（Properties + SignatureUtil + OAuthService + Client interface + MockClient + ClientConfig）；LLM 在 IMPLEMENT 时按 brief §11 endpoint 扩充 interface 方法 + Mock fixture。
 
 ## Validation Strategy（每步要跑什么）
 - step 1-2: tsc --noEmit
@@ -110,6 +125,7 @@ origin: DDT
 - 全量 type-check
 - 全量 test（含集成 + 单元 + smoke）
 - 契约对齐检查：每个 endpoint 的实际响应与 `api-contract.yaml` schema 对照
+- **`bin/audit-external-integration.mjs`** (v0.9.16 D33)：扫 brief §11 外部依赖 vs server 实际 client 类，输出 `docs/external-integration-audit.md`（warning 不阻塞，但 LLM 必须看 hot-list 后决策修复优先级）
 
 任一失败 → 写 blocker → 停止。
 
@@ -187,6 +203,7 @@ curl http://localhost:3001/health
 - ❌ 不要为了跑通测试而绕过契约（如随便填个字段名）— 契约不清写 blocker
 - ❌ 不要修改 docs/api-contract.yaml — 那是 architect 职责
 - ❌ 不要修改 .ddt/tech-stack.json — PreToolUse hook 会硬拦截
+- ❌ **不要写"假 sync 反模式"**（v0.9.16 D33 实战根因）：当 brief §11 声明了外部依赖但 server 端 Service 直接返回假成功（典型反例：`triggerSync()` 返回 `inserted=0, status=COMPLETED` 但完全没调外部 API），等于**承诺了 sync 但什么都没做**。正确做法：注入 `<Sys>Client` interface（dev 走 MockClient 返回 fixture / prod 走 RealClient 真调）。`bin/audit-external-integration.mjs` 在 VERIFY 阶段会检测此反模式输出清单。
 
 ## Do
 

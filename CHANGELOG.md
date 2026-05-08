@@ -4,6 +4,132 @@
 
 ---
 
+## [0.9.16] - 2026-05-09 — 实战 hotfix D33：server 端外部集成审计 + Spring 6 RestClient 骨架生成
+
+源自实战：用户在 alv-ops 项目跑完前述所有 hotfix 后追问"外部依赖（新石器无人车开放平台 API）在项目中体现了吗，server 有对它进行封装吗？"——派 code-architect-cn 专家三方对比 brief §11 / server 实际代码 / API 文档，实证发现：
+
+| 维度 | 实测结果 |
+|---|---|
+| HTTP Client 引入 | ❌ 仅 RestTemplate 隐式可用，未注册 Bean，零调用 |
+| NeolixApiClient 类 | ❌ 不存在；仅 1 行注释提及 |
+| 18 个 endpoint 调用率 | **0/18（0%）** |
+| `app.neolix` 配置 | ⚠️ 占位项存在但无 `@ConfigurationProperties` Bean 消费；`base-url` 错配 |
+| 数据真实性 | ❌ `t_vehicle` / `t_route` 在 data.sql 中无 INSERT，查询永远空 |
+
+**alv-ops 是双层空壳**：v0.9.13 D30 暴露前端 mock；D33 暴露 server 也是 mock。两者本质同构——配置/契约存在，但**没被对应 phase 强制翻译为产出**。/design-execute → /build-web 链路 v0.9.13~v0.9.15 已修；/design → /build-api 链路这里又出同样的洞。
+
+### 🟣 D33 修 5 件事
+
+#### 1. 新增 `bin/audit-external-integration.mjs`（事后审计）
+
+扫 brief §11 标注的外部依赖 vs server/src 实际 client 类：
+
+- 解析 §11：契约文档路径 + 鉴权方式 + 基础 URL + endpoint 数
+- 扫 server/src/main/java 找：
+  - `@ConfigurationProperties` 含系统关键字
+  - OAuth / TokenService 类
+  - RestClient/WebClient/RestTemplate 调用 + 系统关键字
+  - Signature / HMAC 工具类
+  - 假 sync 反模式（`triggerSync` + `inserted=0` / `占位结果`）
+- 扫 application.yml 配置健康（base-url 与 brief 是否一致 / 占位检查）
+- 输出 `docs/external-integration-audit.md`：耦合度 + 核心类清单 + HTTP 调用点 + 反模式 hot-list + 行动建议
+
+**alv-ops 实测**：0/4 核心类 + 0 HTTP 调用 + 1 假 sync（VehicleService.java:62）+ 配置占位。
+
+#### 2. 新增 `bin/generate-external-client.mjs`（Spring 6 RestClient 骨架）
+
+从 brief §11 抽外部系统 → 推断 server base package → 生成 6 个核心 Java 类：
+
+```
+server/src/main/java/com/<group>/external/<key>/
+├── <Prefix>Properties.java       (@ConfigurationProperties)
+├── <Prefix>SignatureUtil.java    (HMAC 签名)
+├── <Prefix>OAuthService.java     (Token 获取 + 内存缓存 stub)
+├── <Prefix>Client.java           (interface + demo 方法 listVehicles)
+├── <Prefix>MockClient.java       (@Profile("!prod") 默认 + 返回 fixture)
+└── <Prefix>ClientConfig.java     (RestClient bean 说明)
+```
+
+设计要点：
+- **Spring 6 RestClient 原生**（零额外依赖，与 java-modern preset 对齐）
+- **双轨模式**：dev 默认走 MockClient + `mock-enabled=true`；prod 切 RealClient
+- **不覆盖已存在文件**（防 LLM 改动丢失）
+- **占位符替换**：基于 brief §11 自动推 prefix（"新石器" → "Neolix"）+ base URLs
+
+**alv-ops 实测**：6 个文件全部生成到 `com.alvops.platform.external.neolix`；重审耦合度从 0% → **100%（4/4 核心类齐 + 1 HTTP 调用点）**。
+
+#### 3. `backend-development` SKILL Phase 2 PLAN 强制 External 映射表
+
+```markdown
+## External Endpoint × Server Client 映射表（v0.9.16 D33 强制）
+
+| 外部 Endpoint | Server Client 类 | Mock 状态 | 业务消费位置 |
+|---|---|---|---|
+| GET /vehicles (新石器) | NeolixClient.listVehicles() | ✅ MockClient fixture | VehicleService.triggerSync() 注入 |
+```
+
+让 IMPLEMENT 阶段不能跳过 client 注入直接写假 sync。
+
+#### 4. `backend-development` SKILL Don't 段加"假 sync 反模式"
+
+精确反例：`triggerSync()` 返回 `inserted=0, status=COMPLETED` 但完全没调外部 API → "承诺了 sync 但什么都没做"。正确做法：注入 `<Sys>Client` 接口（dev MockClient / prod RealClient）。
+
+#### 5. `commands/build-api.md` Phase VERIFY 调 audit-external-integration
+
+```bash
+node "$DDT_PLUGIN_ROOT/bin/audit-external-integration.mjs" --server=server 2>&1 || true
+```
+
+warning 不阻塞，输出报告路径 `docs/external-integration-audit.md`。
+
+### 设计哲学（D33 实证强化）
+
+**audit + generate 双轨**：D31 是 schema 字段层（前端），D33 是 client 类层（后端）—— 同样的"事后审计 + 自动生成骨架"模式，让"假实现"问题被精确定位 + 一键修复。
+
+**生成器只生成"通用核心骨架"**：具体 endpoint 方法 / Mock fixture 数据 / 业务消费集成点都留给 LLM 在 IMPLEMENT 时按 brief §11 实际内容扩展。这是 v0.9.7 起一直坚持的"通用 vs 项目特定"分层。
+
+**双轨模式（Mock vs Real）是必需**：开放平台需要审核凭证，本地开发联调不到——`@Profile("!prod") + ConditionalOnProperty(mock-enabled)` 让 dev 环境无凭证也能跑起来看到非空数据。
+
+### alv-ops 现场修复
+
+```bash
+# 已现场跑：
+node bin/generate-external-client.mjs
+# → 生成 6 个 Neolix 类（com.alvops.platform.external.neolix.*）
+
+# 重审：
+node bin/audit-external-integration.mjs
+# → 0/4 → 4/4 核心类，0 → 1 HTTP 调用点
+```
+
+### 测试覆盖（+15 用例）
+
+`tests/integration/d33-external-integration.test.mjs`：
+- audit-external-integration：dry-run / brief 缺失 / server 全空报告 0% / 假 sync 检测
+- generate-external-client：dry-run / brief 缺失 / 6 个文件生成 / Properties 含 @ConfigurationProperties / MockClient 含 @Profile + ConditionalOnProperty / 已存在不覆盖 / base package 推断
+- backend-development SKILL：External 映射表 / 假 sync 反模式 / Phase 5 audit
+- build-api.md：Phase VERIFY 调 audit
+
+测试基数 533 → 548（+15，零回归）。
+
+### 用户问题精确回答
+
+> "外部依赖在项目中体现了吗？"
+
+**之前**：❌ 完全没体现（耦合度 0%）
+
+**现在 v0.9.16 D33 之后**：✅ 自动生成 4/4 核心类骨架；LLM 按 brief §11 endpoint 扩充方法 + Mock fixture，dev profile 即可跑起来联调
+
+> "哪些地方应该使用却没用？"
+
+audit 报告精确列出 6 处（VehicleService.triggerSync / RealtimeService.getVehicles / TaskController dispatch+cancel / AlertController.video / RouteService.triggerSync / StationService sync），每处含 file:line。
+
+> "server 有对它进行封装吗？"
+
+**之前**：❌ 没有任何 client 类。**现在**：✅ Neolix\* 6 个类齐全，含 Properties + SignatureUtil + OAuthService + Client interface + MockClient + ClientConfig。
+
+---
+
 ## [0.9.15] - 2026-05-08 — 实战 hotfix D32：把 contract-summary 锚回 yaml SSoT（消除时序设计 bug）
 
 源自实战：用户在 alv-ops 跑 v0.9.14 D31 后发现派发包 `03b-contract-summary.md` 是占位 hint 不是真实摘要——根因是 v0.9.14 D31 让 `extract-contract-summary` 依赖 `web/src/api/types.ts`（v0.9.13 D30 generate-api-client 产物），但 `/design-execute` 在 `/build-web` 之前，web/ 整个目录都不存在。
