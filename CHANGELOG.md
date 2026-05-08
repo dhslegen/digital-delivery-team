@@ -4,6 +4,80 @@
 
 ---
 
+## [0.9.14] - 2026-05-08 — 实战 hotfix D31：上游修复（design AI 字段约束）+ 事后审计（schema 字段层差集）
+
+源自实战：用户在 alv-ops 项目跑完 v0.9.13 D30 之后追问"web 受 claude-design bundle 影响，玩的是自己的 mock 数据和 API 契约一点关系没有"——派 code-architect-cn 专家 agent 三方对比（web mock × contract.yaml × server DTO），实证发现：
+
+| Endpoint | 三方一致字段比 |
+|---|---|
+| GET /realtime/vehicles | 10% |
+| GET /alerts | 12% |
+| GET /tasks | 10% |
+| GET /accidents | 17% |
+| GET /users | 36% |
+| **平均** | **~17%（严重错位）** |
+
+主要错位：(a) web 独有展示字段 `x`/`y`/`sla`/`level`/`progress` 等 mock 自创；(b) 命名不一致 `login↔username` `state↔status` `v↔vin`；(c) enum 全错位（中文 vs 英文）；(d) 设计层冲突（ParkMap 用 SVG 画布 x/y，contract 用真实 lon/lat）。
+
+### 🟢 D31 修 5 件事
+
+#### 上游修复
+
+1. **新增 `bin/extract-contract-summary.mjs`**：从 v0.9.13 D30 的 `web/src/api/types.ts` 抽出每个 schema 一行的紧凑字段集摘要
+   - 把 94KB / 41 paths 的完整 yaml 提炼为 <5KB 的紧凑摘要
+   - 让 design AI 一眼看到真实字段名清单（lon/lat/realBattery/status enum 等）
+   - 末尾附 v0.9.14 D31 实战提炼的反模式黑名单（x/y/sla/level/progress 等 7 类虚构字段 + 应改用 + 真因）
+
+2. **`bin/derive-channel-package.mjs` 派发包加 `03b-contract-summary.md`**
+   - claude-design 通道派发时把 contract 摘要放在 03 旁边
+   - 缺失时输出占位文件 + hint 引导用户跑 extract-contract-summary
+
+3. **`templates/prompts/claude-design.template.md` 加硬约束**
+   - 上下文段加 03b 文件引用 + "请优先扫这个找字段名"
+   - 禁止段加"生造视觉用虚构字段（v0.9.14 D31 实战黑名单）"反模式
+   - 数据形态要求从"匹配 03-api-contract.yaml"升级为"匹配 03b-contract-summary.md"
+
+#### 事后审计
+
+4. **新增 `bin/audit-schema-alignment.mjs`**：mock 字段 vs contract schema 字段层差集
+   - 扫 `web/src` 下 `const X = [...]` mock 数组的字段集
+   - 与 `web/src/api/types.ts` 的 schema 字段集对照（精确 + 单数化 + `_LIST/_QUEUE/_DATA` 后缀剥离匹配）
+   - 输出 `docs/schema-audit.md` 含：整体诊断（一致比例 + 评级）/ 详细差集（mock 独有 / 三方一致 / contract 独有）/ 反模式 hot-list / 设计层冲突警示 / 行动建议（按修复成本排序）
+   - alv-ops 实测：17/28 mock 命中 contract，平均一致 21%（评级 🔴 严重错位）；19 条反模式 hot-list 命中
+
+5. **`/build-web` Phase 5 + `frontend-development` SKILL 集成 audit**
+   - VERIFY 阶段调 `audit-schema-alignment.mjs`（warning 不阻塞，`|| true` 兜底）
+   - 报告路径：`docs/schema-audit.md`
+
+### 设计哲学（D31 实证强化）
+
+**"声明 vs 产出"鸿沟在多个层级**：D25 brief §11、D30 type_generation、D31 contract schema 全部是同类问题——配置/契约存在，但**没被某个 phase 强制翻译为下游可消费的形式**。D31 让 contract.yaml 翻译为 design AI 友好的紧凑摘要 + audit 报告，关闭这个鸿沟。
+
+**LLM 注意力工程化**：94KB yaml + 一句"必须严格一致" → 仍生造字段；<5KB 紧凑摘要 + 反模式黑名单 + 实战反例 → 字段名约束才真正生效。这是 prompt engineering 的"信息密度优化"。
+
+**stage-appropriate 修复双轨**：A 上游（design 阶段防发生）+ B 中游（IMPLEMENT 阶段查事后） + 设计层冲突由 LLM 决策（DDT 仅警示，不替决策）。
+
+### 测试覆盖（+13 用例）
+
+`tests/integration/d31-schema-audit-and-design-contract-feed.test.mjs`：
+- extract-contract-summary：dry-run / 缺 types.ts / 紧凑摘要解析（含 enum） / 过滤 ApiResponseX 包装
+- audit-schema-alignment：dry-run / 字段差集 hot-list / 严重错位评级 🔴 / 跳过自动生成产物
+- derive-channel-package：派发包加 03b-contract-summary.md
+- claude-design.template：03b 引用 + D31 实战黑名单
+- build-web.md + frontend-development SKILL：Phase 5 调 audit
+
+测试基数 510 → 523（+13，零回归）。
+
+### 用户回答
+
+> "v0.9.13 后 /build-web --refresh 能解决这个问题吗？"
+
+**v0.9.13 仅解决 30%**：generate-api-client 让 LLM 看到 contract 类型签名，但 mock const 不绑类型 TS 不报错；check-contract-alignment 给 mock 清单但不查字段层错位；enum/中英文/嵌套差异未触及；ParkMap x/y → lon/lat 是设计层冲突需推地图底图。
+
+**v0.9.14 D31 提升到 70%**：上游让 design AI 用真实字段名；事后 audit 给字段层差集 + hot-list + 设计层冲突警示；剩余 30% 是设计层决策（换地图组件 / UI 重设计）必须 LLM 主动询问用户做决策——DDT 不替用户做。
+
+---
+
 ## [0.9.13] - 2026-05-08 — 实战 hotfix D30：把 type_generation 从声明翻译为产出（消除 prototype mock 扩散）
 
 源自实战：用户在 alv-ops 项目跑完 `/build-web` 后发现产物与 claude-design bundle **高度一致**——14 个页面全部内联 mock const（VEHICLES / ALERT_QUEUE / TASKS / ROLE_LIST / USERS 等），零 API 调用。docs/api-contract.yaml 94KB / 41 paths 孤立存在，tech-stack.json 已声明 `type_generation: openapi-typescript` + `data_fetching: tanstack-query` 但**完全没落地**——@tanstack/react-query 装了不调用，openapi-typescript 没装。

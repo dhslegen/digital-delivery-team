@@ -85,6 +85,7 @@ origin: DDT
 
 - vite build / eslint 0 errors / tsc --noEmit 0 errors / vitest run
 - `bin/check-contract-alignment.mjs`（扫禁用模式 + 字段对齐）
+- **`bin/audit-schema-alignment.mjs`** (v0.9.14 D31)：mock 字段 vs contract schema 三方差集，输出 `docs/schema-audit.md`（warning 不阻塞，但 LLM 必须看 hot-list 后决策修复优先级）
 
 ### Phase 6: SUMMARY
 

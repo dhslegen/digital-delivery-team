@@ -185,6 +185,9 @@ npx tsc --noEmit           # 0 errors
 npm test --run             # 全部通过
 
 node "$DDT_PLUGIN_ROOT/bin/check-contract-alignment.mjs" web || exit 3
+
+# v0.9.14 D31：字段层 schema 对齐审计（warning 不阻塞，输出 docs/schema-audit.md）
+node "$DDT_PLUGIN_ROOT/bin/audit-schema-alignment.mjs" --target=web 2>&1 || true
 ```
 
 ## Phase 7 — SUMMARY

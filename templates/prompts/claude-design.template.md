@@ -1,7 +1,7 @@
 # Claude Design 项目设计任务 · {{PROJECT_NAME}}
 
 > 由 ddt-derive-channel-package 自动生成。粘贴到 [https://claude.ai/design](https://claude.ai/design) 项目对话框首条消息。
-> 附件包同时拖入 uploads（7 个文件）。
+> 附件包同时拖入 uploads（8 个文件）。
 
 ---
 
@@ -10,11 +10,14 @@
 - **01-design-brief.md**：完整 10 字段 Brief，已显式回答你可能会问的所有问题
   （scope / vibe / brand_color / innovation / variations / data 等），**不要再问这些**
 - **02-prd.md**：产品 PRD，含 user stories
-- **03-api-contract.yaml**：OpenAPI 3.0 契约 — **决定页面数据形态**
+- **03-api-contract.yaml**：OpenAPI 3.0 契约（完整版） — **决定页面数据形态**
+- **03b-contract-summary.md** ⭐ **(v0.9.14 D31 新增 · 字段名硬约束)**：每个 schema 一行的紧凑字段集，**请优先扫这个**找字段名（94KB 完整 yaml 太长，关键字段约束容易被注意力稀释）
 - **04-tech-stack.json**：锁定栈（React 18 + Vite + TypeScript + Tailwind + shadcn-ui）
 - **05-design-tokens.json**：已定的设计 token，**请直接采用，不要重新设计**
 - **06-components-inventory.md**：现有 shadcn 组件清单，**请复用而非新造**
 - **07-references/**：参考截图（如有）
+
+> ⚠️ **v0.9.14 D31 实战教训**：design AI 拿到 94KB 完整 contract.yaml 仍会"视觉合理性优先"生造 `x` `y` `sla` `level` `progress` 这些 contract 没有的字段。**必须先扫 03b-contract-summary.md** 拿真实字段名清单，再设计 mock。
 
 ---
 
@@ -62,7 +65,7 @@
   - ⚠️ Claude Design 默认 miss `empty / error / loading`，**必须主动输出**
 - **JSX 单文件 < 1000 行**：超出请拆分子组件
 - **React 18 + 标准 JSX**：不依赖 Anthropic 私有库
-- **数据形态 100% 匹配 03-api-contract.yaml**：字段名 / 类型 / 必填一致
+- **数据形态 100% 匹配 03b-contract-summary.md** ⭐ **(v0.9.14 D31 强化)**：mock 数据**必须**用 03b 摘要里列出的真实字段名（如 `lon`/`lat` 不是 `x`/`y`，`status: ON_TASK` 不是 `state: 运输中`，`vin` 不是 `v`）
 
 ### 禁止
 
@@ -70,6 +73,7 @@
 - ❌ 重新设计已有组件（参考 06-components-inventory.md 复用）
 - ❌ 用 `fetch('/api/...')` / `axios.get(...)` —— DDT 后续会替换为 OpenAPI client
 - ❌ 用 mock 数据 / placeholder（数据形态从 03-api-contract.yaml 推导）
+- ❌ **生造视觉用虚构字段**（v0.9.14 D31 实战黑名单）：禁止 `x` `y` `sla` `level` `progress` `t` `v` `state(中文)` `org` `client(字符串)` —— 详见 03b-contract-summary.md 末尾的反模式表格
 - ❌ 用 localStorage / sessionStorage 存业务态（DDT 项目用 zustand persist）
 
 ---

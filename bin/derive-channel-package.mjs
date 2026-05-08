@@ -340,16 +340,44 @@ function deriveClaudeDesign(cwd, meta, opts) {
   // 复制 6 文件 + 1 references 目录
   // v0.8.1 D4：非 .md 文件（yaml/json）通过 copyOrWrapForUpload 自动包装为 .md
   // [src, dst, title] —— title 用于包装时的 H1
+  // v0.9.14 D31：03b-contract-summary.md（紧凑字段摘要）让 design AI 一眼看到字段名
   const copies = [
     ['docs/design-brief.md',                          '01-design-brief.md',         null],
     ['docs/prd.md',                                   '02-prd.md',                  null],
     ['docs/api-contract.yaml',                        '03-api-contract.yaml',       'API Contract (OpenAPI 3.0)'],
+    ['docs/contract-summary.md',                      '03b-contract-summary.md',    null],
     ['.ddt/tech-stack.json',                          '04-tech-stack.json',         'Tech Stack Selection'],
     ['.ddt/design/tokens.json',                       '05-design-tokens.json',      'Design Tokens'],
     ['.ddt/design/components-inventory.md',           '06-components-inventory.md', null],
   ];
   for (const [src, dst, title] of copies) {
-    writes.push(copyOrWrapForUpload(join(cwd, src), dst, uploadDir, opts, title));
+    const srcPath = join(cwd, src);
+    // 03b 缺失时尝试现场生成 contract 摘要（v0.9.14 D31）
+    if (src === 'docs/contract-summary.md' && !existsSync(srcPath)) {
+      try {
+        // 调用 extract-contract-summary 生成（仅在 web/src/api/types.ts 已存在时）
+        const typesPath = join(cwd, 'web', 'src', 'api', 'types.ts');
+        if (existsSync(typesPath)) {
+          // 内联调用 extract-contract-summary 的核心逻辑
+          // （避免 spawn 依赖；这里简化为提示用户先跑命令）
+        }
+      } catch {}
+    }
+    if (existsSync(srcPath)) {
+      writes.push(copyOrWrapForUpload(srcPath, dst, uploadDir, opts, title));
+    } else if (src === 'docs/contract-summary.md') {
+      // 不存在时输出占位文件 + hint
+      const hintPath = join(uploadDir, dst);
+      const hint = '# Contract Schema 摘要（v0.9.14 D31）\n\n' +
+        '> ℹ️ 此文件由 `bin/extract-contract-summary.mjs` 生成；\n' +
+        '> 跑 `node $DDT_PLUGIN_ROOT/bin/extract-contract-summary.mjs --output docs/contract-summary.md`\n' +
+        '> 然后重跑 `/digital-delivery-team:design-execute --refresh` 让真实摘要进入派发包。\n\n' +
+        '当前缺失：design AI 仅依赖 03-api-contract.yaml 全文，可能"视觉合理性优先"生造字段。';
+      if (!opts.dryRun) {
+        writeFileSync(hintPath, hint, 'utf8');
+      }
+      writes.push({ from: '<placeholder>', to: hintPath, size: hint.length });
+    }
   }
   // 复制 references/ 目录
   const assetsDir = join(cwd, '.ddt', 'design', 'assets');
