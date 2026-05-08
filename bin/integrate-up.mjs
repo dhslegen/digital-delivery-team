@@ -62,6 +62,30 @@ function portInUse(port) {
   return r.status === 0 && r.stdout.trim().length > 0;
 }
 
+// v0.9.12 D29：docker compose 多路径检测
+//   返回 { runner: 'compose-v2' | 'compose-v1' | null, args: ['compose'] | [] }
+//   compose-v2: docker compose（plugin）；compose-v1: docker-compose（standalone v5）
+function detectComposeRunner() {
+  if (which('docker') && spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' }).status === 0) {
+    return { runner: 'compose-v2', cmd: 'docker', baseArgs: ['compose'] };
+  }
+  if (which('docker-compose') && spawnSync('docker-compose', ['--version'], { encoding: 'utf8' }).status === 0) {
+    return { runner: 'compose-v1', cmd: 'docker-compose', baseArgs: [] };
+  }
+  return null;
+}
+
+// v0.9.12 D29：常见 db 端口 -> 服务名 映射，用于"端口已 listen 视为已就绪"判断
+const DB_PORTS = [
+  { port: 3306, name: 'MySQL' },
+  { port: 5432, name: 'PostgreSQL' },
+  { port: 6379, name: 'Redis' },
+];
+
+function detectRunningInfra() {
+  return DB_PORTS.filter(p => portInUse(p.port)).map(p => `${p.name}:${p.port}`);
+}
+
 function readTechStack() {
   if (!existsSync(TECH_STACK_PATH)) return null;
   try { return JSON.parse(readFileSync(TECH_STACK_PATH, 'utf8')); } catch { return null; }
@@ -146,37 +170,67 @@ class Reporter {
 
 function detectEnv(reporter, args) {
   const phase = reporter.begin('1. 环境侦测');
-  const issues = [];
-  const docker = which('docker');
-  const dockerCompose = docker ? spawnSync('docker', ['compose', 'version'], { encoding: 'utf8' }).status === 0 : false;
-  if (!docker) issues.push('docker 未安装');
-  else if (!dockerCompose) issues.push('docker compose（v2）不可用');
+  const issues = [];     // 真 fail（无法继续）
+  const warnings = [];   // 软警告（让 LLM/用户决定）
 
-  if (portInUse(8080) && !args['skip-server']) issues.push('端口 8080 已被占用（可能已有 server 在跑）');
-  if (portInUse(5173) && !args['skip-web']) issues.push('端口 5173 已被占用（可能已有 vite 在跑）');
+  // v0.9.12 D29：docker compose 多路径 + 已运行栈兜底
+  const composeRunner = detectComposeRunner();
+  const runningInfra = detectRunningInfra();
+
+  if (!composeRunner) {
+    if (runningInfra.length > 0) {
+      warnings.push(`docker compose 不可用（v2 plugin 与 standalone 都没装），但检测到已运行栈：${runningInfra.join(', ')}；将自动 --reuse-stack`);
+      args['reuse-stack'] = true;  // 自动开启
+    } else {
+      issues.push('docker compose 不可用，且无已运行栈（端口 3306/5432/6379 都未监听）；请装 docker compose 或手动起 db/cache');
+    }
+  }
+
+  // v0.9.12 D29：端口已占用从 issue 改 warning（让 LLM 决定 --skip-server / 复用）
+  if (portInUse(8080) && !args['skip-server']) {
+    warnings.push('端口 8080 已被占用（可能已有 server 在跑）；如要复用加 --skip-server，否则启动 server 会冲突');
+  }
+  if (portInUse(5173) && !args['skip-web']) {
+    warnings.push('端口 5173 已被占用（可能已有 vite 在跑）；如要复用加 --skip-web');
+  }
 
   const techStack = readTechStack();
   if (!techStack) issues.push('.ddt/tech-stack.json 不存在（先跑 /design）');
+
+  // 系统代理检测（warning 级；smoke 阶段会自动 NO_PROXY 绕过）
+  const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
+  if (httpProxy) {
+    warnings.push(`检测到系统代理 ${httpProxy}；smoke 阶段将自动 NO_PROXY=localhost,127.0.0.1 绕过`);
+  }
+
+  for (const w of warnings) phase.notes.push(`⚠️ ${w}`);
 
   if (issues.length) {
     reporter.fail(phase, issues.join('; '));
     return null;
   }
-  reporter.ok(phase, `preset=${presetOf(techStack)}`);
-  return { techStack, preset: presetOf(techStack) };
+  const note = composeRunner
+    ? `preset=${presetOf(techStack)}, compose=${composeRunner.runner}${runningInfra.length ? ', 已运行=' + runningInfra.join(',') : ''}`
+    : `preset=${presetOf(techStack)}, 已运行=${runningInfra.join(',')}（reuse-stack 模式）`;
+  reporter.ok(phase, note);
+  return { techStack, preset: presetOf(techStack), composeRunner, runningInfra };
 }
 
 // ============================================================================
 // Phase 2: docker-compose 准备
 // ============================================================================
 
-function prepareCompose(reporter, preset) {
+function prepareCompose(reporter, preset, env, args) {
   const phase = reporter.begin('2. docker-compose 准备');
+  // v0.9.12 D29：--reuse-stack 或检测到已运行栈 → 跳过
+  if (args['reuse-stack'] || env.runningInfra.length > 0) {
+    reporter.skip(phase, `复用已运行栈（${env.runningInfra.join(', ') || 'reuse-stack'}）；不准备 compose`);
+    return null;
+  }
   if (existsSync(COMPOSE_PATH)) {
     reporter.ok(phase, `用户已有 docker-compose.yml（保留不动）`);
     return COMPOSE_PATH;
   }
-  // 按 preset 复制模板
   const template = join(COMPOSE_TEMPLATES_DIR, `${preset}.yml`);
   if (!existsSync(template)) {
     reporter.skip(phase, `preset=${preset} 无 docker-compose 模板（go-modern / python-fastapi 等暂未自动支持，请手动起 db）`);
@@ -191,20 +245,30 @@ function prepareCompose(reporter, preset) {
 // Phase 3: 起基础组件 + healthcheck
 // ============================================================================
 
-async function dockerComposeUp(reporter, composePath) {
+async function dockerComposeUp(reporter, composePath, env) {
   const phase = reporter.begin('3. 起基础组件（docker compose up）');
   if (!composePath) {
-    reporter.skip(phase, '无 docker-compose 配置');
-    return false;
+    const reason = env.runningInfra.length > 0
+      ? `已有栈运行（${env.runningInfra.join(', ')}），跳过 up`
+      : '无 docker-compose 配置';
+    reporter.skip(phase, reason);
+    return true;  // skip 不阻塞下游
   }
-  const r = spawnSync('docker', ['compose', '-f', composePath, 'up', '-d', '--wait'], {
+  // v0.9.12 D29：用检测到的 composeRunner（v2 plugin / v1 standalone）
+  const runner = env.composeRunner;
+  if (!runner) {
+    reporter.skip(phase, 'docker compose 不可用，跳过（应该已在环境侦测告警）');
+    return true;
+  }
+  const upArgs = [...runner.baseArgs, '-f', composePath, 'up', '-d', '--wait'];
+  const r = spawnSync(runner.cmd, upArgs, {
     cwd: PROJECT_ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
   });
   if (r.status !== 0) {
-    reporter.fail(phase, `docker compose up 失败: ${r.stderr || r.stdout}`);
+    reporter.fail(phase, `${runner.cmd} ${upArgs.join(' ')} 失败: ${r.stderr || r.stdout}`);
     return false;
   }
-  reporter.ok(phase, '基础组件已启动并通过 healthcheck');
+  reporter.ok(phase, `基础组件已启动并通过 healthcheck（${runner.runner}）`);
   return true;
 }
 
@@ -212,28 +276,62 @@ async function dockerComposeUp(reporter, composePath) {
 // Phase 4: db migration
 // ============================================================================
 
-const MIGRATION_BY_PRESET = {
-  'java-modern': { dir: 'server', cmd: 'mvn', args: ['flyway:migrate'], skipIf: (root) => !existsSync(join(root, 'server', 'src', 'main', 'resources', 'db', 'migration')) },
-  'node-modern': { dir: 'server', cmd: 'npx', args: ['prisma', 'migrate', 'deploy'], skipIf: (root) => !existsSync(join(root, 'server', 'prisma', 'schema.prisma')) },
-  'python-fastapi': { dir: 'server', cmd: 'poetry', args: ['run', 'alembic', 'upgrade', 'head'], skipIf: (root) => !existsSync(join(root, 'server', 'alembic.ini')) },
-};
+// v0.9.12 D29：识别多种迁移路径——flyway / prisma / alembic / Spring Boot schema.sql
+//   找到具体迁移配置才跑；都没找到只输出 hint 不强制（避免错跑）
+function detectMigrationPaths() {
+  const paths = [];
+  const serverRoot = join(PROJECT_ROOT, 'server');
+
+  // Spring Boot flyway: src/main/resources/db/migration/V*.sql
+  if (existsSync(join(serverRoot, 'src', 'main', 'resources', 'db', 'migration'))) {
+    paths.push({ kind: 'flyway', cmd: 'mvn', args: ['flyway:migrate'], cwd: serverRoot });
+  }
+  // Spring Boot 原生 schema.sql + data.sql（v0.9.12 D29 新增识别）
+  const schemaSql = join(serverRoot, 'src', 'main', 'resources', 'schema.sql');
+  const dataSql = join(serverRoot, 'src', 'main', 'resources', 'data.sql');
+  if (existsSync(schemaSql) || existsSync(dataSql)) {
+    paths.push({ kind: 'spring-sql-init', hintFiles: [schemaSql, dataSql].filter(existsSync) });
+  }
+  // Prisma
+  if (existsSync(join(serverRoot, 'prisma', 'schema.prisma'))) {
+    paths.push({ kind: 'prisma', cmd: 'npx', args: ['prisma', 'migrate', 'deploy'], cwd: serverRoot });
+  }
+  // Alembic
+  if (existsSync(join(serverRoot, 'alembic.ini'))) {
+    paths.push({ kind: 'alembic', cmd: 'poetry', args: ['run', 'alembic', 'upgrade', 'head'], cwd: serverRoot });
+  }
+  return paths;
+}
 
 function runMigration(reporter, preset) {
   const phase = reporter.begin('4. db migration');
-  const cfg = MIGRATION_BY_PRESET[preset];
-  if (!cfg) { reporter.skip(phase, `preset=${preset} 不支持自动迁移，请手动跑`); return true; }
-  if (cfg.skipIf && cfg.skipIf(PROJECT_ROOT)) {
-    reporter.skip(phase, `${preset}: 未发现迁移目录/配置文件，假设无 schema 变更`);
+  const paths = detectMigrationPaths();
+  if (paths.length === 0) {
+    reporter.skip(phase, `未识别到迁移配置（flyway / prisma / alembic / spring schema.sql 都未发现）；如有 schema 变更请手动跑`);
     return true;
   }
-  const cwd = join(PROJECT_ROOT, cfg.dir);
-  if (!existsSync(cwd)) { reporter.skip(phase, `${cfg.dir}/ 目录不存在`); return true; }
-  const r = spawnSync(cfg.cmd, cfg.args, { cwd, encoding: 'utf8' });
+  // 多路径并存时优先级：spring-sql-init（最常见的 Spring Boot 隐式迁移）→ flyway → prisma → alembic
+  // spring-sql-init 不强跑（Spring Boot 启动时会自动执行 schema.sql + data.sql），仅 hint
+  const springSql = paths.find(p => p.kind === 'spring-sql-init');
+  if (springSql && paths.length === 1) {
+    const files = springSql.hintFiles.map(f => f.replace(PROJECT_ROOT + '/', '')).join(', ');
+    reporter.skip(phase, `检测到 Spring Boot schema.sql/data.sql（${files}）；server 启动时会自动执行（确保 spring.sql.init.mode=always 或 embedded db）；如需手动导入用 mysql client + utf8mb4 charset`);
+    return true;
+  }
+  // 跑能跑的路径（flyway / prisma / alembic）
+  const runnable = paths.filter(p => p.cmd);
+  if (runnable.length === 0) {
+    const kinds = paths.map(p => p.kind).join(', ');
+    reporter.skip(phase, `识别到迁移路径但都不可执行（${kinds}）；按项目实际方式手动迁移`);
+    return true;
+  }
+  const cfg = runnable[0];
+  const r = spawnSync(cfg.cmd, cfg.args, { cwd: cfg.cwd, encoding: 'utf8' });
   if (r.status !== 0) {
-    reporter.fail(phase, `${cfg.cmd} ${cfg.args.join(' ')} 失败: ${r.stderr || r.stdout}`);
+    reporter.fail(phase, `${cfg.cmd} ${cfg.args.join(' ')} 失败 (${cfg.kind}): ${(r.stderr || r.stdout).slice(0, 500)}`);
     return false;
   }
-  reporter.ok(phase, `${cfg.cmd} ${cfg.args.join(' ')} 成功`);
+  reporter.ok(phase, `${cfg.kind}: ${cfg.cmd} ${cfg.args.join(' ')} 成功`);
   return true;
 }
 
@@ -301,6 +399,9 @@ async function startServer(reporter, preset, args) {
   if (!ok && cfg.fallbackHealthUrl) ok = await pollHealth(cfg.fallbackHealthUrl, 15000);
 
   if (!ok) {
+    // v0.9.12 D29：失败时输出 server.log 最近 30 行到 stderr，让 LLM 看真实错误
+    const tail = tailFile(logPath, 30);
+    if (tail) console.error(`\n--- server.log (最后 30 行) ---\n${tail}\n--- end ---`);
     reporter.fail(phase, `server 60s 内未就绪（PID ${pid}）；查看 ${logPath}`);
     return false;
   }
@@ -322,11 +423,24 @@ async function startWeb(reporter, preset, args) {
 
   const ok = await pollPort(cfg.readyPort, 30000);
   if (!ok) {
+    // v0.9.12 D29：失败时输出 web.log 最近 30 行
+    const tail = tailFile(logPath, 30);
+    if (tail) console.error(`\n--- web.log (最后 30 行) ---\n${tail}\n--- end ---`);
     reporter.fail(phase, `web 30s 内端口 ${cfg.readyPort} 未监听（PID ${pid}）；查看 ${logPath}`);
     return false;
   }
   reporter.ok(phase, `web dev server 监听 :${cfg.readyPort}（PID ${pid}）`);
   return true;
+}
+
+// v0.9.12 D29：tail 文件最后 N 行（避免大日志全读）
+function tailFile(path, n) {
+  if (!existsSync(path)) return null;
+  try {
+    const text = readFileSync(path, 'utf8');
+    const lines = text.split(/\r?\n/);
+    return lines.slice(-n).join('\n');
+  } catch { return null; }
 }
 
 // ============================================================================
@@ -359,6 +473,17 @@ async function runSmoke(reporter, preset, args) {
   if (args['skip-server'] && args['skip-web']) {
     reporter.skip(phase, '--skip-server + --skip-web');
     return true;
+  }
+
+  // v0.9.12 D29：检测系统代理，自动 NO_PROXY 绕过 localhost
+  //   Node fetch 内部 undici 会读 NO_PROXY 环境变量决定是否走 HTTP_PROXY
+  const httpProxy = process.env.HTTP_PROXY || process.env.http_proxy;
+  if (httpProxy) {
+    const existingNoProxy = process.env.NO_PROXY || process.env.no_proxy || '';
+    const merged = ['localhost', '127.0.0.1', '::1', existingNoProxy].filter(Boolean).join(',');
+    process.env.NO_PROXY = merged;
+    process.env.no_proxy = merged;
+    phase.notes.push(`已注入 NO_PROXY=${merged} 绕过系统代理 ${httpProxy}`);
   }
 
   const checks = [];
@@ -442,69 +567,65 @@ async function main() {
 
   if (args['dry-run']) {
     console.log('# /integrate 计划（--dry-run）');
-    console.log('1. 环境侦测：docker / docker-compose / port 占用 / .ddt/tech-stack.json');
-    console.log('2. docker-compose 准备：项目根 docker-compose.yml 或 plugin 模板复制');
-    console.log('3. docker compose up -d --wait（等 healthcheck）');
-    console.log('4. db migration（按 preset：mvn flyway / npx prisma migrate / alembic upgrade）');
-    console.log('5. 启 server 后台（mvn spring-boot:run / npm run start:dev）+ 等 health 60s');
-    console.log('6. 启 web 后台（npm run dev）+ 等端口 :5173 30s');
-    console.log('7. smoke：health endpoint + OpenAPI 第一个 GET endpoint + web 端口');
-    console.log('8. 报告 docs/integrate-report.md');
+    console.log('1. 环境侦测：docker compose v2/v1 多路径 + 已运行栈兜底 + 端口已占用降级 warning');
+    console.log('2. docker-compose 准备：项目根 docker-compose.yml / plugin 模板 / --reuse-stack 跳过');
+    console.log('3. docker compose up -d --wait（compose-v2 plugin 或 docker-compose v5 standalone）');
+    console.log('4. db migration 多路径：flyway / prisma / alembic / Spring Boot schema.sql（hint）');
+    console.log('5. 启 server 后台 + 等 health 60s（失败时 dump server.log 尾 30 行到 stderr）');
+    console.log('6. 启 web 后台 + 等端口 30s（失败时 dump web.log 尾）');
+    console.log('7. smoke：自动 NO_PROXY 绕代理；health + OpenAPI 第一个 GET endpoint + web 端口');
+    console.log('8. 报告 docs/integrate-report.md（try/finally 保证必落，不论成功失败）');
     console.log('   --tear-down 时拆环境；默认保留供 /verify 使用');
+    console.log('   --reuse-stack 强制复用已运行栈，跳过 Phase 2/3');
     process.exit(0);
   }
 
   const reporter = new Reporter();
+  let exitCode = 0;
+  let composePath = null;
 
-  // Phase 1
-  const env = detectEnv(reporter, args);
-  if (!env) { reporter.writeReport(); process.exit(2); }
+  // v0.9.12 D29：try/finally 保证报告必落
+  try {
+    // Phase 1
+    const env = detectEnv(reporter, args);
+    if (!env) { exitCode = 2; return; }
 
-  // Phase 2
-  const composePath = prepareCompose(reporter, env.preset);
+    // Phase 2
+    composePath = prepareCompose(reporter, env.preset, env, args);
 
-  // Phase 3
-  if (composePath) {
-    const ok = await dockerComposeUp(reporter, composePath);
-    if (!ok) { reporter.writeReport(); process.exit(3); }
+    // Phase 3
+    if (composePath || env.runningInfra.length > 0) {
+      const ok = await dockerComposeUp(reporter, composePath, env);
+      if (!ok) { exitCode = 3; return; }
+    }
+
+    // Phase 4
+    if (!runMigration(reporter, env.preset)) { exitCode = 4; return; }
+
+    // Phase 5
+    const serverOk = await startServer(reporter, env.preset, args);
+    if (!serverOk) { exitCode = 5; return; }
+
+    // Phase 6
+    const webOk = await startWeb(reporter, env.preset, args);
+    if (!webOk) { exitCode = 6; return; }
+
+    // Phase 7
+    const smokeOk = await runSmoke(reporter, env.preset, args);
+    if (!smokeOk) { exitCode = 7; return; }
+
+    // Phase 8
+    if (args['tear-down']) {
+      await tearDown(reporter, composePath);
+    } else {
+      const phase = reporter.begin('8. 拆环境');
+      reporter.skip(phase, '--keep-stack（默认）：栈保留供 /verify 使用；手动 `docker compose down` 清理');
+    }
+  } finally {
+    // v0.9.12 D29：无论中途 return 还是异常，报告必落
+    try { reporter.writeReport(); } catch (e) { console.error('⚠️  写报告失败:', e.message); }
+    process.exit(exitCode);
   }
-
-  // Phase 4
-  if (!runMigration(reporter, env.preset)) {
-    reporter.writeReport();
-    process.exit(4);
-  }
-
-  // Phase 5
-  const serverOk = await startServer(reporter, env.preset, args);
-  if (!serverOk) { reporter.writeReport(); process.exit(5); }
-
-  // Phase 6
-  const webOk = await startWeb(reporter, env.preset, args);
-  if (!webOk) { reporter.writeReport(); process.exit(6); }
-
-  // Phase 7
-  const smokeOk = await runSmoke(reporter, env.preset, args);
-  if (!smokeOk) {
-    if (args['tear-down']) await tearDown(reporter, composePath);
-    reporter.writeReport();
-    process.exit(7);
-  }
-
-  // Phase 8
-  if (args['tear-down']) {
-    await tearDown(reporter, composePath);
-  } else {
-    reporter.begin('8. 拆环境').status = 'skip';
-    const last = reporter.phases[reporter.phases.length - 1];
-    last.status = 'skip';
-    last.duration_ms = 0;
-    last.notes.push('--keep-stack（默认）：栈保留供 /verify 使用；手动 `docker compose down` 清理');
-    console.log('  ⏭️  保留栈供 /verify 使用（加 --tear-down 自动拆）');
-  }
-
-  reporter.writeReport();
-  process.exit(0);
 }
 
 // require for spawnDetached writeStream

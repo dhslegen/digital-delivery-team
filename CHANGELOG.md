@@ -4,6 +4,73 @@
 
 ---
 
+## [0.9.12] - 2026-05-08 — 实战 hotfix D29：/integrate 实战调优（仅修通用问题，项目特定留 LLM）
+
+源自实战：用户跑 `/digital-delivery-team:integrate` 时 v0.9.11 在 Phase 1 直接 fail（docker compose v2 不可用），但用户系统其实有 docker-compose v5 standalone + 已运行的 Colima 容器。`reporter.fail()` 后 `process.exit(2)` 提前退出，**报告也没生成**——用户失去了观察整体阻塞模式的能力，只能手动接管整个流程。
+
+用户洞察："**每个项目的具体问题都不一样，让 LLM 自己处理；脚本只修通用问题**"——拒绝把 utf8mb4 / RSA 公钥 / Java 17 等项目特定 known issues 硬编码到 DDT。
+
+### 🟢 D29 修通用问题（6 项）
+
+1. **docker compose 多路径检测** —— v2 plugin → v1 standalone → 已运行栈兜底
+   - `detectComposeRunner()`: 试 `docker compose version`，fallback `docker-compose --version`
+   - `detectRunningInfra()`: 检测 :3306 / :5432 / :6379 listen 视为已就绪基础组件
+
+2. **端口 8080/5173 已占用降级** —— issue → warning
+   - 旧版：端口已占用直接判 fail（违直觉，旧 server 在跑反而是好事）
+   - 新版：仅 warning 提示用户加 `--skip-server` 复用
+
+3. **db migration 多路径** —— flyway / prisma / alembic + Spring Boot schema.sql
+   - `detectMigrationPaths()` 识别 4 种迁移配置
+   - `spring-sql-init` kind 仅输出 hint 不强跑（Spring Boot 启动时会自动执行）
+
+4. **smoke 自动绕代理** —— 检测 `HTTP_PROXY`/`http_proxy` → 注入 `NO_PROXY=localhost,127.0.0.1,::1`
+   - 让 fetch 走直连而非代理 502
+
+5. **失败时 dump log 尾** —— server/web 启动失败时输出最近 30 行 .log 到 stderr
+   - 让 LLM 看真实错误（utf8mb4 / RSA / Java 版本）而非"60s 未就绪"
+   - 配合 `tailFile()` 工具
+
+6. **try/finally 保证报告必落** —— main 函数包 try/finally
+   - 旧版：phase fail → `process.exit(N)` 直接退，报告丢失
+   - 新版：fail → 设 `exitCode` + `return`，finally 内 `reporter.writeReport()` 必执行
+
+### 新增参数
+
+- `--reuse-stack`：检测 :3306/:5432/:6379 已 listen 直接跳 Phase 2/3
+  - 自动启用：当 docker compose 不可用但端口已 listen 时
+
+### 设计哲学（这次的关键）
+
+> 脚本提供**框架性工具**（多路径检测、端口判断、报告生成、richer stderr）；LLM 提供**智能性判断**（读 log → 识别 utf8mb4 错误 → 改 application.yml）。
+
+具体不修的"项目特定问题"（v0.9.11 实战遇到，但 D29 拒绝硬编码）：
+- ❌ JDBC URL `characterEncoding=utf8mb4` 自动 fix（每个项目可能用不同 charset）
+- ❌ MySQL 8 RSA 公钥认证自动加 `allowPublicKeyRetrieval=true`（项目可能配 SSL）
+- ❌ MySQL client 默认 latin1 charset 自动修（导入命令是用户跑的）
+- ❌ Java 版本切换（用户机器配置）
+- ❌ application.yml 自动读密码（每个项目存放方式不同）
+
+这些**应该**在用户重跑 /integrate 失败时，LLM 看 stderr/server.log 自己定位 + 改配置 + 重试。
+
+### 测试覆盖（+13 用例）
+
+`tests/integration/d29-integrate-real-world.test.mjs`：
+- detectComposeRunner v2 + v1 fallback
+- detectRunningInfra 三常见 db 端口
+- detectEnv 端口已占用降级 + 已运行栈自动 reuse-stack + 代理 warning
+- detectMigrationPaths 识别 schema.sql + spring-sql-init kind
+- runMigration spring-sql-init 仅 hint 不强跑
+- runSmoke NO_PROXY 注入
+- tailFile 工具 + server/web 启动失败时 log 尾输出
+- main try/finally 保证 writeReport 必执行
+- --dry-run 输出反映 D29 改动
+- commands/integrate.md --reuse-stack 文档 + 设计哲学说明
+
+测试基数 481 → 494（+13 D29，零回归）。
+
+---
+
 ## [0.9.11] - 2026-05-07 — 实战 hotfix D28：新增 `/integrate` 命令填补"代码完成 → 栈跑起来"缺口
 
 源自实战：用户跑完 `/build-web` 和 `/build-api` 后，DDT 推荐 `/test`——但**数据库 / Redis 没起、server 进程没启动、前后端从未真实联调过**，`/test` 跑的是 mock + 单元，不是真实集成。/impl → /verify 之间缺"栈跑起来"环节。

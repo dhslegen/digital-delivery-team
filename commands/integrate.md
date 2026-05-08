@@ -1,6 +1,6 @@
 ---
-description: 集成验证 · 起 db/redis + db migrate + 启前后端 + smoke 测试。/impl 与 /verify 之间的"栈跑起来"环节（v0.9.11 D28）。
-argument-hint: "[--dry-run] [--tear-down] [--skip-smoke] [--skip-server] [--skip-web]"
+description: 集成验证 · 起 db/redis + db migrate + 启前后端 + smoke 测试。/impl 与 /verify 之间的"栈跑起来"环节（v0.9.11 D28；v0.9.12 D29 实战调优）。
+argument-hint: "[--dry-run] [--tear-down] [--reuse-stack] [--skip-smoke] [--skip-server] [--skip-web]"
 ---
 
 # /integrate
@@ -122,6 +122,26 @@ fi
 
 `/integrate --tear-down` 起栈 → smoke → 自动拆环境。适合 CI / 演示一次性运行。  
 默认 **保留栈**（`/verify` 阶段可复用），手动 `docker compose down` 清理。
+
+## --reuse-stack（v0.9.12 D29 新增）
+
+`/integrate --reuse-stack` 假设基础组件（MySQL/Postgres/Redis）已经在跑——直接跳过 Phase 2/3 的 docker compose 准备/启动，进入 Phase 4 db migration → 5/6 启 server/web → 7 smoke。
+
+**典型场景**：
+- 用 Colima / Docker Desktop / 物理机已起 db
+- 团队共享开发数据库
+- 多项目复用同一 MySQL 实例
+
+**自动触发**：当 docker compose（v2 plugin）和 docker-compose（standalone v5）都不可用时，如果检测到 :3306 / :5432 / :6379 已 listen，会**自动启用** --reuse-stack 模式（不需要手动加参数）。
+
+## v0.9.12 D29 行为要点
+
+- **环境侦测放宽**：docker compose 多路径 fallback（v2 plugin → v1 standalone → 已运行栈）；端口 8080/5173 已占用从 fail 改 warning
+- **db migration 多路径**：除 flyway/prisma/alembic 外，识别 Spring Boot 原生 `schema.sql` + `data.sql`（hint 不强跑——Spring Boot 启动时会自动执行）
+- **失败时 dump log 尾**：server/web 启动失败时，最近 30 行日志输出到 stderr，让 LLM 直接看真实错误而非"60s 未就绪"
+- **自动绕代理**：检测 `HTTP_PROXY`/`http_proxy` → smoke 阶段自动注入 `NO_PROXY=localhost,127.0.0.1`
+- **报告必落**：用 try/finally 包主流程，无论中途哪个 phase fail，`docs/integrate-report.md` 都会写出
+- **项目特定问题**留给 LLM 智能处理：utf8mb4 / RSA 公钥 / Java 版本切换 / 密码不匹配等不硬编码到 known issues，DDT 仅提供"看 log"和"重试"工具，LLM 看完 stderr/server.log 自己决定改哪个 application.yml
 
 ## --skip-server / --skip-web / --skip-smoke
 
