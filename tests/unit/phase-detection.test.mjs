@@ -27,8 +27,9 @@ test('detectPhase 大小写兼容', () => {
   assert.deepEqual(detectPhase('/PRD'), { phase: 'prd', args: '' });
 });
 
-// PR-B: hook 单源化契约 — 业务级命令的 phase 事件由 emit-phase 唯一发起
-test('PR-B: user-prompt-submit hook 不发业务级 phase_start（避免与 emit-phase 双源叠加）', () => {
+// D34 (v0.9.18)：hook 双源采集 — 业务级 + 编排级命令均由 hook 兜底写 phase_start，
+//   配合 store.mjs 端的 (project_id, phase, ±60s) 去重逻辑（emit-phase 优先，hook 兜底）
+test('D34: user-prompt-submit hook 为所有 phase 命令写 phase_start（兜底 LLM 跳过 emit-phase）', () => {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
@@ -39,7 +40,7 @@ test('PR-B: user-prompt-submit hook 不发业务级 phase_start（避免与 emit
   const HOOK = path.resolve(here, '../../hooks/handlers/user-prompt-submit.js');
   try {
     fs.mkdirSync(path.join(sandbox, '.ddt'), { recursive: true });
-    fs.writeFileSync(path.join(sandbox, '.ddt', 'project-id'), 'pr-b-test');
+    fs.writeFileSync(path.join(sandbox, '.ddt', 'project-id'), 'd34-test');
 
     // 业务级 /prd
     spawnSync(process.execPath, [HOOK], {
@@ -59,10 +60,14 @@ test('PR-B: user-prompt-submit hook 不发业务级 phase_start（避免与 emit
       .filter(ev => ev.event === 'phase_start');
     const prdEvents     = events.filter(ev => ev.data?.phase === 'prd');
     const kickoffEvents = events.filter(ev => ev.data?.phase === 'kickoff');
-    assert.equal(prdEvents.length, 0,
-      'hook 不应为业务级 /prd 发 phase_start（由 commands/prd.md 内 emit-phase 唯一发起）');
+    assert.equal(prdEvents.length, 1,
+      'hook 必须为业务级 /prd 写 phase_start 兜底（LLM 跳过 emit-phase 时也不丢事件）');
     assert.equal(kickoffEvents.length, 1,
-      'hook 必须为编排级 /kickoff 发 phase_start');
+      'hook 必须为编排级 /kickoff 写 phase_start');
+    assert.equal(prdEvents[0].data?.source, 'hook',
+      'hook 写的事件必须打 source=hook，便于 store.mjs 端按来源去重');
+    assert.equal(kickoffEvents[0].data?.source, 'hook',
+      '编排级也打 source=hook');
   } finally { fs.rmSync(sandbox, { recursive: true, force: true }); }
 });
 

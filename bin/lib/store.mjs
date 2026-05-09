@@ -17,6 +17,19 @@ export class DeliveryStore {
     this._migrateQualityMetrics();
     const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
     this._db.exec(schema);
+    this._migratePhaseRuns();
+  }
+
+  // D34 (v0.9.18)：phase_runs 加 source 列，支撑 hook + emit-phase 双源去重
+  _migratePhaseRuns() {
+    try {
+      const cols = this._db.prepare('PRAGMA table_info(phase_runs)').all();
+      if (!cols.length) return;
+      const existing = new Set(cols.map(c => c.name));
+      if (!existing.has('source')) {
+        this._db.prepare('ALTER TABLE phase_runs ADD COLUMN source TEXT').run();
+      }
+    } catch (_) { /* 表不存在时正常忽略 */ }
   }
 
   close() {
@@ -149,11 +162,35 @@ export class DeliveryStore {
       }
 
       // M1-5: phase_runs 写入
-      case 'phase_start':
+      // D34 (v0.9.18)：双源 + 去重 — hook 与 emit-phase 都写 phase_start
+      //   规则：同 (project_id, phase) 在 ±60s 内相邻的两条事件视为同一 phase 启动
+      //         emit-phase 优先（精确 ts），删除已有的 hook 行；hook 后到则跳过（兜底已就位）
+      //         两源 ts 相差 > 60s 视为独立的两次 phase 启动，正常入库
+      case 'phase_start': {
+        const newSource = d.source || 'unknown';
+        const candidate = this._db.prepare(
+          `SELECT id, source FROM phase_runs
+           WHERE project_id=? AND phase=? AND ended_at IS NULL
+             AND ABS((julianday(?) - julianday(started_at)) * 86400) < 60
+           ORDER BY started_at DESC LIMIT 1`
+        ).get(pid, d.phase || 'unknown', ts);
+        if (candidate) {
+          const existingSource = candidate.source || 'unknown';
+          if (newSource === 'hook' && existingSource === 'emit-phase') {
+            // emit-phase 已写过，hook 跳过（emit-phase 更精确）
+            break;
+          }
+          if (newSource === 'emit-phase' && existingSource === 'hook') {
+            // emit-phase 后到，删除 hook 行让出位置（emit-phase 的 ts 与命令真实开始更近）
+            this._db.prepare('DELETE FROM phase_runs WHERE id=?').run(candidate.id);
+          }
+          // 同源（hook + hook 或 emit-phase + emit-phase）→ 正常 INSERT，由后续 phase_end 三级匹配处理
+        }
         this._db.prepare(
-          'INSERT INTO phase_runs(session_id, project_id, phase, args, started_at) VALUES(?, ?, ?, ?, ?)'
-        ).run(sessionId, pid, d.phase || 'unknown', d.args || '', ts);
+          'INSERT INTO phase_runs(session_id, project_id, phase, args, started_at, source) VALUES(?, ?, ?, ?, ?, ?)'
+        ).run(sessionId, pid, d.phase || 'unknown', d.args || '', ts, newSource);
         break;
+      }
 
       case 'phase_end': {
         // PR-B 三级匹配：emit-phase.mjs 每次新进程都会生成 cli-${ts} 不同 session_id，

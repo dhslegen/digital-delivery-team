@@ -41,11 +41,13 @@ function mapToProgressPhase(cmd) {
   return cmd;
 }
 
-// PR-B P0-3：业务级命令（prd/wbs/design/test/...）的 phase 事件由 commands/X.md 内 emit-phase 唯一发起，
-//   user-prompt-submit hook 不再重复发 phase_start，避免 hook + emit-phase 双源时间窗叠加（实测重复计算 30-50%）。
-//   编排级命令（kickoff/impl/verify/ship）由 hook 抓（commands/kickoff.md 内部不调 emit-phase 编排级 phase）。
-function shouldEmitPhaseEvent(cmd) {
-  return ORCHESTRATOR_COMMANDS.has(cmd);
+// D34 (v0.9.18)：撤销 PR-B P0-3 单源限制——hook 与 emit-phase **双源写入**，aggregate.mjs ingest 时去重。
+//   背景：commands/X.md::Phase 1 把 emit-phase 跟前置检查写在同一 bash 块里，依赖 main thread 字面执行；
+//   实战发现 Claude 会改写 bash（"友好版"，砍掉 emit-phase 行），导致 phase 事件永久丢失。
+//   双源策略：UserPromptSubmit hook 在命令输入瞬间写 source="hook" 兜底；emit-phase 跑成功时写 source="emit-phase"。
+//   去重在 store.mjs 端：emit-phase 后到优先（精确 ts），删除 hook 行；hook 先到则保留作兜底。
+function shouldEmitPhaseEvent(_cmd) {
+  return true; // 所有 phase 命令（业务级 + 编排级）均由 hook 兜底
 }
 
 const PHASE_PATTERN = new RegExp(

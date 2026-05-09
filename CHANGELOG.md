@@ -4,6 +4,69 @@
 
 ---
 
+## [0.9.18] - 2026-05-09 — 实战 hotfix D34：phase 事件双源采集 + ingest 去重（消除 LLM 跳 emit-phase 导致的工时永久丢失）
+
+源自实战：用户在 alv-ops 项目运行 `/digital-delivery-team:build-api`（含一次 `/relay` 跨会话接力），但 efficiency-report 显示"backend 工时不可证明"。三方对照 events.jsonl + phase_runs + Bash head 实证发现：
+
+| 时间点 | Bash head（前 80 字符） | 是否含 emit-phase |
+|---|---|---|
+| 12:55:39（build-api 启动瞬间） | `test -f docs/api-contract.yaml && echo "✅ ..." \|\| echo "❌ 缺少 do` | **❌ 砍掉了** |
+| 12:55:41 | `DDT_PLUGIN_ROOT=$(cat "${HOME}/.claude/delivery-metrics/.ddt-plugin-root" 2>/dev` | ❌ |
+| 12:55:50 | `DDT_PLUGIN_ROOT="${HOME}/.claude/plugins/cache/digital-delivery-team/digital-del` | ❌ |
+| 12:55:59 | `npx --yes @redocly/cli lint docs/api-contract.yaml 2>&1 \| tail -5` | ❌ |
+
+对比 `commands/build-api.md::Phase 1` 模板字面内容（含 `node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase build-api --action start`），**Claude 把整段 bash 改写成了"友好版"**——把 `test -f X \|\| { echo "❌"; exit 1; }` 改成 `test -f X && echo "✅" \|\| echo "❌"`，并完整跳过 emit-phase 调用一行。
+
+phase_start 事件因此永久丢失。`hooks/handlers/user-prompt-submit.js::shouldEmitPhaseEvent` 在 PR-B P0-3 阶段被收敛为只对编排级命令（kickoff/impl/verify/ship）写事件——业务级命令（prd/wbs/design/build-api/build-web/...）的 phase_start 事件被设计为**只能由命令文件内的 emit-phase 唯一发起**。当 LLM 改写或简化 bash 跳过 emit-phase 时，**hook 不会兜底**——这是把"完整事件采集"的责任错误地交给了 LLM 自觉。
+
+### 🟣 D34 修 3 件事
+
+#### 1. 撤销 PR-B P0-3 单源限制（`hooks/handlers/user-prompt-submit.js`）
+
+`shouldEmitPhaseEvent` 改为对所有 phase 命令返回 `true`——hook 在用户输入 `/<command>` 的瞬间就为业务级 + 编排级**双写** phase_start 兜底，事件附带 `source: 'hook'` 标签。
+
+LLM 改写 bash 跳过 emit-phase？没关系——hook 那条已经在 events.jsonl 里就位了。
+
+#### 2. `bin/lib/store.mjs` 加 source 列 + ingest 去重
+
+- 新增 `_migratePhaseRuns()`：对已有库 `ALTER TABLE phase_runs ADD COLUMN source TEXT`（idempotent）
+- 改写 `case 'phase_start'` ingest 逻辑：
+  - **去重时间窗**：同 (project_id, phase) 在 ±60s 内相邻的两条事件视为同一 phase 启动
+  - **优先级**：emit-phase（精确 ts，命令真实开始）> hook（粗 ts，UserPromptSubmit 触发瞬间）
+  - **emit-phase 后到**：删除已有 hook 行，让 emit-phase 替代
+  - **hook 后到**：跳过（emit-phase 已就位，更精确）
+  - **>60s 间隔**：视为两次合法独立启动，正常入库
+
+PR-B P0-3 当初要解决的"双源叠加 30~50% 重复工时"问题：现在由 store 层去重根治，不再需要在 hook 端单源化。
+
+#### 3. 测试覆盖（7 个用例）
+
+`tests/integration/d34-phase-event-dual-source.test.mjs`：
+
+- 单源 hook / 单源 emit-phase / hook 先 → emit-phase 后到 / emit-phase 先 → hook 后到 / 两次合法独立（>60s）/ **alv-ops 真实场景模拟（LLM 跳过 emit-phase 时 hook 兜底）** / PRAGMA schema 验证
+
+`tests/unit/phase-detection.test.mjs::"PR-B"` 旧测试改写为 D34 新预期（hook 双写 + source 标签）。
+
+### 📊 测试基数
+
+554 → 555（+7 D34，-1 改写 PR-B 旧测试），零回归。
+
+### 🎯 设计原则反思
+
+DDT 这种"度量埋点写在用户态命令模板里"的架构在传统脚本里成立——bash 解释器一定字面执行。但在 LLM 时代失效——Claude 把 commands/X.md 的 bash 块当作"意图说明"而不是"必须字面执行的代码"。
+
+把度量埋点交给 hook（系统强制采集，绕不开）比交给命令模板（依赖 LLM 自觉）稳健得多。**关键事件应放在 LLM 不能介入的层**，命令模板只放"用户可见的业务步骤"。
+
+PR-B P0-3 当初解决的"双源叠加"是真实问题，但解法过激——直接禁用 hook 端采集。D34 的解法是 hook 与 emit-phase 双写 + ingest 去重，两全其美。
+
+### 影响范围
+
+- **新项目**：phase_runs 自动含 source 列；hook + emit-phase 双写、自动去重
+- **已有项目**：首次 ingest 时自动 ALTER TABLE；存量历史数据 source 列为 NULL（不影响工时计算）
+- **alv-ops 当前会话工时**：无法回填（事件流已固化）；下次跑 `/build-api` 即可被 hook 兜底
+
+---
+
 ## [0.9.17] - 2026-05-09 — 文档清理：去 vx.x.x 版本印记 + 计数同步
 
 源自用户反馈："README 不应关心升级日志，只关心如何向开发者讲清道明，日志有专门的文件"。本次仅改文档，不动任何 agent / command / skill / hook / bin 行为。
