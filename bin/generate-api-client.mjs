@@ -57,9 +57,41 @@ function ensureDir(p) { mkdirSync(p, { recursive: true }); }
 
 // ============================================================================
 // 模板：openapi-fetch client.ts（首次创建用）
+// D35 (v0.9.19)：按 bundler 派生不同环境变量读取方式——避免 Vite SPA 项目里
+//   `process.env` 报"找不到名称 process"。bundler 推断来自 tech-stack.json::frontend.bundler。
 // ============================================================================
 
-const CLIENT_TEMPLATE = `// 由 DDT v0.9.13 D30 生成。安全编辑：本文件可手动改（首次创建后不再被覆盖）。
+function envReaderFor(bundler) {
+  // Vite/Vite-based（含 vitest / nuxt 3）：浏览器代码无 process 全局，import.meta.env 是规范
+  // Webpack/Next.js：DefinePlugin 把 process.env.X 在编译期替换为字面量，TypeScript 端需 @types/node 或 globalThis 声明
+  // 兜底：纯字面量（无环境变量）
+  if (!bundler) return { snippet: `'http://localhost:8080'`, comment: '未声明 bundler，使用字面量 fallback' };
+  const b = String(bundler).toLowerCase();
+  if (b === 'vite' || b === 'vitest' || b === 'nuxt' || b === 'astro') {
+    return {
+      snippet: `import.meta.env?.VITE_API_BASE_URL || 'http://localhost:8080'`,
+      comment: 'Vite 系：只用 import.meta.env（浏览器代码无 process 全局）',
+    };
+  }
+  if (b === 'next' || b === 'nextjs' || b === 'next.js') {
+    return {
+      snippet: `process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'`,
+      comment: 'Next.js：用 NEXT_PUBLIC_ 前缀，由 DefinePlugin 编译期替换为字面量',
+    };
+  }
+  if (b === 'webpack' || b === 'cra' || b === 'create-react-app') {
+    return {
+      snippet: `process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080'`,
+      comment: 'Webpack/CRA：用 REACT_APP_ 前缀，由 DefinePlugin 编译期替换',
+    };
+  }
+  // 未识别 bundler：保守用字面量，避免引入 process 编译错
+  return { snippet: `'http://localhost:8080'`, comment: `bundler=${bundler} 未识别，使用字面量 fallback（请在此手动接环境变量读取）` };
+}
+
+function buildClientTemplate(bundler) {
+  const env = envReaderFor(bundler);
+  return `// 由 DDT 生成（bundler=${bundler || 'unknown'}）。安全编辑：本文件可手动改（首次创建后不再被覆盖）。
 // 强类型来源：./types.ts（每次 contract 变更自动重生）
 //
 // 用法（在组件内）：
@@ -80,10 +112,8 @@ const CLIENT_TEMPLATE = `// 由 DDT v0.9.13 D30 生成。安全编辑：本文�
 import createClient from 'openapi-fetch';
 import type { paths } from './types';
 
-// 从环境变量读基础 URL（fallback dev 默认）
-const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
-  || (typeof process !== 'undefined' && process.env?.VITE_API_BASE_URL)
-  || 'http://localhost:8080';
+// ${env.comment}
+const BASE_URL = ${env.snippet};
 
 export const apiClient = createClient<paths>({
   baseUrl: BASE_URL,
@@ -99,6 +129,7 @@ export async function unwrap<T>(promise: Promise<{ data?: T; error?: unknown }>)
   return data;
 }
 `;
+}
 
 const README_TEMPLATE = `# web/src/api/
 
@@ -143,9 +174,12 @@ function detectGenerator(techStack) {
   return { kind: 'unknown', hint: `type_generation=${t} 未识别；当前支持：openapi-typescript` };
 }
 
-function shouldRegenerate(contractHash, force) {
+function shouldRegenerate(contractHash, force, typesPath) {
   if (force) return { yes: true, reason: '--force' };
   if (!existsSync(STATE_PATH)) return { yes: true, reason: '首次生成（无 state 文件）' };
+  // D35 (v0.9.19)：hash 守门只看契约不看产物——若 types.ts 被外部删除（git stash / git clean / 手误），
+  //   原版会"hash 命中 → skip 重生 → 产物永不出现"。加产物存在性校验。
+  if (typesPath && !existsSync(typesPath)) return { yes: true, reason: `产物 types.ts 缺失（被外部删除）` };
   const last = readJson(STATE_PATH, {});
   if (last.contract_sha256 !== contractHash) return { yes: true, reason: `contract 已变更（hash 不同）` };
   return { yes: false, reason: `contract 未变（hash=${contractHash.slice(0, 12)}...）` };
@@ -164,14 +198,43 @@ function runOpenApiTypescript(target) {
   return { ok: true, typesPath, linesGenerated };
 }
 
-function ensureClientTemplate(target) {
+function ensureClientTemplate(target, bundler) {
   const apiDir = join(PROJECT_ROOT, target, 'src', 'api');
+  // D35 (v0.9.19)：父目录可能不存在（首次运行 / 用户清理 / 全新 scaffold）；
+  //   原版 writeFileSync 会抛 ENOENT。统一先 mkdir 兜底。
+  ensureDir(apiDir);
   const clientPath = join(apiDir, 'client.ts');
   const readmePath = join(apiDir, 'README.md');
   const created = [];
-  if (!existsSync(clientPath)) { writeFileSync(clientPath, CLIENT_TEMPLATE); created.push('client.ts'); }
+  if (!existsSync(clientPath)) { writeFileSync(clientPath, buildClientTemplate(bundler)); created.push('client.ts'); }
   if (!existsSync(readmePath)) { writeFileSync(readmePath, README_TEMPLATE); created.push('README.md'); }
   return created;
+}
+
+// D35 (v0.9.19)：检测 <target>/package.json 是否含必需 runtime deps（如 openapi-fetch）；
+//   缺失则按 lockfile 推断 PM 给出精确安装命令——避免用户跑完脚本后 IDE 红屏 + 不知用哪个 PM。
+function checkRuntimeDeps(target, generator) {
+  const pkgPath = join(PROJECT_ROOT, target, 'package.json');
+  if (!existsSync(pkgPath)) {
+    return { ok: true, missing: [], hint: null }; // 没 package.json 不报，让用户自己处理
+  }
+  const pkg = readJson(pkgPath, {});
+  const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  const missing = (generator.npmRuntimeDeps || []).filter(d => !allDeps[d]);
+  if (missing.length === 0) return { ok: true, missing: [], hint: null };
+
+  // 推断 package manager：lockfile 优先
+  const yarnLock = existsSync(join(PROJECT_ROOT, target, 'yarn.lock'));
+  const pnpmLock = existsSync(join(PROJECT_ROOT, target, 'pnpm-lock.yaml'));
+  const npmLock  = existsSync(join(PROJECT_ROOT, target, 'package-lock.json'));
+  let pm = 'npm';
+  let cmd = 'install';
+  if (yarnLock) { pm = 'yarn'; cmd = 'add'; }
+  else if (pnpmLock) { pm = 'pnpm'; cmd = 'add'; }
+  else if (npmLock) { pm = 'npm'; cmd = 'install'; }
+
+  const hint = `cd ${target} && ${pm} ${cmd} ${missing.join(' ')}`;
+  return { ok: false, missing, hint };
 }
 
 function writeState(contractHash, generator) {
@@ -190,13 +253,14 @@ async function main() {
 
   if (args['dry-run']) {
     console.log('# generate-api-client.mjs --dry-run');
-    console.log('1. 读 .ddt/tech-stack.json::frontend.type_generation');
+    console.log('1. 读 .ddt/tech-stack.json::frontend.{type_generation, bundler}');
     console.log('2. 读 docs/api-contract.yaml + 计算 SHA256');
-    console.log('3. 对比 .ddt/api-client/last-generation.json 中的 hash');
-    console.log('4. hash 不同或 --force → 跑 npx openapi-typescript -o ' + target + '/src/api/types.ts');
-    console.log('5. 首次创建 ' + target + '/src/api/client.ts 模板（不覆盖已有）');
+    console.log('3. 对比 .ddt/api-client/last-generation.json 中的 hash + 校验产物 types.ts 存在性（D35）');
+    console.log('4. hash 不同 / 产物缺失 / --force → 跑 npx openapi-typescript -o ' + target + '/src/api/types.ts');
+    console.log('5. mkdir -p ' + target + '/src/api/（D35 兜底）+ 首次创建 client.ts 按 bundler 派生模板（D35：vite 不写 process.env）');
     console.log('6. 写 ' + target + '/src/api/README.md（首次）');
     console.log('7. 更新 .ddt/api-client/last-generation.json');
+    console.log('8. 检测 ' + target + '/package.json 缺的 runtime deps（如 openapi-fetch），按 lockfile 推断 PM 给精确安装命令（D35）');
     process.exit(0);
   }
 
@@ -224,9 +288,10 @@ async function main() {
     process.exit(2);
   }
 
-  // Step 2: hash 守门
+  // Step 2: hash 守门（D35：加产物存在性校验，避免外部删除后 hash 命中 skip）
   const contractHash = sha256OfFile(CONTRACT);
-  const decision = shouldRegenerate(contractHash, args.force);
+  const typesPath = join(PROJECT_ROOT, target, 'src', 'api', 'types.ts');
+  const decision = shouldRegenerate(contractHash, args.force, typesPath);
   console.log(`▶ contract hash: ${contractHash.slice(0, 12)}... (${decision.reason})`);
 
   let typesResult = { skipped: true };
@@ -244,20 +309,29 @@ async function main() {
     console.log(`  ⏭️  types.ts 已是最新（contract 未变）`);
   }
 
-  // Step 4: client.ts + README 模板（首次）
-  const created = ensureClientTemplate(target);
+  // Step 4: client.ts + README 模板（首次；D35：按 bundler 派生避免 process.env 编译错）
+  const bundler = techStack?.frontend?.bundler;
+  const created = ensureClientTemplate(target, bundler);
   if (created.length > 0) {
-    console.log(`▶ 创建模板: ${created.join(', ')}`);
+    console.log(`▶ 创建模板: ${created.join(', ')}（bundler=${bundler || 'unknown'}）`);
   }
 
   // Step 5: 状态落盘
   writeState(contractHash, generator);
 
-  // Step 6: 输出 hint
+  // Step 6: D35：runtime deps 检测——缺 openapi-fetch 等会导致 IDE 红屏，提前给出精确 PM 命令
+  const depsCheck = checkRuntimeDeps(target, generator);
+
+  // Step 7: 输出 hint
   console.log('');
   console.log('✅ API client 就绪');
   console.log(`   types: ${target}/src/api/types.ts`);
   console.log(`   client: ${target}/src/api/client.ts`);
+  if (!depsCheck.ok) {
+    console.log('');
+    console.log(`⚠️  缺 runtime deps：${depsCheck.missing.join(', ')}`);
+    console.log(`   请运行：${depsCheck.hint}`);
+  }
   console.log(`   提醒：在组件内 import { apiClient } from '@/api/client'；勿用 mock const 数组替代`);
 
   process.exit(0);

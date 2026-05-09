@@ -96,7 +96,8 @@ test('D30: generate-api-client 在 web/ 缺失时 exit 2', () => {
 
 test('D30: generate-api-client 含 client.ts 模板（openapi-fetch + apiClient + unwrap）', () => {
   const text = readBin(GENERATE_BIN);
-  assert.match(text, /CLIENT_TEMPLATE/, '应有 CLIENT_TEMPLATE 常量');
+  // D35：CLIENT_TEMPLATE 重构为 buildClientTemplate(bundler) 函数（按 bundler 派生模板）
+  assert.match(text, /buildClientTemplate|CLIENT_TEMPLATE/, '应有模板生成函数或常量');
   assert.match(text, /openapi-fetch/, '模板应基于 openapi-fetch');
   assert.match(text, /apiClient/, '应导出 apiClient');
   assert.match(text, /unwrap/, '应有 unwrap 工具函数（适配 react-query queryFn）');

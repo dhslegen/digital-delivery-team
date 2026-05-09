@@ -4,6 +4,94 @@
 
 ---
 
+## [0.9.19] - 2026-05-09 — 实战 hotfix D35：generate-api-client 健壮性补丁（4 个"温柔的乐观"反模式）
+
+源自演示前 alv-ops 实战：用户演示前需紧急生成前端 API client 证明"契约先行"力量，跑 `bin/generate-api-client.mjs` 暴露 4 个"假设默认成立"反模式，全部需要立即修复以保证下次"一次成功"：
+
+| 反模式 | 现象 | 用户付出的代价 |
+|---|---|---|
+| **A. 假设父目录存在** | `web/src/api/` 不存在时 `ensureClientTemplate` 抛 ENOENT | 演示前手动 `mkdir -p` |
+| **B. 假设 process 全局存在** | CLIENT_TEMPLATE 写了 `process.env` 兜底，Vite SPA 编译错"找不到名称 process" | 手改 client.ts 去掉 process.env |
+| **C. 假设产物不会被外部删除** | hash 守门只看 contract，types.ts 被 git stash/clean/手误删除后命中 hash → skip 重生 → 产物永不出现 | 加 `--force` 强制重生 |
+| **D. 假设 npm 包已装** | 模板用了 `openapi-fetch`，但 web/package.json 里没装，IDE 红屏"找不到模块" | 演示前手动 `yarn add openapi-fetch` |
+
+**根本模式**：DDT 目标是"零摩擦交付"，所有"温柔的乐观"都要变成"显式校验 + 友好降级"。
+
+### 🟣 D35 修 4 件事
+
+#### 1. `ensureClientTemplate` 加 mkdir 兜底（修 A）
+
+```diff
+function ensureClientTemplate(target, bundler) {
+  const apiDir = join(PROJECT_ROOT, target, 'src', 'api');
++ // D35：父目录可能不存在（首次运行 / 用户清理 / 全新 scaffold）
++ ensureDir(apiDir);
+  ...
+}
+```
+
+#### 2. `CLIENT_TEMPLATE` 重构为 `buildClientTemplate(bundler)` 函数（修 B）
+
+按 `tech-stack.json::frontend.bundler` 派生不同环境变量读取方式：
+
+| bundler | BASE_URL 读取 | 备注 |
+|---|---|---|
+| `vite` / `vitest` / `nuxt` / `astro` | `import.meta.env?.VITE_API_BASE_URL` | 浏览器代码无 process 全局 |
+| `next` / `nextjs` | `process.env.NEXT_PUBLIC_API_BASE_URL` | DefinePlugin 编译期替换 |
+| `webpack` / `cra` | `process.env.REACT_APP_API_BASE_URL` | 同上 |
+| 其他/未知 | 字面量 `'http://localhost:8080'` | 保守不引入 process |
+
+避免 Vite SPA 项目里"找不到名称 process"编译错。
+
+#### 3. `shouldRegenerate` 加产物存在性校验（修 C）
+
+```diff
+- function shouldRegenerate(contractHash, force) {
++ function shouldRegenerate(contractHash, force, typesPath) {
+   if (force) return { yes: true, reason: '--force' };
+   if (!existsSync(STATE_PATH)) return { yes: true, reason: '首次生成（无 state 文件）' };
++  // D35：types.ts 被外部删除（git stash / clean / 手误）→ 强制重生
++  if (typesPath && !existsSync(typesPath))
++    return { yes: true, reason: `产物 types.ts 缺失（被外部删除）` };
+   ...
+}
+```
+
+#### 4. 新增 `checkRuntimeDeps`：缺包检测 + lockfile 推断 PM（修 D）
+
+- 扫 `<target>/package.json` 的 `dependencies` + `devDependencies`，对比 `generator.npmRuntimeDeps`（如 `openapi-fetch`）
+- 缺失时按 lockfile 推断 package manager：`yarn.lock` → `yarn add` / `pnpm-lock.yaml` → `pnpm add` / `package-lock.json` → `npm install`
+- 输出可直接复制粘贴的精确命令：`cd web && yarn add openapi-fetch`
+
+下次跑完脚本，IDE 红屏前先看到"⚠️ 缺 runtime deps：openapi-fetch / 请运行：cd web && yarn add openapi-fetch"。
+
+### 📊 测试覆盖（+9 D35）
+
+`tests/integration/d35-generate-api-client-robustness.test.mjs`：
+
+- A 父目录兜底（dry-run 描述含 `mkdir -p`）
+- B Vite 模板不含 `process.env`、Next 用 `NEXT_PUBLIC_`、Webpack 用 `REACT_APP_`、未知 bundler 用字面量
+- C `shouldRegenerate` 签名 + 产物缺失分支
+- D checkRuntimeDeps 函数 + 三种 lockfile 推断 + 端到端"yarn.lock → yarn add" + 端到端"deps 已装 → 不警告"
+
+旧 d30 测试 `assert.match(text, /CLIENT_TEMPLATE/)` 改为兼容 `/buildClientTemplate|CLIENT_TEMPLATE/`。
+
+### 📈 测试基数
+
+555 → 564（+9 D35，零回归）。
+
+### 🎯 设计原则反思
+
+实战暴露的 4 个问题共享一个根本模式："温柔的乐观"——假设默认成立。在传统脚本里靠用户经验弥补；DDT 目标是"零摩擦交付"，所有乐观都要拧紧成"显式校验 + 友好降级"：
+- 父目录不存在？mkdir
+- 全局变量不存在？按 bundler 派生
+- 产物被删？检测 + 重生
+- 包没装？检测 + 给精确命令
+
+这次 hotfix 是 alv-ops 演示前的"应急"，但反哺到 DDT 后下次任何项目跑 `/build-web` 都能直接通过。
+
+---
+
 ## [0.9.18] - 2026-05-09 — 实战 hotfix D34：phase 事件双源采集 + ingest 去重（消除 LLM 跳 emit-phase 导致的工时永久丢失）
 
 源自实战：用户在 alv-ops 项目运行 `/digital-delivery-team:build-api`（含一次 `/relay` 跨会话接力），但 efficiency-report 显示"backend 工时不可证明"。三方对照 events.jsonl + phase_runs + Bash head 实证发现：
