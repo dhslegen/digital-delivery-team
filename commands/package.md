@@ -27,6 +27,11 @@ if printf '%s' "$ARGUMENTS" | grep -q -- '--dry-run'; then
 fi
 node "$DDT_PLUGIN_ROOT/bin/emit-phase.mjs" --phase package --action start
 "$DDT_PLUGIN_ROOT/bin/check-blockers.sh" || exit 2
+
+# v0.9.20 D36：部署事实采集——扫 application*.yml / pom.xml / package.json / docker-compose
+# 输出 .ddt/deployment-facts.json（docs-agent 必读）+ docs/deployment-facts.md（人读）
+# docs-agent 在生成 deploy.md 时**禁止凭常识**填硬编码 root/actuator，必须用本文件的事实
+node "$DDT_PLUGIN_ROOT/bin/audit-deployment-config.mjs" 2>&1 || echo "⚠️ deployment audit 失败（不阻塞，docs-agent 会用占位提示用户补全）"
 ```
 
 若 `docs/review-report.md` 中阻塞级条目 > 0，拒绝执行并提示：

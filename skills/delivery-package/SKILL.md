@@ -31,6 +31,17 @@ origin: DDT
 - **回滚脚本**：必须有对应的 rollback 命令或说明
 - **环境校验**：跑前自检（Node 版本、必要工具、磁盘空间）
 - **脚本头部**：`set -euo pipefail`
+- **事实驱动（D36 / v0.9.20）**：必读 `.ddt/deployment-facts.json`（由 `bin/audit-deployment-config.mjs` 生成），**禁止凭常识填**以下 5 个值：
+  1. **MySQL root 密码**：用 `facts.derived.mysql_root_password`（不得写 `root`、`123456`、`password` 等"常见值"——除非 facts 实际是这个值）
+  2. **MySQL 端口 / 数据库名**：用 `facts.derived.mysql_database` + `facts.server.datasource.port`
+  3. **后端端口 / context-path**：用 `facts.server.server.port` + `facts.server.server.context_path`
+  4. **前端 dev 端口**：用 `facts.web.dev_port`（vite 默认 5173 / next 默认 3000 / cra 默认 3000）
+  5. **smoke 测试 health endpoint**：用 `facts.smoke_endpoint`——
+     - actuator 装好且暴露 → `GET /actuator/health`
+     - actuator 缺失 → 用 facts 推断的 fallback（contract 第一个 GET 或 `/auth/login`）
+     - **禁止**在 actuator 不可用时写 `curl /api/actuator/health`（会 404 `No static resource`）
+
+  facts.json 缺失（audit 失败）→ deploy.md 顶部必须加显式 ⚠️ 警告 + 用 `<YOUR_XXX>` 占位 + 提示用户跑 `node $DDT_PLUGIN_ROOT/bin/audit-deployment-config.mjs` 补全。
 
 ## Demo Script 原则
 - 时间轴精确到 10 秒（示例：`00:00–00:30 展示登录流程`）
@@ -49,6 +60,7 @@ origin: DDT
 - 部署不要依赖"先手工改一下 XXX 再运行"
 - Demo 不要总时长超过 5 分钟或覆盖超过 3 个特性
 - 不在 README 里放真实用户数据或截图中含敏感信息
+- **D36 反模式**：不要凭常识写 `MYSQL_ROOT_PASSWORD=root` / `curl /api/actuator/health` / 其它"假定默认"——这些**导致演示翻车**的硬编码假设必须从 `.ddt/deployment-facts.json` 派生
 
 ## Quality Gate（出包前必须通过）
 - [ ] `tests/test-report.md` 存在且覆盖率 ≥ 70%

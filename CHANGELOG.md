@@ -4,6 +4,96 @@
 
 ---
 
+## [0.9.20] - 2026-05-09 — 实战 hotfix D36：部署事实采集器（消除 docs-agent 凭常识填硬编码导致演示翻车）
+
+源自 alv-ops 演示前实战：用户跑完 deploy.md 的 smoke 测试**两条全报错**：
+
+| 错误 | docs-agent 凭常识填的值 | 项目实际 |
+|---|---|---|
+| `Access denied for user 'root'@'172.22.0.1'` | `MYSQL_ROOT_PASSWORD=root` | docker 容器实际 `123456` |
+| `No static resource actuator/health` | smoke 第一步 `curl /api/actuator/health` | actuator 依赖未装 / 未配 exposure |
+
+直接根因（不是模板写死）：DDT 的 `templates/deploy.template.md` 是中性占位的，硬编码值是 **docs-agent（LLM）凭常识自己填的**——因为 DDT 没把"部署事实"喂给 agent，LLM 就用最常见的默认值。
+
+更深的根因：**契约（api-contract.yaml）有 SSoT，但部署/环境配置层没有 SSoT**——deploy.md / application.yml / docker-compose 三个文件三个真相，无人对齐。
+
+### 🟣 D36 修 4 件事
+
+#### 1. 新增 `bin/audit-deployment-config.mjs`（事实采集层）
+
+扫项目实际配置，输出 `.ddt/deployment-facts.json`（agent 必读）+ `docs/deployment-facts.md`（人读）：
+
+| 维度 | 来源 | 输出字段 |
+|---|---|---|
+| MySQL 密码 | `application*.yml` 中 `${DB_PASS:xxx}` 默认值 + `docker-compose.yml` 中 `MYSQL_ROOT_PASSWORD` | `derived.mysql_root_password` + `mysql_password_source` |
+| 数据库 host/port/name | `application*.yml::spring.datasource.url` JDBC URL 解析 | `server.datasource.{host,port,database}` |
+| 后端端口 + context-path | `application*.yml::server.port` + `servlet.context-path` | `server.server.{port,context_path}` |
+| **Actuator** 真实可用性 | `pom.xml` 含 `spring-boot-starter-actuator` **AND** `application.yml::management.endpoints.web.exposure.include` 含 health | `actuator.health_available` |
+| 前端 dev 端口 | `package.json` 推断 framework + `vite.config.ts` 覆写检测 | `web.dev_port`（vite 5173 / next 3000 / cra 3000） |
+| **smoke endpoint** 智能推断 | actuator 优先 → `api-contract.yaml` 第一个 GET 次之 → `/auth/login` 兜底 | `smoke_endpoint.{method,path,auth_required,reason}` |
+
+#### 2. `commands/package.md` Phase 1 自动调用
+
+```bash
+# 在 emit-phase start + check-blockers 之后
+node "$DDT_PLUGIN_ROOT/bin/audit-deployment-config.mjs" 2>&1 || echo "⚠️ deployment audit 失败（不阻塞）"
+```
+
+每次 `/package` 跑都会先采集事实，docs-agent 拿到的就是项目真实状态。
+
+#### 3. `agents/docs-agent.md` 加 D36 Hard Requirement
+
+新增第 5 条硬约束：
+
+> **D36 (v0.9.20) 部署事实优先**：生成 `docs/deploy.md` 时**禁止凭常识填硬编码值**——
+> - **MySQL 密码** 必须用 `.ddt/deployment-facts.json::derived.mysql_root_password`
+> - **smoke 测试第一步** 必须用 `facts.smoke_endpoint`（actuator 未装则禁用 `/actuator/health`）
+> - **后端端口 / context-path / 前端端口** 必须用 facts 提供值
+> - facts.json 缺失 → 在 deploy.md 顶部加 ⚠️ 警告并用 `<YOUR_XXX>` 占位
+
+#### 4. `skills/delivery-package/SKILL.md` 加事实驱动 5 字段
+
+`Deploy 原则` 段加 `事实驱动（D36 / v0.9.20）` 子段，列出 5 个**禁止凭常识填**的字段，配 `Don't` 反模式："不要凭常识写 `MYSQL_ROOT_PASSWORD=root` / `curl /api/actuator/health`"。
+
+### 📊 测试覆盖（+14 D36）
+
+`tests/integration/d36-deployment-facts-audit.test.mjs`：
+
+- A. application.yml `${DB_PASS:s3cret}` 默认值提取
+- B. actuator 三态：装+暴露 / 装但未配 exposure（最微妙） / 未装
+- C. 前端框架推断：vite + 自定义 port / next 默认 3000
+- D. docker-compose 优先级：容器实际值 > application.yml 默认
+- E. smoke fallback：无 actuator → contract 第一个 GET endpoint
+- F. smoke 兜底：无 actuator + 无 contract → POST /auth/login
+- G. Markdown 报告含必填规则提示
+- H. dry-run 不写文件
+- I. docs-agent + package + skill 三处协同声明（必读 facts / 调用 audit / 5 字段事实驱动）
+
+### 📈 测试基数
+
+564 → 578（+14 D36，零回归）。
+
+### 🎯 设计原则反思
+
+D34 / D35 / D36 共享一个深层模式：**"声明 vs 产出"鸿沟**——某个 phase 有配置/契约，但没被强制翻译为产出，LLM 用常识 fallback 填硬编码。
+
+| Hotfix | 鸿沟 | 修复模式 |
+|---|---|---|
+| D30 | tech-stack.json::type_generation 声明 → /build-web 不跑 | 上游脚本采集 + 命令必跑 |
+| D33 | brief §11 外部依赖声明 → /build-api 不实现 | 审计层 + 生成器 + skill Hard Requirement |
+| D34 | 业务级 phase_start 仅 emit-phase 写 → LLM 跳过则永久丢失 | hook 兜底双源 + ingest 去重 |
+| **D36** | 部署事实分散 → docs-agent 凭常识填硬编码 | **审计层采集事实 + agent Hard Requirement 必读** |
+
+DDT 的 SSoT 思想至今只覆盖 API 层（api-contract.yaml）和技术栈层（tech-stack.json）；**部署/环境层 SSoT 由 D36 新增**（`.ddt/deployment-facts.json`）。下一次 LLM 生成 deploy.md 时再也不会写硬编码 `root` / `/actuator/health`——facts.json 里有什么就写什么。
+
+### 影响范围
+
+- **新项目**：`/package` 自动跑 audit；docs-agent 必读 facts.json，deploy.md 与项目实际配置 100% 对齐
+- **已有项目**：手动跑 `node $DDT_PLUGIN_ROOT/bin/audit-deployment-config.mjs` 即可生成 facts；下次 `/package --refresh` 增量更新 deploy.md
+- **alv-ops 当前 deploy.md**：手动重跑 `/package --refresh` 后两个硬编码错误会自动修正
+
+---
+
 ## [0.9.19] - 2026-05-09 — 实战 hotfix D35：generate-api-client 健壮性补丁（4 个"温柔的乐观"反模式）
 
 源自演示前 alv-ops 实战：用户演示前需紧急生成前端 API client 证明"契约先行"力量，跑 `bin/generate-api-client.mjs` 暴露 4 个"假设默认成立"反模式，全部需要立即修复以保证下次"一次成功"：

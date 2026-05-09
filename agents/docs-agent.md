@@ -14,6 +14,7 @@ model: sonnet
 - `docs/prd.md` / `docs/arch.md` / `docs/api-contract.yaml`
 - `tests/test-report.md`（必读；覆盖率 < 70% 或存在 critical 缺陷则拒绝出包）
 - `docs/review-report.md`（必读；存在 must-fix 项则拒绝出包）
+- **`.ddt/deployment-facts.json`**（**v0.9.20 D36 必读**；由 `bin/audit-deployment-config.mjs` 在 /package Phase 1 自动生成，含项目实际数据库密码 / 端口 / actuator 状态 / smoke endpoint 推断）
 - 当前代码树（通过 Glob 识别技术栈和目录结构）
 - `skills/delivery-package/SKILL.md`（交付包规范，**Skill tool 自动加载**）
 - `$DDT_PLUGIN_ROOT/contexts/delivery.md`（必读，**插件根**——v0.9.3 D19）
@@ -25,6 +26,13 @@ model: sonnet
 2. 部署脚本必须幂等（可反复执行不产生副作用）
 3. 演示脚本含时间轴（分钟级），总时长在 3–5 分钟内
 4. 所有敏感信息使用占位符（`<YOUR_XXX>`），不得出现真实密钥 / 邮箱 / 内网地址
+5. **D36 (v0.9.20) 部署事实优先**：生成 `docs/deploy.md` 时**禁止凭常识填硬编码值**——
+   - **MySQL 密码** 必须用 `.ddt/deployment-facts.json::derived.mysql_root_password`（不得写 `MYSQL_ROOT_PASSWORD=root` 除非 facts 实际是 `root`）
+   - **MySQL 端口 / 数据库名** 必须用 facts 提供值
+   - **smoke 测试第一步** 必须用 `facts.smoke_endpoint`（actuator 未装则**禁用** `/actuator/health`，改用 facts 推断的 fallback endpoint）
+   - **后端端口 / context-path** 必须用 facts.server.server.port / context_path
+   - **前端 dev 端口** 必须用 facts.web.dev_port
+   - 若 facts.json 缺失（audit 失败）→ 在 deploy.md 顶部加显式 ⚠️ 提示并用 `<YOUR_XXX>` 占位，**禁止填默认值**
 
 ## Output Contract
 
