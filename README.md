@@ -445,6 +445,7 @@ npm run test:integration  # 仅 integration
 
 - [USAGE.md](./USAGE.md) — 场景化使用示例
 - [CHANGELOG.md](./CHANGELOG.md) — 版本变更记录（每个特性的引入版本）
+- [ROADMAP.md](./ROADMAP.md) — 通向 v1.0 的演进路线图（M1 实战闭环 / M2 生产就绪 / M3 团队协作 / M4 行业落地）
 - 设计原则：契约先行 + 数字员工分工 + 自动度量 + 决策门 + 6-phase 范式（EXPLORE/PLAN/APPROVE/IMPLEMENT/VERIFY/SUMMARY）
 - 数据来源：Spring Initializr 22 分组 200+ 组件清单 + Claude Code AskUserQuestion 工具 schema
 
